@@ -129,7 +129,7 @@ function formatBytes(bytes: number): string {
 
 // The indexers rate-limit bursts, so one that turns away a search is left
 // alone for a little while rather than for the usual half hour.
-const SEARCH_COOLDOWN_MS = 5 * 60 * 1000;
+const SEARCH_COOLDOWN_MS = 2 * 60 * 1000;
 
 function decodeEntities(text: string): string {
   return text
@@ -225,6 +225,27 @@ export async function searchNyaa(query: string): Promise<TorrentOption[]> {
  * fewer results.
  */
 export async function searchTorrents(query: string): Promise<TorrentOption[]> {
+  let options = await runIndexes(query);
+  if (options.length < 3) {
+    // Names like "the office s1" match nothing, because the indexes look for
+    // the whole phrase. The name without the season and quality words does.
+    const shorter = simplifyQuery(query);
+    if (shorter && shorter !== query.trim()) {
+      const extra = await runIndexes(shorter);
+      const seen = new Set(options.map((o) => o.hash.toLowerCase()));
+      for (const option of extra) {
+        const key = option.hash.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        options.push(option);
+      }
+      options.sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0));
+    }
+  }
+  return options;
+}
+
+async function runIndexes(query: string): Promise<TorrentOption[]> {
   const [apibay, nyaa] = await Promise.all([searchApibay(query), searchNyaa(query)]);
   const seen = new Set<string>();
   const options: TorrentOption[] = [];
@@ -236,4 +257,19 @@ export async function searchTorrents(query: string): Promise<TorrentOption[]> {
   }
   options.sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0));
   return options;
+}
+
+/** Drops the season, episode and quality words from a name. */
+export function simplifyQuery(query: string): string {
+  return query
+    .replace(/\b(season|seasons)\s*\d{1,2}\b/gi, ' ')
+    .replace(/\bs\d{1,3}\b/gi, ' ')
+    .replace(/\b(ep|episode|e)\d{1,3}\b/gi, ' ')
+    .replace(
+      /\b(2160p|1440p|1080p|720p|480p|360p|4k|uhd|bluray|blu\s?ray|web\s?dl|webrip|webrip|hdrip|dvdrip|hd|hevc|x26[45]|english|malayalam|tamil|hindi)\b/gi,
+      ' ',
+    )
+    .replace(/[._]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

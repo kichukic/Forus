@@ -34,7 +34,7 @@ type Props = {
 // Typing on a TV remote is slow, so a search runs once typing pauses.
 const DEBOUNCE_MS = 600;
 // How many releases a search shows before the films take over.
-const MAX_RELEASES = 40;
+const MAX_RELEASES = 60;
 
 export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl }: Props) {
   const insets = useSafeAreaInsets();
