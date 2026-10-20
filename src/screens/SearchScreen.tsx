@@ -2,18 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatSize, getApiKey, listVideoFiles, type TorboxFile } from '../api/torbox';
 import { searchVideos, type SearchResult } from '../api/youtube';
 import { FileCardContent } from '../components/FileCardContent';
-import { FocusCard, cardImageStyle } from '../components/FocusCard';
+import { VideoCardContent } from '../components/Cards';
+import { FocusCard } from '../components/FocusCard';
+import { cleanTitle } from '../components/VideoRow';
 import { TRUSTED_CHANNELS } from '../data/channels';
 import { GUTTER, colors, isTV } from '../theme';
 import type { Playable } from '../types';
@@ -86,17 +88,21 @@ export function SearchScreen({ onPlay }: Props) {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + GUTTER }]}>
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search shows, movies, news…"
-        placeholderTextColor={colors.muted}
-        autoFocus
-        autoCorrect={false}
-        returnKeyType="search"
-        style={styles.input}
-        hasTVPreferredFocus
-      />
+      <Text style={styles.heading}>Search</Text>
+      <View style={styles.inputWrap}>
+        <Ionicons name="search" size={isTV ? 22 : 19} color={colors.muted} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search shows, movies, news…"
+          placeholderTextColor={colors.muted}
+          autoFocus
+          autoCorrect={false}
+          returnKeyType="search"
+          style={styles.input}
+          hasTVPreferredFocus
+        />
+      </View>
       <Text style={styles.note}>Official channels only, plus files in your TorBox.</Text>
 
       {loading && <ActivityIndicator color={colors.accent} style={styles.spinner} />}
@@ -120,23 +126,13 @@ export function SearchScreen({ onPlay }: Props) {
                 {item.type === 'torbox' ? (
                   <FileCardContent fileName={item.file.name} detail={`TorBox · ${formatSize(item.file.size)}`} />
                 ) : (
-                  <>
-                    <View>
-                      <Image source={{ uri: item.video.thumbnail }} style={cardImageStyle} />
-                      <Text style={[styles.badge, item.video.live && styles.liveBadge]}>
-                        {item.video.live ? '● LIVE' : item.video.duration}
-                      </Text>
-                    </View>
-                    <View style={styles.caption}>
-                      <Text style={styles.title} numberOfLines={1}>
-                        {item.video.title}
-                      </Text>
-                      <Text style={styles.detail} numberOfLines={1}>
-                        {item.video.channel}
-                        {item.video.published ? ` · ${item.video.published}` : ''}
-                      </Text>
-                    </View>
-                  </>
+                  <VideoCardContent
+                    image={item.video.thumbnail}
+                    title={cleanTitle(item.video.title)}
+                    subtitle={[item.video.channel, item.video.published].filter(Boolean).join(' · ')}
+                    duration={item.video.duration}
+                    live={item.video.live}
+                  />
                 )}
               </FocusCard>
             </View>
@@ -149,34 +145,21 @@ export function SearchScreen({ onPlay }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  input: {
+  heading: { color: colors.text, fontSize: isTV ? 32 : 26, fontWeight: '900', marginHorizontal: GUTTER, marginBottom: 14 },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     marginHorizontal: GUTTER,
-    backgroundColor: colors.surface,
-    color: colors.text,
-    fontSize: isTV ? 22 : 17,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 26,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
+  input: { flex: 1, color: colors.text, fontSize: isTV ? 22 : 16, paddingVertical: isTV ? 14 : 12 },
   note: { color: colors.muted, fontSize: isTV ? 15 : 13, marginHorizontal: GUTTER, marginTop: 8 },
   spinner: { marginTop: 24 },
-  grid: { paddingHorizontal: GUTTER - 4, paddingVertical: 16 },
+  grid: { paddingHorizontal: GUTTER - 4, paddingTop: 18, paddingBottom: 120 },
   cell: { padding: 4, marginBottom: 8 },
-  badge: {
-    position: 'absolute',
-    right: 6,
-    bottom: 6,
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  liveBadge: { backgroundColor: colors.live },
-  caption: { padding: 8, height: isTV ? 52 : 50, justifyContent: 'center' },
-  title: { color: colors.text, fontSize: isTV ? 14 : 13, fontWeight: '700' },
-  detail: { color: colors.muted, fontSize: isTV ? 12 : 11, marginTop: 2 },
 });

@@ -1,4 +1,4 @@
-# MyTV Malayalam
+# ForUs
 
 An app for free Malayalam TV: live news, serials and shows. All of it comes from
 official channels' free YouTube uploads. There are no logins, no API keys and no

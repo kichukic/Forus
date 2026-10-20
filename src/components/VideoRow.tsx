@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, StyleSheet, Text, View } from 'react-native';
-import { loadVideoPage, loadVideos, type Video } from '../api/youtube';
-import { MOVIES, SHOWS, type VideoSource } from '../data/channels';
-import { GUTTER, colors, isTV } from '../theme';
-import { FocusCard, cardImageStyle } from './FocusCard';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { loadVideoPage, loadVideos, searchVideos, type Video } from '../api/youtube';
+import { MOVIES, SHOWS, TRUSTED_CHANNELS, type VideoSource } from '../data/channels';
+import type { Theme } from '../data/themes';
+import { CARD_HEIGHT, GUTTER, colors, isTV } from '../theme';
+import { VideoCardContent } from './Cards';
+import { FocusCard } from './FocusCard';
+import { SectionHeader, SkeletonRow } from './Section';
 
 type Props = {
   source: VideoSource;
@@ -79,11 +82,36 @@ export function NewRow({ onPlay }: { onPlay: (video: Video) => void }) {
       .catch(() => setFailed(true));
   }, []);
 
-  return <VideoList title="New today" videos={videos} failed={failed} onPlay={onPlay} />;
+  return (
+    <VideoList title="New today" subtitle="Fresh uploads from every channel" videos={videos} failed={failed} onPlay={onPlay} />
+  );
+}
+
+const FULL_MOVIE = /full movie|full length/i;
+// A row of one or two cards looks broken; such themes are left out.
+const MIN_THEME_RESULTS = 3;
+
+// A themed row ("Mohanlal movies") filled by a search of the trusted channels.
+// It disappears if the search finds too little.
+export function ThemeRow({ theme, onPlay }: { theme: Theme; onPlay: (video: Video) => void }) {
+  const [videos, setVideos] = useState<Video[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    // Film themes would otherwise pick up the channels' scenes and trailers.
+    const moviesOnly = FULL_MOVIE.test(theme.query);
+    searchVideos(theme.query, TRUSTED_CHANNELS)
+      .then((results) => setVideos(results.filter((r) => !r.live && (!moviesOnly || FULL_MOVIE.test(r.title)))))
+      .catch(() => setFailed(true));
+  }, [theme]);
+
+  if (failed || (videos && videos.length < MIN_THEME_RESULTS)) return null;
+  return <VideoList title={theme.title} subtitle="Picked from official channels" videos={videos} failed={false} onPlay={onPlay} />;
 }
 
 type ListProps = {
   title: string;
+  subtitle?: string;
   videos: (Video & { channel?: string })[] | null;
   failed: boolean;
   onPlay: (video: Video) => void;
@@ -91,14 +119,14 @@ type ListProps = {
   loadingMore?: boolean;
 };
 
-function VideoList({ title, videos, failed, onPlay, onEndReached, loadingMore }: ListProps) {
+function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, loadingMore }: ListProps) {
   return (
     <View style={styles.row}>
-      <Text style={styles.heading}>{title}</Text>
+      <SectionHeader title={title} subtitle={subtitle} />
       {failed ? (
         <Text style={styles.note}>Couldn't load. Check the internet connection.</Text>
       ) : !videos ? (
-        <ActivityIndicator color={colors.accent} style={styles.loading} />
+        <SkeletonRow />
       ) : videos.length === 0 ? (
         <Text style={styles.note}>Nothing new right now.</Text>
       ) : (
@@ -116,14 +144,12 @@ function VideoList({ title, videos, failed, onPlay, onEndReached, loadingMore }:
           }
           renderItem={({ item }) => (
             <FocusCard onPress={() => onPlay(item)}>
-              <View>
-                <Image source={{ uri: item.thumbnail }} style={cardImageStyle} />
-                {item.duration ? <Text style={styles.duration}>{item.duration}</Text> : null}
-              </View>
-              <Text style={styles.title} numberOfLines={2}>
-                {item.channel ? <Text style={styles.channel}>{item.channel} · </Text> : null}
-                {item.title}
-              </Text>
+              <VideoCardContent
+                image={item.thumbnail}
+                title={cleanTitle(item.title)}
+                subtitle={item.channel}
+                duration={item.duration}
+              />
             </FocusCard>
           )}
         />
@@ -132,32 +158,16 @@ function VideoList({ title, videos, failed, onPlay, onEndReached, loadingMore }:
   );
 }
 
+// YouTube titles pile up "| Actor | Actor | Channel"; the part before the
+// first bar is the actual name.
+export function cleanTitle(title: string): string {
+  const head = title.split('|')[0].trim();
+  return head.length >= 4 ? head : title;
+}
+
 const styles = StyleSheet.create({
-  row: { marginBottom: isTV ? 28 : 20 },
-  heading: {
-    color: colors.text,
-    fontSize: isTV ? 22 : 18,
-    fontWeight: '700',
-    marginBottom: isTV ? 10 : 4,
-    marginLeft: GUTTER,
-  },
-  list: { paddingHorizontal: GUTTER, paddingVertical: 10 },
-  title: { color: colors.text, fontSize: isTV ? 14 : 13, padding: 8, height: isTV ? 52 : 50 },
-  channel: { color: colors.accent, fontWeight: '700' },
+  row: { marginBottom: isTV ? 30 : 24 },
+  list: { paddingHorizontal: GUTTER, paddingVertical: isTV ? 8 : 2 },
   note: { color: colors.muted, fontSize: isTV ? 16 : 14, marginLeft: GUTTER },
-  loading: { alignSelf: 'flex-start', marginLeft: GUTTER },
-  more: { alignSelf: 'center', marginHorizontal: 24 },
-  duration: {
-    position: 'absolute',
-    right: 6,
-    bottom: 6,
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
+  more: { alignSelf: 'center', marginHorizontal: 24, height: CARD_HEIGHT },
 });

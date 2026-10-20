@@ -31,3 +31,8 @@ export function addToHistory(history: Playable[], item: Playable): Playable[] {
   AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => {});
   return next;
 }
+
+export function clearHistory(): Playable[] {
+  AsyncStorage.removeItem(KEY).catch(() => {});
+  return [];
+}

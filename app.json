@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "MyTV Malayalam",
+    "name": "ForUs",
     "slug": "MytvstreamApp",
     "version": "1.0.0",
     "orientation": "default",
@@ -29,7 +29,8 @@
           "backgroundColor": "#0b0d12"
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-font"
     ],
     "android": {
       "package": "com.mytvstream.malayalam"

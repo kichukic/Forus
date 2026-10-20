@@ -30,10 +30,12 @@ type Props = {
   mini: boolean;
   onMiniChange: (mini: boolean) => void;
   onClose: () => void;
+  // Room to leave under the mini player, e.g. for the bottom navigation bar.
+  bottomOffset?: number;
   children: (controls: ShellControls) => ReactNode;
 };
 
-export function PlayerShell({ mini, onMiniChange, onClose, children }: Props) {
+export function PlayerShell({ mini, onMiniChange, onClose, bottomOffset = 0, children }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // 0 is full screen, 1 is the corner window.
@@ -90,7 +92,7 @@ export function PlayerShell({ mini, onMiniChange, onClose, children }: Props) {
     left: progress.interpolate({ inputRange: [0, 1], outputRange: [0, width - miniWidth - MINI_MARGIN] }),
     top: progress.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, height - miniHeight - MINI_MARGIN - insets.bottom - 16],
+      outputRange: [0, height - miniHeight - MINI_MARGIN - insets.bottom - 16 - bottomOffset],
     }),
     width: progress.interpolate({ inputRange: [0, 1], outputRange: [width, miniWidth] }),
     height: progress.interpolate({ inputRange: [0, 1], outputRange: [height, miniHeight] }),
