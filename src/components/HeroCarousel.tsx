@@ -28,6 +28,7 @@ type Props = {
 type Featured = Video & { channel: string };
 
 const SLIDES = 6;
+const HERO_SIZES = ['maxresdefault', 'hq720', 'mqdefault'];
 const ROTATE_MS = 6000;
 
 export function HeroCarousel({ sources, label, onPlay }: Props) {
@@ -115,8 +116,10 @@ function Slide({
   onPlay: () => void;
   first: boolean;
 }) {
-  // Not every upload has a full-resolution thumbnail; fall back to the smaller one.
-  const [uri, setUri] = useState(`https://i.ytimg.com/vi/${video.id}/maxresdefault.jpg`);
+  // Not every upload has a full-resolution thumbnail, so step down through the
+  // 16:9 sizes. (hqdefault is 4:3 with black bars baked in, so it's skipped.)
+  const [size, setSize] = useState(0);
+  const uri = `https://i.ytimg.com/vi/${video.id}/${HERO_SIZES[size]}.jpg`;
   const [focused, setFocused] = useState(false);
 
   return (
@@ -125,7 +128,7 @@ function Slide({
         source={{ uri }}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
-        onError={() => setUri(`https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`)}
+        onError={() => setSize((n) => Math.min(n + 1, HERO_SIZES.length - 1))}
       />
       <LinearGradient colors={SCRIM} locations={[0.25, 0.6, 1]} style={StyleSheet.absoluteFill} />
 
@@ -135,7 +138,7 @@ function Slide({
           {video.title.split('|')[0].trim()}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
-          {video.channel} · Malayalam · Free
+          {video.channel}
         </Text>
         <Pressable
           onPress={onPlay}

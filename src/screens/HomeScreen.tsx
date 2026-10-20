@@ -16,6 +16,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clearVideoCache, thumbnailUrl } from '../api/youtube';
+import { clearCatalogCache, type CatalogMovie } from '../api/catalog';
+import type { TorrentOption } from '../api/torrents';
 import { LiveTileContent, VideoCardContent } from '../components/Cards';
 import { FileCardContent } from '../components/FileCardContent';
 import { FocusCard } from '../components/FocusCard';
@@ -23,7 +25,8 @@ import { HeroCarousel } from '../components/HeroCarousel';
 import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
 import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
-import { LIVE_NEWS, MOVIES, SHOWS } from '../data/channels';
+import { CatalogScreen } from './CatalogScreen';
+import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
 import { GLOW, GUTTER, colors, isTV } from '../theme';
@@ -36,6 +39,7 @@ const TABS = [
   { id: 'all', label: 'All' },
   { id: 'movies', label: 'Movies' },
   { id: 'shows', label: 'Shows' },
+  { id: 'disha', label: 'For Disha Chotu' },
   { id: 'news', label: 'News' },
   { id: 'torbox', label: 'TorBox' },
 ] as const;
@@ -43,6 +47,7 @@ type Tab = (typeof TABS)[number]['id'];
 
 const MOVIE_THEMES = THEMES.filter((t) => t.kind === 'movie');
 const SHOW_THEMES = THEMES.filter((t) => t.kind === 'show');
+const HINDI_THEMES = THEMES.filter((t) => t.kind === 'hindi');
 const ALL_CHANNELS = [...SHOWS, ...MOVIES];
 // The news channels' recorded uploads, one row each on the News tab.
 const NEWS_SOURCES = LIVE_NEWS.map(({ name, channelId }) => ({ name, channelId }));
@@ -52,10 +57,23 @@ type Props = {
   torboxVersion: number;
   onPlay: (item: Playable) => void;
   onOpenTorbox: () => void;
-  onOpenSearch: () => void;
+  // Opens search limited to the given tab's channels.
+  onOpenSearch: (scope: SearchScope) => void;
+  // Opens a film from the catalog.
+  onOpenMovie: (movie: CatalogMovie) => void;
+  // Sends a release found by searching to TorBox.
+  onSendRelease: (option: TorrentOption) => void;
 };
 
-export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox, onOpenSearch }: Props) {
+export function HomeScreen({
+  history,
+  torboxVersion,
+  onPlay,
+  onOpenTorbox,
+  onOpenSearch,
+  onOpenMovie,
+  onSendRelease,
+}: Props) {
   // Keeps the header clear of a phone's status bar and notch. Zero on TVs.
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>('all');
@@ -73,6 +91,7 @@ export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox, onOpe
 
   const refresh = () => {
     clearVideoCache();
+    clearCatalogCache();
     setRefreshKey((k) => k + 1);
     // The rows show their own placeholders; this one only acknowledges the pull.
     setRefreshing(true);
@@ -123,10 +142,9 @@ export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox, onOpe
             <Text style={styles.brand}>
               For<Text style={styles.brandAccent}>Us</Text>
             </Text>
-            <Text style={styles.tagline}>Malayalam TV, free to stream</Text>
           </View>
           {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
-          <RoundButton icon="search" label="Search" onPress={onOpenSearch} />
+          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab)} />
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
           {TABS.map((t) => (
@@ -184,6 +202,23 @@ export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox, onOpe
       )}
 
       {panel(
+        'disha',
+        <TabScroll refreshControl={refreshControl} themes={HINDI_THEMES} refreshKey={refreshKey} onPlay={playVideo}>
+          <HeroCarousel key={`hero-disha-${refreshKey}`} sources={HINDI_MOVIES} label="Picked for Disha ♥" onPlay={playVideo} />
+          {HINDI_MOVIES.map((source) => (
+            <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
+          ))}
+          {HINDI_DRAMAS.map((source) => (
+            <VideoRow
+              key={`${source.channelId}-${refreshKey}`}
+              source={{ ...source, name: `Dramas in Hindi · ${source.name}` }}
+              onPlay={playVideo}
+            />
+          ))}
+        </TabScroll>,
+      )}
+
+      {panel(
         'news',
         <TabScroll refreshControl={refreshControl}>
           {liveRow}
@@ -195,13 +230,22 @@ export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox, onOpe
 
       {panel(
         'torbox',
-        <TorboxRow
-          grid
-          version={torboxVersion + refreshKey}
-          onPlay={onPlay}
-          onOpenSettings={onOpenTorbox}
+        <CatalogScreen
+          key={`catalog-${refreshKey}`}
+          embedded
+          onOpen={onOpenMovie}
+          onSend={onSendRelease}
           refreshControl={refreshControl}
-          header={<SectionHeader title="My TorBox" subtitle="Your own cloud files, played right here" />}
+          header={
+            <View style={styles.row}>
+              <SectionHeader title="My TorBox" subtitle="Your own cloud files, played right here" />
+              <TorboxRow
+                version={torboxVersion + refreshKey}
+                onPlay={onPlay}
+                onOpenSettings={onOpenTorbox}
+              />
+            </View>
+          }
         />,
       )}
     </View>
@@ -317,7 +361,6 @@ const styles = StyleSheet.create({
   brandBlock: { flex: 1 },
   brand: { color: colors.text, fontSize: isTV ? 32 : 25, fontWeight: '900', letterSpacing: -0.5 },
   brandAccent: { color: colors.accent },
-  tagline: { color: colors.muted, fontSize: isTV ? 14 : 11.5, marginTop: 1, fontWeight: '500' },
   round: {
     width: isTV ? 50 : 42,
     height: isTV ? 50 : 42,

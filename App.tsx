@@ -2,17 +2,23 @@ import { useEffect, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { BOTTOM_NAV_HEIGHT, BottomNav, type NavId } from './src/components/BottomNav';
+import { AnimatedSplash } from './src/components/AnimatedSplash';
+import { BottomNav, BOTTOM_NAV_HEIGHT, type NavId } from './src/components/BottomNav';
 import { PlayerShell } from './src/components/PlayerShell';
 import { addToHistory, clearHistory, loadHistory, playableKey } from './src/data/history';
+import type { CatalogMovie } from './src/api/catalog';
+import type { TorrentOption } from './src/api/torrents';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { MovieScreen } from './src/screens/MovieScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
+import { SendScreen } from './src/screens/SendScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TorboxSetupScreen } from './src/screens/TorboxSetupScreen';
 import { colors, isTV } from './src/theme';
+import type { SearchScope } from './src/data/channels';
 import type { Playable } from './src/types';
 
 // The screen behind the player. The player itself floats above whichever it is.
@@ -20,6 +26,8 @@ type Screen = NavId | 'torbox';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
+  // The opening animation; the home screen loads underneath it meanwhile.
+  const [splash, setSplash] = useState(true);
   // Where the TorBox screen goes back to.
   const [torboxFrom, setTorboxFrom] = useState<NavId>('home');
   const [playing, setPlaying] = useState<Playable | null>(null);
@@ -27,6 +35,12 @@ export default function App() {
   const [mini, setMini] = useState(false);
   const [history, setHistory] = useState<Playable[]>([]);
   const [torboxVersion, setTorboxVersion] = useState(0);
+  // Which tab's channels search looks in.
+  const [searchScope, setSearchScope] = useState<SearchScope>('all');
+  // The film open from the catalog, over whatever screen is showing.
+  const [movie, setMovie] = useState<CatalogMovie | null>(null);
+  // A release found by searching for its name, on its way to TorBox.
+  const [sending, setSending] = useState<TorrentOption | null>(null);
 
   useEffect(() => {
     loadHistory().then(setHistory);
@@ -56,7 +70,9 @@ export default function App() {
   // Back works like YouTube's: a full player shrinks first, then screens close.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (playing && !mini) {
+      if (sending) setSending(null);
+      else if (movie) setMovie(null);
+      else if (playing && !mini) {
         if (isTV) closePlayer();
         else setMini(true);
       } else if (screen === 'torbox') closeTorbox();
@@ -66,11 +82,11 @@ export default function App() {
       return true;
     });
     return () => sub.remove();
-  }, [playing, mini, screen, torboxFrom]);
+  }, [playing, mini, screen, torboxFrom, movie, sending]);
 
   // On TV nothing behind a player may keep remote focus, so it's hidden.
-  const hideBackground = isTV && !!playing;
-  const showNav = !isTV && screen !== 'torbox';
+  const hideBackground = isTV && (!!playing || !!movie || !!sending);
+  const showNav = !isTV && screen !== 'torbox' && !movie && !sending;
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
 
   return (
@@ -84,13 +100,18 @@ export default function App() {
             torboxVersion={torboxVersion}
             onPlay={play}
             onOpenTorbox={openTorbox}
-            onOpenSearch={() => setScreen('search')}
+            onOpenSearch={(scope) => {
+              setSearchScope(scope);
+              setScreen('search');
+            }}
+            onOpenMovie={setMovie}
+            onSendRelease={setSending}
           />
         </View>
 
         {screen === 'search' && (
           <View style={layer('search')}>
-            <SearchScreen onPlay={play} />
+            <SearchScreen key={searchScope} scope={searchScope} onPlay={play} />
           </View>
         )}
 
@@ -116,7 +137,48 @@ export default function App() {
           </View>
         )}
 
-        {showNav && <BottomNav active={screen as NavId} onSelect={setScreen} />}
+        {showNav && (
+          <BottomNav
+            active={screen as NavId}
+            onSelect={(id) => {
+              // The bottom bar's Search looks everywhere.
+              if (id === 'search') setSearchScope('all');
+              setScreen(id);
+            }}
+          />
+        )}
+
+        {sending && (
+          <View style={StyleSheet.absoluteFill}>
+            <SendScreen
+              key={sending.hash}
+              option={sending}
+              onClose={() => setSending(null)}
+              onPlay={play}
+              onOpenTorbox={() => {
+                // The settings screen sits below this one, so this is closed.
+                setSending(null);
+                openTorbox();
+              }}
+            />
+          </View>
+        )}
+
+        {movie && (
+          <View style={StyleSheet.absoluteFill}>
+            <MovieScreen
+              key={movie.id}
+              movie={movie}
+              onClose={() => setMovie(null)}
+              onPlay={play}
+              onOpenTorbox={() => {
+                // The settings screen sits below this one, so the film is closed.
+                setMovie(null);
+                openTorbox();
+              }}
+            />
+          </View>
+        )}
 
         {playing && (
           <PlayerShell
@@ -134,6 +196,7 @@ export default function App() {
             }
           </PlayerShell>
         )}
+        {splash && <AnimatedSplash onDone={() => setSplash(false)} />}
       </View>
     </SafeAreaProvider>
   );

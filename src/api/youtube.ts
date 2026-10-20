@@ -217,10 +217,15 @@ export async function relatedVideos(videoId: string, trusted: Map<string, string
 
 // YouTube's own web search, kept to the trusted official channels. Fetches a
 // few pages, since most results on a page come from other channels.
-export async function searchVideos(query: string, trusted: Map<string, string>): Promise<SearchResult[]> {
+export async function searchVideos(
+  query: string,
+  trusted: Map<string, string>,
+  // Narrow scopes keep fewer results per page, so they may read further.
+  maxPages = MAX_PAGES,
+): Promise<SearchResult[]> {
   const results: SearchResult[] = [];
   let continuation: string | undefined;
-  for (let i = 0; i < MAX_PAGES && results.length < ENOUGH_RESULTS; i++) {
+  for (let i = 0; i < maxPages && results.length < ENOUGH_RESULTS; i++) {
     const body = { context: { client: SEARCH_CLIENT }, ...(continuation ? { continuation } : { query }) };
     const res = await fetch(SEARCH_URL, {
       method: 'POST',

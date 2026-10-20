@@ -90,3 +90,108 @@ export function formatSize(bytes: number): string {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
   return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
 }
+
+// A torrent in the account, with everything needed to follow its progress.
+export type TorboxTorrent = {
+  id: number;
+  hash: string;
+  name: string;
+  /** 0 to 100. */
+  progress: number;
+  downloadState: string;
+  downloadFinished: boolean;
+  downloadPresent: boolean;
+  eta?: number;
+  downloadSpeed?: number;
+  files: { id: number; name: string; size: number; mimetype?: string }[];
+};
+
+type ApiTorrent = {
+  id?: number;
+  hash?: string;
+  name?: string;
+  progress?: number;
+  download_state?: string;
+  downloadState?: string;
+  download_finished?: boolean;
+  downloadFinished?: boolean;
+  download_present?: boolean;
+  downloadPresent?: boolean;
+  eta?: number;
+  download_speed?: number;
+  downloadSpeed?: number;
+  files?: { id?: number; name?: string; short_name?: string; size?: number; mimetype?: string }[];
+};
+
+function toTorrent(item: ApiTorrent): TorboxTorrent {
+  // TorBox reports progress as a fraction in some places and a percent in others.
+  const raw = item.progress ?? 0;
+  const progress = raw > 0 && raw <= 1 ? Math.round(raw * 100) : Math.round(raw);
+  return {
+    id: item.id ?? 0,
+    hash: item.hash ?? '',
+    name: item.name ?? '',
+    progress: Math.min(100, Math.max(0, progress)),
+    downloadState: item.downloadState ?? item.download_state ?? 'unknown',
+    downloadFinished: item.downloadFinished ?? item.download_finished ?? false,
+    downloadPresent: item.downloadPresent ?? item.download_present ?? false,
+    eta: item.eta,
+    downloadSpeed: item.downloadSpeed ?? item.download_speed,
+    files: (item.files ?? []).map((f) => ({
+      id: f.id ?? 0,
+      name: f.short_name || f.name || '',
+      size: f.size ?? 0,
+      mimetype: f.mimetype,
+    })),
+  };
+}
+
+/** One torrent from the account, by its id. */
+export async function getTorrent(key: string, id: number): Promise<TorboxTorrent | null> {
+  const list = await call<ApiTorrent[]>(`torrents/mylist?id=${id}&bypass_cache=true`, key).catch(
+    () => [] as ApiTorrent[],
+  );
+  const found = (list ?? []).find((t) => t.id === id) ?? list?.[0];
+  return found ? toTorrent(found) : null;
+}
+
+/** Looks for a torrent the account already has, by its hash. */
+export async function findTorrentByHash(key: string, hash: string): Promise<TorboxTorrent | null> {
+  const list = await call<ApiTorrent[]>(`torrents/mylist?bypass_cache=true`, key).catch(
+    () => [] as ApiTorrent[],
+  );
+  const found = (list ?? []).find((t) => (t.hash ?? '').toLowerCase() === hash.toLowerCase());
+  return found ? toTorrent(found) : null;
+}
+
+/** Hands a magnet to TorBox, which downloads it into the account's cloud. */
+export async function createTorrent(
+  key: string,
+  magnet: string,
+  name?: string,
+): Promise<{ torrentId: number; hash: string }> {
+  const form = new FormData();
+  form.append('magnet', magnet);
+  form.append('seed', '1');
+  if (name) form.append('name', name);
+
+  const res = await fetch(`${BASE}/torrents/createtorrent`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}` },
+    body: form,
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body?.success) {
+    throw new Error(body?.detail || body?.error || `TorBox returned ${res.status}`);
+  }
+  return { torrentId: body.data?.torrent_id, hash: body.data?.hash ?? '' };
+}
+
+/** The biggest video file of a torrent, which is the one to play. */
+export function mainVideoFile(torrent: TorboxTorrent) {
+  const videos = torrent.files.filter(
+    (f) => f.mimetype?.startsWith('video/') || VIDEO_EXT.test(f.name),
+  );
+  if (videos.length === 0) return null;
+  return videos.reduce((biggest, f) => (f.size > biggest.size ? f : biggest));
+}

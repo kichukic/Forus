@@ -1,10 +1,19 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, GUTTER, RADIUS, colors, isTV } from '../theme';
 
 // A row's heading, with an optional small line under it.
-export function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+export function SectionHeader({
+  title,
+  subtitle,
+  style,
+}: {
+  title: string;
+  subtitle?: string;
+  // For when the heading sits inside something that already has a gutter.
+  style?: ViewStyle;
+}) {
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, style]}>
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </View>

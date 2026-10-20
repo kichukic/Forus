@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { loadVideoPage, loadVideos, searchVideos, type Video } from '../api/youtube';
-import { MOVIES, SHOWS, TRUSTED_CHANNELS, type VideoSource } from '../data/channels';
+import { FULL_MOVIE, MOVIES, SHOWS, TRUSTED_CHANNELS, type VideoSource } from '../data/channels';
 import type { Theme } from '../data/themes';
 import { CARD_HEIGHT, GUTTER, colors, isTV } from '../theme';
 import { VideoCardContent } from './Cards';
@@ -87,7 +87,6 @@ export function NewRow({ onPlay }: { onPlay: (video: Video) => void }) {
   );
 }
 
-const FULL_MOVIE = /full movie|full length/i;
 // A row of one or two cards looks broken; such themes are left out.
 const MIN_THEME_RESULTS = 3;
 

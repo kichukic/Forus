@@ -33,14 +33,14 @@ function persist() {
 }
 
 /** True when the source recently failed and should be skipped for now. */
-export function isCoolingDown(id: string): boolean {
+export function isCoolingDown(id: string, cooldownMs = FAIL_COOLDOWN_MS): boolean {
   const entry = memory[id];
   if (!entry) return false;
   if (entry.workedAt && Date.now() - entry.workedAt < OK_TTL_MS) return false;
-  return !!entry.failedAt && Date.now() - entry.failedAt < FAIL_COOLDOWN_MS;
+  return !!entry.failedAt && Date.now() - entry.failedAt < cooldownMs;
 }
 
-export function markFailed(id: string) {
+export function markFailed(id: string, _cooldownMs = FAIL_COOLDOWN_MS) {
   memory[id] = { failedAt: Date.now() };
   persist();
 }

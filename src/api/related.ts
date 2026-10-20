@@ -1,6 +1,6 @@
 // What to list under the player: related videos from the official channels,
 // topped up from the app's own rows so the list is never short.
-import { LIVE_NEWS, MOVIES, SHOWS, TRUSTED_CHANNELS } from '../data/channels';
+import { FULL_MOVIE, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, TRUSTED_CHANNELS } from '../data/channels';
 import type { Playable } from '../types';
 import { getApiKey, listVideoFiles } from './torbox';
 import { loadVideos, relatedVideos, thumbnailUrl } from './youtube';
@@ -16,7 +16,6 @@ export type RelatedCard = {
 };
 
 const MAX_CARDS = 20;
-const FULL_MOVIE = /full movie|full length/i;
 
 export async function getRelated(item: Playable): Promise<RelatedCard[]> {
   if (item.kind === 'file') return relatedFiles(item);
@@ -42,8 +41,9 @@ async function relatedToVideo(videoId: string, title: string): Promise<RelatedCa
     add(videoCard(r.id, r.title, [r.channel, r.live ? '● LIVE' : r.duration].filter(Boolean).join(' · ')), r.id);
   }
 
-  // Films are followed by films, everything else by the latest episodes.
-  const pool = FULL_MOVIE.test(title) ? MOVIES : SHOWS;
+  // Films are followed by films (Hindi ones by Hindi ones), everything else by
+  // the latest episodes.
+  const pool = !FULL_MOVIE.test(title) ? SHOWS : /hindi|bollywood/i.test(title) ? HINDI_MOVIES : MOVIES;
   const lists = await Promise.all(pool.map((s) => loadVideos(s).catch(() => [])));
   const latest = lists
     .flatMap((list, i) => list.map((v) => ({ ...v, channel: pool[i].name })))

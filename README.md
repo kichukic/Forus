@@ -38,6 +38,35 @@ and doesn't add downloads. Each play asks TorBox for a fresh stream link,
 because the links expire. MKV files with DTS audio may play without sound
 because most phones and TVs can't decode DTS.
 
+## Movie Catalog
+
+The **Catalog** section in the TorBox tab is a film catalog: browse the popular
+films or search for one, then pick a release and the app sends it to your
+TorBox and plays it.
+
+- The catalog comes from [Cinemeta](https://v3-cinemeta.strem.io), Stremio's
+  free metadata service. It needs no key and gives every film an IMDb id.
+  The list grows as you scroll.
+- The releases for a film come from [Torrentio](https://torrentio.strem.fun), a
+  public Stremio addon. It answers with the releases the indexers have, with
+  their quality, size and number of seeds.
+- A search also looks for releases **by name**, across The Pirate Bay's open
+  index and Nyaa, so anything with a torrent can be found — films the other
+  sources don't know about, anime, and the rest. Releases come first in a
+  search, with the films they matched under them.
+- Picking a release builds a magnet link and hands it to TorBox, which
+  downloads it into your own cloud. The app then follows the download, shows
+  the progress, and opens the file in the player when it's ready.
+
+Nothing is downloaded until you pick a release, and everything goes into your
+own TorBox account, so a film you start here also shows up under **My
+TorBox**. TorBox allows 60 uncached downloads an hour; if you hit that, its
+own message is shown.
+
+The public indexes turn away bursts and are sometimes blocked outright, so
+each one is optional: one that stops answering is remembered and left alone
+for a while, and the search carries on with whatever else answers.
+
 ## Remote
 
 | Button | On the home screen | In the player |

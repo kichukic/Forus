@@ -48,8 +48,9 @@ export const SHOWS: VideoSource[] = [
 ];
 
 // Verified distributor channels that upload complete films for free. They also
-// post trailers, songs and scenes, so only titles that say "full movie" are kept.
-const FULL_MOVIE = /full movie|full length/i;
+// post trailers, songs and scenes, so only titles that say "full movie" are kept
+// (Hindi studios write "Full Hindi Movie" or "Hindi Full Movie").
+export const FULL_MOVIE = /full (hindi )?movie|hindi full movie|full length/i;
 
 export const MOVIES: VideoSource[] = [
   { name: 'Speed Audio & Video', channelId: 'UCCylGvN1jEnQ3dB4iajSMCA', titleFilter: FULL_MOVIE },
@@ -59,8 +60,25 @@ export const MOVIES: VideoSource[] = [
   { name: 'Central Talkies', channelId: 'UC-y6ddbfjQiKV43LVfOKiMw', titleFilter: FULL_MOVIE },
 ];
 
+// For the "For Disha Chotu" tab: Hindi films from the big studios' own channels.
+export const HINDI_MOVIES: VideoSource[] = [
+  { name: 'Ultra Movie Parlour', channelId: 'UCYauDsl-rswjQGpA0_-Z9Pw', titleFilter: FULL_MOVIE },
+  { name: 'Shemaroo Movies', channelId: 'UCBOmfqgTZi7yDp4-3Lr_3lA', titleFilter: FULL_MOVIE },
+  { name: 'Ultra Bollywood', channelId: 'UCmL1WlDI8UkXDXCXcBQN9CA', titleFilter: FULL_MOVIE },
+  { name: 'Zee Movies Hindi', channelId: 'UCcWi9YwnWUsR53jV0T4ObKA', titleFilter: FULL_MOVIE },
+  { name: 'Rajshri', channelId: 'UCEKWXRsfUHkan-D_ljU8Asw', titleFilter: FULL_MOVIE },
+  { name: 'Venus Movies', channelId: 'UCpcsv3Ow-8IhoUGDEfPetsQ', titleFilter: FULL_MOVIE },
+];
+
+// No official channel posts Korean dramas in Hindi (they are licensed to paid
+// apps); these are the official channels for Chinese dramas dubbed in Hindi.
+export const HINDI_DRAMAS: VideoSource[] = [
+  { name: 'Dyar Entertainment', channelId: 'UC2lLHs_L-bVRaJvaKLP7gXA' },
+  { name: 'CCAP Hindi', channelId: 'UCWpl0xU2QoCilabHBfT0YBQ' },
+];
+
 // Official channels that only appear in search results, with no row of their own.
-const SEARCH_ONLY: VideoSource[] = [
+const SEARCH_ONLY_FILMS: VideoSource[] = [
   // Mohanlal's production house; recent uploads are mostly scenes.
   { name: 'Aashirvad Cinemas', channelId: 'UC_J44kyEsEB8LPlhfm2Xb4g' },
   // Distributors and production houses whose recent uploads are mostly short films,
@@ -68,11 +86,31 @@ const SEARCH_ONLY: VideoSource[] = [
   { name: 'Saina Movies', channelId: 'UCeM3IXubMXTH3LdsMQ3VAhw' },
   { name: 'Friday Film House', channelId: 'UCv65_DW-OzwBgJw99zWJy3g' },
   { name: 'Goodwill Entertainments', channelId: 'UCq6f9bBWaWTHl0FhH167RgA' },
-  { name: 'Asianet Plus', channelId: 'UCjtSIpqwfNEd4H2ulPgn9yQ' },
 ];
+const SEARCH_ONLY_SHOWS: VideoSource[] = [{ name: 'Asianet Plus', channelId: 'UCjtSIpqwfNEd4H2ulPgn9yQ' }];
+
+type Channel = { name: string; channelId: string };
+const byId = (list: Channel[]) => new Map(list.map((c) => [c.channelId, c.name]));
 
 // Search covers YouTube as a whole, which is full of pirated re-uploads, so it
 // only keeps results from these channels.
-export const TRUSTED_CHANNELS = new Map(
-  [...LIVE_NEWS, ...SHOWS, ...MOVIES, ...SEARCH_ONLY].map((c) => [c.channelId, c.name]),
-);
+export const TRUSTED_CHANNELS = byId([
+  ...LIVE_NEWS,
+  ...SHOWS,
+  ...MOVIES,
+  ...HINDI_MOVIES,
+  ...HINDI_DRAMAS,
+  ...SEARCH_ONLY_FILMS,
+  ...SEARCH_ONLY_SHOWS,
+]);
+
+// Search follows the tab it was opened from: each tab only searches its own channels.
+export type SearchScope = 'all' | 'movies' | 'shows' | 'disha' | 'news' | 'torbox';
+
+export const SCOPE_CHANNELS: Record<Exclude<SearchScope, 'torbox'>, Map<string, string>> = {
+  all: TRUSTED_CHANNELS,
+  movies: byId([...MOVIES, ...SEARCH_ONLY_FILMS]),
+  shows: byId([...SHOWS, ...SEARCH_ONLY_SHOWS]),
+  disha: byId([...HINDI_MOVIES, ...HINDI_DRAMAS]),
+  news: byId(LIVE_NEWS),
+};

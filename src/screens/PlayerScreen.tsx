@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import type { HWEvent } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { PlayerControls, ProgressLine, type PlaybackTime } from '../components/PlayerControls';
 import type { ShellControls } from '../components/PlayerShell';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { SourcePicker } from '../components/SourcePicker';
@@ -64,6 +65,8 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
   // The source that last reported 'ready'; the ready timeout leaves it alone.
   const readyId = useRef<string | null>(null);
   const [paused, setPaused] = useState(false);
+  const [buffering, setBuffering] = useState(false);
+  const [time, setTime] = useState<PlaybackTime>({ t: 0, d: 0 });
   const [external, setExternal] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -76,6 +79,12 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
     webview.current?.injectJavaScript(
       `if (window.cmd) { window.cmd(${JSON.stringify(name)}, ${arg}); } true;`,
     );
+
+  // A new source starts its own clock.
+  useEffect(() => {
+    setTime({ t: 0, d: 0 });
+    setBuffering(false);
+  }, [current?.id]);
 
   const pick = useCallback((source: Source) => {
     const at = sources.current.findIndex((s) => s.id === source.id);
@@ -171,8 +180,13 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
       setFailed(false);
       // A player on another site plays, but the remote cannot steer it.
       setExternal(msg.data === 'external');
+    } else if (msg.type === 'time') {
+      const data = msg.data as PlaybackTime;
+      if (data && typeof data.t === 'number') setTime({ t: data.t, d: data.d || 0 });
     } else if (msg.type === 'state') {
+      // YouTube's states: 1 playing, 2 paused, 3 buffering.
       setPaused(msg.data === 2);
+      setBuffering(msg.data === 3);
     } else if (msg.type === 'error') {
       const code = Number(msg.data);
       if (EMBED_BLOCKED.includes(code)) {
@@ -227,11 +241,11 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
                 : { uri: current.url ?? '' }
             }
             style={styles.webview}
-            // On TV the remote drives playback through useTVEventHandler, so the
-            // WebView must not take focus and swallow the D-pad keys. On a phone
-            // you tap YouTube's own controls.
-            focusable={!isTV}
-            pointerEvents={isTV ? 'none' : 'auto'}
+            // The app's own controls (or, on TV, the remote) drive playback, so
+            // the page never gets touches or focus and YouTube's menus stay shut.
+            // Only a third-party site's own player is left touchable.
+            focusable={!isTV && external}
+            pointerEvents={isTV || !external ? 'none' : 'auto'}
             javaScriptEnabled
             domStorageEnabled
             allowsFullscreenVideo
@@ -244,6 +258,17 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
             }}
             onMessage={onMessage}
           />
+          {!isTV && !external && !mini && (
+            <PlayerControls
+              paused={paused}
+              buffering={buffering}
+              time={time}
+              live={item.kind === 'live'}
+              onToggle={() => send(paused ? 'play' : 'pause')}
+              onSeekBy={(sec) => send('seek', sec)}
+              onSeekTo={(sec) => send('seekTo', sec)}
+            />
+          )}
         </View>
       )}
 
@@ -327,6 +352,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
                   ? 'OK: pause / play    Back: home'
                   : 'OK: pause / play    ◀ ▶: 10 seconds    Back: home'}
           </Text>
+          {!external && <ProgressLine time={time} live={item.kind === 'live'} />}
         </View>
       )}
 

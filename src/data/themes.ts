@@ -1,9 +1,10 @@
-// Rows added to the bottom of the Movies and Shows tabs as they are scrolled. Each one is a
-// YouTube search kept to the trusted official channels, so it only ever shows
-// their uploads. Add, remove or reorder freely.
+// Rows added to the bottom of the Movies, Shows and For Disha Chotu tabs as they
+// are scrolled. Each one is a YouTube search kept to the trusted official channels,
+// so it only ever shows their uploads. Add, remove or reorder freely.
 
-// 'movie' themes go on the Movies tab, 'show' themes on the Shows tab.
-export type Theme = { title: string; query: string; kind: 'movie' | 'show' };
+// 'movie' themes go on the Movies tab, 'show' themes on the Shows tab and
+// 'hindi' themes on the For Disha Chotu tab.
+export type Theme = { title: string; query: string; kind: 'movie' | 'show' | 'hindi' };
 
 export const THEMES: Theme[] = [
   { title: 'Mohanlal movies', query: 'Mohanlal malayalam full movie', kind: 'movie' },
@@ -30,4 +31,13 @@ export const THEMES: Theme[] = [
   { title: 'Dubbed movies', query: 'malayalam dubbed full movie', kind: 'movie' },
   { title: 'Indrajith movies', query: 'Indrajith malayalam full movie', kind: 'movie' },
   { title: 'Kalabhavan Mani movies', query: 'Kalabhavan Mani malayalam full movie', kind: 'movie' },
+  { title: 'Bollywood comedies', query: 'hindi comedy full movie', kind: 'hindi' },
+  { title: 'Romantic Hindi movies', query: 'hindi romantic full movie', kind: 'hindi' },
+  { title: 'South movies in Hindi', query: 'south hindi dubbed full movie', kind: 'hindi' },
+  { title: 'Family dramas', query: 'hindi family drama full movie', kind: 'hindi' },
+  { title: 'Akshay Kumar movies', query: 'Akshay Kumar full hindi movie', kind: 'hindi' },
+  { title: 'Govinda movies', query: 'Govinda full hindi movie', kind: 'hindi' },
+  { title: 'Hindi thrillers', query: 'hindi thriller full movie', kind: 'hindi' },
+  { title: 'Ajay Devgn movies', query: 'Ajay Devgn full hindi movie', kind: 'hindi' },
+  { title: 'Classic Bollywood', query: '90s bollywood full hindi movie', kind: 'hindi' },
 ];

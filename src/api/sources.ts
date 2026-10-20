@@ -14,6 +14,21 @@ import { resolveLiveVideoId } from './youtubeLive';
 // is given one. It doesn't need to exist.
 export const ORIGIN = 'https://mytvstream.app';
 
+// The app draws its own controls, so YouTube's are switched off, along with its
+// annotations, keyboard shortcuts and fullscreen button.
+const YT_PARAMS = [
+  'autoplay=1',
+  'enablejsapi=1',
+  'playsinline=1',
+  'controls=0',
+  'rel=0',
+  'iv_load_policy=3',
+  'fs=0',
+  'disablekb=1',
+  'cc_load_policy=0',
+  `origin=${encodeURIComponent(ORIGIN)}`,
+].join('&');
+
 export type Source = {
   /** Unique per source, also used as the health key. */
   id: string;
@@ -62,7 +77,9 @@ export const BRIDGE_JS = `
     if (!v) return;
     if (name === 'toggle') { v.paused ? v.play() : v.pause(); }
     else if (name === 'seek') { try { v.currentTime = Math.max(0, (v.currentTime || 0) + (arg || 0)); } catch (e) {} }
+    else if (name === 'seekTo') { try { v.currentTime = Math.max(0, arg || 0); } catch (e) {} }
     else if (name === 'play') { v.play(); }
+    else if (name === 'pause') { v.pause(); }
   };
   function state() { var v = findVideo(); return v ? (v.paused ? 2 : 1) : 0; }
   var waits = 0;
@@ -75,6 +92,7 @@ export const BRIDGE_JS = `
       v.addEventListener('play', function () { post('state', 1); });
       v.addEventListener('pause', function () { post('state', 2); });
       setInterval(function () { post('state', state()); }, 1000);
+      setInterval(function () { post('time', { t: v.currentTime || 0, d: v.duration || 0 }); }, 500);
     } else if (document.querySelector('iframe')) {
       // A player that lives on another site: it plays, but the remote can't steer it.
       clearInterval(timer);
@@ -91,7 +109,7 @@ function ytEmbedHtml(embedUrl: string): string {
   return `<!doctype html>
 <html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>html,body{margin:0;height:100%;background:#a00;overflow:hidden}iframe{border:0;width:100%;height:100%}</style>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{border:0;width:100%;height:100%;pointer-events:none}</style>
 </head><body>
 <iframe id="p" src="${embedUrl}" allow="autoplay; encrypted-media; fullscreen"></iframe>
 <script>
@@ -102,7 +120,15 @@ function ytEmbedHtml(embedUrl: string): string {
   function onYouTubeIframeAPIReady() {
     player = new YT.Player('p', {
       events: {
-        onReady: function (e) { e.target.playVideo(); send('ready'); },
+        onReady: function (e) {
+          e.target.playVideo();
+          send('ready');
+          // The app draws its own seek bar from these.
+          setInterval(function () {
+            if (!player.getCurrentTime) return;
+            send('time', { t: player.getCurrentTime(), d: player.getDuration() });
+          }, 500);
+        },
         onError: function (e) { send('error', e.data); },
         onStateChange: function (e) { send('state', e.data); }
       }
@@ -114,8 +140,12 @@ function ytEmbedHtml(embedUrl: string): string {
       player.getPlayerState() === YT.PlayerState.PLAYING ? player.pauseVideo() : player.playVideo();
     } else if (name === 'seek') {
       player.seekTo(player.getCurrentTime() + arg, true);
+    } else if (name === 'seekTo') {
+      player.seekTo(arg, true);
     } else if (name === 'play') {
       player.playVideo();
+    } else if (name === 'pause') {
+      player.pauseVideo();
     }
   };
 </script>
@@ -134,8 +164,7 @@ function ytSource(videoId: string): Source {
 }
 
 function ytEmbedUrl(videoId: string): string {
-  const params = `autoplay=1&enablejsapi=1&playsinline=1&rel=0&origin=${encodeURIComponent(ORIGIN)}`;
-  return `https://www.youtube.com/embed/${videoId}?${params}`;
+  return `https://www.youtube.com/embed/${videoId}?${YT_PARAMS}`;
 }
 
 function pageSource(id: string, label: string, provider: string, url: string): Source {
@@ -165,7 +194,7 @@ export async function getPrimarySources(item: YouTubePlayable): Promise<Source[]
       provider: 'youtube',
       transport: 'yt',
       html: ytEmbedHtml(
-        `https://www.youtube.com/embed/live_stream?channel=${item.channelId}&autoplay=1&enablejsapi=1&playsinline=1&rel=0&origin=${encodeURIComponent(ORIGIN)}`,
+        `https://www.youtube.com/embed/live_stream?channel=${item.channelId}&${YT_PARAMS}`,
       ),
     });
     return sources;

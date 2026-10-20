@@ -4,12 +4,15 @@
     "slug": "MytvstreamApp",
     "version": "1.0.0",
     "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0c0a12",
     "plugins": [
       [
         "@react-native-tvos/config-tv",
         {
           "isTV": true,
-          "androidTVBanner": "./assets/images/icon-400x240.png",
+          "androidTVBanner": "./assets/images/tv-banner.png",
           "appleTVImages": {
             "icon": "./assets/images/icon-1280x768.png",
             "iconSmall": "./assets/images/icon-400x240.png",
@@ -24,16 +27,20 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/icon-1920x720.png",
-          "imageWidth": 400,
-          "backgroundColor": "#0b0d12"
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 180,
+          "backgroundColor": "#0c0a12"
         }
       ],
       "expo-video",
       "expo-font"
     ],
     "android": {
-      "package": "com.mytvstream.malayalam"
+      "package": "com.kishor.forus",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundImage": "./assets/images/adaptive-background.png"
+      }
     }
   }
 }
