@@ -11,6 +11,13 @@ Android phones (touch, either orientation).
 
 Edit [src/data/channels.ts](src/data/channels.ts) to add or remove channels.
 
+- **Search** (top right) searches YouTube but keeps only results from the
+  official channels in [src/data/channels.ts](src/data/channels.ts)
+  (`TRUSTED_CHANNELS`), plus matching files in your TorBox. YouTube itself is
+  full of pirated re-uploads, which this filter keeps out.
+- **New today** merges the newest uploads from every show and movie channel.
+  Pull down on the home screen (or press **Refresh** on a TV) to fetch fresh
+  lists.
 - **Recently Watched** appears at the top once you've played something: the last
   20 videos and live channels, newest first, saved on the device.
 - **Live News** plays a channel's current YouTube live stream.

@@ -1,10 +1,11 @@
-import { FlatList, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { FlatList, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { thumbnailUrl } from '../api/youtube';
+import { clearVideoCache, thumbnailUrl } from '../api/youtube';
 import { FileCardContent } from '../components/FileCardContent';
 import { FocusCard, cardImageStyle } from '../components/FocusCard';
 import { TorboxRow } from '../components/TorboxRow';
-import { VideoRow } from '../components/VideoRow';
+import { NewRow, VideoRow } from '../components/VideoRow';
 import { LIVE_NEWS, MOVIES, SHOWS } from '../data/channels';
 import { playableKey } from '../data/history';
 import { CARD_HEIGHT, GUTTER, colors, isTV } from '../theme';
@@ -15,18 +16,40 @@ type Props = {
   torboxVersion: number;
   onPlay: (item: Playable) => void;
   onOpenTorbox: () => void;
+  onOpenSearch: () => void;
 };
 
-export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox }: Props) {
+export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox, onOpenSearch }: Props) {
   // Keeps the header clear of a phone's status bar and notch. Zero on TVs.
   const insets = useSafeAreaInsets();
+  // Bumped on refresh; the rows below are keyed on it, so they remount and refetch.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = () => {
+    clearVideoCache();
+    setRefreshKey((k) => k + 1);
+    // The rows show their own spinners; this one only acknowledges the pull.
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 600);
+  };
+
   return (
     <View style={styles.screen}>
       <ScrollView
         style={styles.screen}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + styles.content.paddingVertical }]}
+        refreshControl={
+          isTV ? undefined : (
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} colors={[colors.accent]} />
+          )
+        }
       >
-        <Text style={styles.brand}>MyTV Malayalam</Text>
+        <View style={styles.header}>
+          <Text style={styles.brand}>MyTV Malayalam</Text>
+          <HeaderButton label="🔍  Search" onPress={onOpenSearch} />
+          {isTV && <HeaderButton label="↻  Refresh" onPress={refresh} />}
+        </View>
 
         {history.length > 0 && (
           <>
@@ -57,6 +80,8 @@ export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox }: Pro
           </>
         )}
 
+        <NewRow key={`new-${refreshKey}`} onPlay={(v) => onPlay({ kind: 'video', videoId: v.id, title: v.title })} />
+
         <Section title="Live News" />
         <FlatList
           horizontal
@@ -77,14 +102,14 @@ export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox }: Pro
         <Section title="Serials & Shows" />
         {SHOWS.map((source) => (
           <VideoRow
-            key={source.channelId}
+            key={`${source.channelId}-${refreshKey}`}
             source={source}
             onPlay={(v) => onPlay({ kind: 'video', videoId: v.id, title: v.title })}
           />
         ))}
 
         <Section title="My TorBox" />
-        <TorboxRow version={torboxVersion} onPlay={onPlay} onOpenSettings={onOpenTorbox} />
+        <TorboxRow version={torboxVersion + refreshKey} onPlay={onPlay} onOpenSettings={onOpenTorbox} />
 
         <Section title="Movies" />
         {MOVIES.length === 0 ? (
@@ -92,7 +117,7 @@ export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox }: Pro
         ) : (
           MOVIES.map((source) => (
             <VideoRow
-              key={source.channelId}
+              key={`${source.channelId}-${refreshKey}`}
               source={source}
               onPlay={(v) => onPlay({ kind: 'video', videoId: v.id, title: v.title })}
             />
@@ -102,6 +127,17 @@ export function HomeScreen({ history, torboxVersion, onPlay, onOpenTorbox }: Pro
       {/* Solid strip so rows don't scroll visibly behind the phone's status bar. */}
       <View style={[styles.statusStrip, { height: insets.top }]} />
     </View>
+  );
+}
+
+function HeaderButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ focused, pressed }) => [styles.headerButton, (focused || pressed) && styles.headerButtonActive]}
+    >
+      <Text style={styles.headerButtonText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -123,13 +159,29 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   statusStrip: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.background },
   content: { paddingVertical: isTV ? 32 : 16 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: isTV ? 16 : 10,
+    paddingHorizontal: GUTTER,
+    marginBottom: 8,
+  },
   brand: {
+    flex: 1,
     color: colors.accent,
     fontSize: isTV ? 30 : 24,
     fontWeight: '800',
-    marginLeft: GUTTER,
-    marginBottom: 8,
   },
+  headerButton: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: isTV ? 20 : 14,
+    paddingVertical: isTV ? 10 : 8,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  headerButtonActive: { borderColor: colors.accent },
+  headerButtonText: { color: colors.text, fontSize: isTV ? 18 : 14, fontWeight: '700' },
   section: {
     color: colors.muted,
     fontSize: isTV ? 16 : 13,

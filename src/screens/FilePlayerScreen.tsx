@@ -1,20 +1,28 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiKey, getStreamUrl } from '../api/torbox';
+import type { ShellControls } from '../components/PlayerShell';
+import { RelatedPanel } from '../components/RelatedPanel';
 import { colors, isTV } from '../theme';
-import type { FilePlayable } from '../types';
+import type { FilePlayable, Playable } from '../types';
 
 type Props = {
   item: FilePlayable;
   onClose: () => void;
+  // Plays something from the related list under the video.
+  onPlay: (item: Playable) => void;
+  // Set when the player sits in the mini-player shell (which also pads the top).
+  shell?: ShellControls;
 };
 
 // Plays a file from the user's TorBox cloud in the app's own video player.
-export function FilePlayerScreen({ item, onClose }: Props) {
-  const insets = useSafeAreaInsets();
+export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
+  const { width, height } = useWindowDimensions();
+  const mini = shell?.mini ?? false;
+  // A phone held upright shows the video at the top with its title below.
+  const portraitPhone = !isTV && height > width;
   const player = useVideoPlayer(null, (p) => {
     p.staysActiveInBackground = false;
   });
@@ -42,8 +50,9 @@ export function FilePlayerScreen({ item, onClose }: Props) {
     <View style={styles.screen}>
       <VideoView
         player={player}
-        style={styles.video}
-        nativeControls
+        style={portraitPhone ? styles.videoPortrait : styles.video}
+        // In the corner window a tap opens the player instead.
+        nativeControls={!mini}
         contentFit="contain"
         fullscreenOptions={{ enable: !isTV }}
       />
@@ -67,9 +76,27 @@ export function FilePlayerScreen({ item, onClose }: Props) {
         </View>
       )}
 
-      {!isTV && (
-        <Pressable onPress={onClose} hitSlop={12} style={[styles.close, { top: insets.top + 8 }]}>
+      {portraitPhone && !mini && (
+        // Dragging the title block down shrinks the player into the corner.
+        <RelatedPanel item={item} onPlay={onPlay} dragHandlers={shell?.dragHandlers}>
+          <Text style={styles.infoTitle}>{item.title}</Text>
+          <Text style={styles.infoNote}>From your TorBox</Text>
+        </RelatedPanel>
+      )}
+
+      {!isTV && !mini && (
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          style={[styles.close, { top: (portraitPhone ? (width * 9) / 16 : 0) + 8 }]}
+        >
           <Text style={styles.closeText}>✕</Text>
+        </Pressable>
+      )}
+
+      {!isTV && !mini && shell && (
+        <Pressable onPress={shell.minimize} hitSlop={12} style={styles.minimize}>
+          <Text style={styles.minimizeText}>⌄</Text>
         </Pressable>
       )}
     </View>
@@ -79,6 +106,21 @@ export function FilePlayerScreen({ item, onClose }: Props) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#000' },
   video: { flex: 1 },
+  videoPortrait: { width: '100%', aspectRatio: 16 / 9 },
+  infoTitle: { color: colors.text, fontSize: 17, fontWeight: '700', lineHeight: 24 },
+  infoNote: { color: colors.muted, fontSize: 13, marginTop: 6 },
+  minimize: {
+    position: 'absolute',
+    top: 8,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  minimizeText: { color: '#fff', fontSize: 22, fontWeight: '800', lineHeight: 22 },
   overlay: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',

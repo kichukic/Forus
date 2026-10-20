@@ -20,11 +20,13 @@ export type Source = {
   label: string;
   /** Provider family: "youtube", "vidsrc", "cobalt", ... */
   provider: string;
-  /** How playback is driven: the YouTube iframe API, or a plain video element. */
-  transport: 'yt' | 'dom';
+  /** How it is played: the YouTube iframe API, a plain video element, or the native player. */
+  transport: 'yt' | 'dom' | 'native';
   /** Loaded by the WebView. */
   url?: string;
   html?: string;
+  /** Played by the native player instead of a WebView. */
+  media?: { url: string; kind: 'hls' | 'file' };
 };
 
 /**
@@ -84,43 +86,12 @@ export const BRIDGE_JS = `
   }, 500);
 })();`;
 
-/** A page that plays the stream itself, with the bridge built in. */
-function directHtml(media: Media): string {
-  const setup =
-    media.kind === 'hls'
-      ? `
-    if (window.Hls && Hls.isSupported()) {
-      var hls = new Hls({ lowLatencyMode: true, backBufferLength: 60 });
-      hls.loadSource(URL);
-      hls.attachMedia(v);
-    } else {
-      v.src = URL;
-    }`
-      : `
-    v.src = URL;`;
-
-  return `<!doctype html>
-<html><head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}video{width:100%;height:100%;object-fit:contain;background:#000}</style>
-</head><body>
-<video id="v" playsinline autoplay controls></video>
-<script>${BRIDGE_JS}</script>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
-<script>
-  var v = document.getElementById('v');
-  var URL = ${JSON.stringify(media.url)};
-  ${setup}
-</script>
-</body></html>`;
-}
-
 /** The official YouTube iframe player. */
 function ytEmbedHtml(embedUrl: string): string {
   return `<!doctype html>
 <html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{border:0;width:100%;height:100%}</style>
+<style>html,body{margin:0;height:100%;background:#a00;overflow:hidden}iframe{border:0;width:100%;height:100%}</style>
 </head><body>
 <iframe id="p" src="${embedUrl}" allow="autoplay; encrypted-media; fullscreen"></iframe>
 <script>
@@ -171,21 +142,14 @@ function pageSource(id: string, label: string, provider: string, url: string): S
   return { id, label, provider, transport: 'dom', url };
 }
 
-/** Sources that need no network call, tried before the slower extractors. */
+/** The official YouTube sources. These start playing right away. */
 export async function getPrimarySources(item: YouTubePlayable): Promise<Source[]> {
   const sources: Source[] = [];
 
   if (item.kind === 'live') {
     const liveId = await resolveLiveVideoId(item.channelId);
-    const blocked = isBlocked(`embed:${item.channelId}`);
-    if (liveId && !blocked) {
+    if (liveId && !isBlocked(`embed:${item.channelId}`)) {
       sources.push(ytSource(liveId));
-      sources.push(
-        pageSource('vidsrc', 'VidSrc', 'vidsrc', `https://vidsrc.net/embed/youtube/${liveId}`),
-      );
-      sources.push(
-        pageSource('piped', 'Piped', 'piped', `https://piped.video/embed/watch?v=${liveId}`),
-      );
     }
     sources.push(
       pageSource(
@@ -222,33 +186,45 @@ export async function getPrimarySources(item: YouTubePlayable): Promise<Source[]
       `https://m.youtube.com/watch?v=${videoId}`,
     ),
   );
+  return sources;
+}
+
+/** Third-party embed frontends. They are tried after the direct streams. */
+export async function getFrontendSources(item: YouTubePlayable): Promise<Source[]> {
+  const sources: Source[] = [];
+
+  if (item.kind === 'live') {
+    const liveId = await resolveLiveVideoId(item.channelId);
+    if (!liveId) return sources;
+    sources.push(
+      pageSource('vidsrc', 'VidSrc', 'vidsrc', `https://vidsrc.sh/embed/youtube/${liveId}`),
+    );
+    sources.push(
+      pageSource('piped', 'Piped', 'piped', `https://piped.video/embed/watch?v=${liveId}`),
+    );
+    return sources;
+  }
+
+  const videoId = item.videoId;
   sources.push(
-    pageSource('vidsrc', 'VidSrc', 'vidsrc', `https://vidsrc.net/embed/youtube/${videoId}`),
+    pageSource('vidsrc', 'VidSrc', 'vidsrc', `https://vidsrc.sh/embed/youtube/${videoId}`),
+  );
+  sources.push(
+    pageSource('vidsrc-alt', 'VidSrc (alt)', 'vidsrc', `https://vidsrc.me/embed/youtube/${videoId}`),
   );
   sources.push(
     pageSource('piped', 'Piped', 'piped', `https://piped.video/embed/watch?v=${videoId}`),
   );
-  return sources;
-}
-
-/** Sources that need an extra network call, so they arrive after playback starts. */
-export async function getExtraSources(item: YouTubePlayable): Promise<Source[]> {
-  const sources: Source[] = [];
-
-  if (item.kind === 'video') {
-    for (const host of await invidiousEmbedInstances()) {
-      sources.push(
-        pageSource(`invidious:${host}`, 'Invidious', 'invidious', `${host}/embed/${item.videoId}`),
-      );
-    }
+  for (const host of await invidiousEmbedInstances()) {
+    sources.push(
+      pageSource(`invidious:${host}`, 'Invidious', 'invidious', `${host}/embed/${videoId}`),
+    );
   }
-
-  sources.push(...(await getDirectSources(item)));
   return sources;
 }
 
 /** Sources that resolve a direct stream through a third-party extractor. */
-async function getDirectSources(item: YouTubePlayable): Promise<Source[]> {
+export async function getDirectSources(item: YouTubePlayable): Promise<Source[]> {
   if (item.kind !== 'video') return [];
   const videoId = item.videoId;
 
@@ -275,8 +251,8 @@ async function getDirectSources(item: YouTubePlayable): Promise<Source[]> {
           id: provider,
           label,
           provider,
-          transport: 'dom',
-          html: directHtml(media),
+          transport: 'native',
+          media: { url: media.url, kind: media.kind },
         };
       } catch {
         markFailed(provider);

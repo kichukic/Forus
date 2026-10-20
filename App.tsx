@@ -2,19 +2,24 @@ import { useEffect, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { addToHistory, loadHistory } from './src/data/history';
+import { PlayerShell } from './src/components/PlayerShell';
+import { addToHistory, loadHistory, playableKey } from './src/data/history';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
+import { SearchScreen } from './src/screens/SearchScreen';
 import { TorboxSetupScreen } from './src/screens/TorboxSetupScreen';
 import { colors, isTV } from './src/theme';
 import type { Playable } from './src/types';
 
-// What's drawn over the home screen, if anything.
-type Overlay = { screen: 'player'; item: Playable } | { screen: 'torbox' } | null;
+// The screen behind the player. The player itself floats above whichever it is.
+type Screen = 'home' | 'search' | 'torbox';
 
 export default function App() {
-  const [overlay, setOverlay] = useState<Overlay>(null);
+  const [screen, setScreen] = useState<Screen>('home');
+  const [playing, setPlaying] = useState<Playable | null>(null);
+  // On a phone the player can shrink into the corner while you keep browsing.
+  const [mini, setMini] = useState(false);
   const [history, setHistory] = useState<Playable[]>([]);
   const [torboxVersion, setTorboxVersion] = useState(0);
 
@@ -24,49 +29,75 @@ export default function App() {
 
   const play = (item: Playable) => {
     setHistory((h) => addToHistory(h, item));
-    setOverlay({ screen: 'player', item });
+    setPlaying(item);
+    setMini(false);
   };
 
-  const close = () => setOverlay(null);
+  const closePlayer = () => {
+    setPlaying(null);
+    setMini(false);
+  };
 
   const closeTorbox = () => {
     setTorboxVersion((v) => v + 1);
-    setOverlay(null);
+    setScreen('home');
   };
 
-  // The remote's (or phone's) Back button closes whatever is open instead of quitting the app.
+  // Back works like YouTube's: a full player shrinks first, then screens close.
   useEffect(() => {
-    if (!overlay) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      overlay.screen === 'torbox' ? closeTorbox() : close();
+      if (playing && !mini) {
+        if (isTV) closePlayer();
+        else setMini(true);
+      } else if (screen === 'torbox') closeTorbox();
+      else if (screen === 'search') setScreen('home');
+      else if (playing) closePlayer();
+      else return false;
       return true;
     });
     return () => sub.remove();
-  }, [overlay]);
+  }, [playing, mini, screen]);
+
+  // On TV nothing behind a player may keep remote focus, so it's hidden.
+  const hideBackground = isTV && !!playing;
 
   return (
     <SafeAreaProvider>
       <View style={styles.root}>
         <StatusBar hidden={isTV} style="light" />
-        {/* Home stays mounted underneath so rows and focus survive a Back press. */}
-        <View style={[styles.root, overlay && styles.hidden]}>
+        {/* Home stays mounted so its rows and scroll position survive. */}
+        <View style={[styles.root, (screen !== 'home' || hideBackground) && styles.hidden]}>
           <HomeScreen
             history={history}
             torboxVersion={torboxVersion}
             onPlay={play}
-            onOpenTorbox={() => setOverlay({ screen: 'torbox' })}
+            onOpenTorbox={() => setScreen('torbox')}
+            onOpenSearch={() => setScreen('search')}
           />
         </View>
-        {overlay && (
-          <View style={StyleSheet.absoluteFill}>
-            {overlay.screen === 'torbox' ? (
-              <TorboxSetupScreen onDone={closeTorbox} />
-            ) : overlay.item.kind === 'file' ? (
-              <FilePlayerScreen item={overlay.item} onClose={close} />
-            ) : (
-              <PlayerScreen item={overlay.item} onClose={close} />
-            )}
+
+        {screen === 'search' && (
+          <View style={[StyleSheet.absoluteFill, hideBackground && styles.hidden]}>
+            <SearchScreen onPlay={play} />
           </View>
+        )}
+
+        {screen === 'torbox' && (
+          <View style={[StyleSheet.absoluteFill, hideBackground && styles.hidden]}>
+            <TorboxSetupScreen onDone={closeTorbox} />
+          </View>
+        )}
+
+        {playing && (
+          <PlayerShell mini={mini} onMiniChange={setMini} onClose={closePlayer}>
+            {(shell) =>
+              playing.kind === 'file' ? (
+                <FilePlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
+              ) : (
+                <PlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
+              )
+            }
+          </PlayerShell>
         )}
       </View>
     </SafeAreaProvider>

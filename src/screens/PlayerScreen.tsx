@@ -10,18 +10,20 @@ import {
 } from 'react-native';
 import type { HWEvent } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { ShellControls } from '../components/PlayerShell';
+import { RelatedPanel } from '../components/RelatedPanel';
 import { SourcePicker } from '../components/SourcePicker';
 import {
   BRIDGE_JS,
   ORIGIN,
-  getExtraSources,
+  getDirectSources,
+  getFrontendSources,
   getPrimarySources,
   type Source,
 } from '../api/sources';
 import { markBlocked, markFailed, markWorked } from '../api/sourceHealth';
 import { colors, isTV } from '../theme';
-import type { YouTubePlayable } from '../types';
+import type { Playable, YouTubePlayable } from '../types';
 
 // 101/150: the owner disabled embedding. 152/153: embed configuration rejected.
 const EMBED_BLOCKED = [101, 150, 152, 153];
@@ -41,20 +43,28 @@ function youtubeAppUrl(item: YouTubePlayable): string {
 type Props = {
   item: YouTubePlayable;
   onClose: () => void;
+  // Plays something from the related list under the video.
+  onPlay: (item: Playable) => void;
+  // Set when the player sits in the mini-player shell (which also pads the top).
+  shell?: ShellControls;
 };
 
-export function PlayerScreen({ item, onClose }: Props) {
+export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const webview = useRef<WebView>(null);
   const sources = useRef<Source[]>([]);
   const index = useRef(0);
   const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  // In the corner window only the video is shown.
+  const mini = shell?.mini ?? false;
 
   const [list, setList] = useState<Source[]>([]);
   const [current, setCurrent] = useState<Source | null>(null);
   const [failed, setFailed] = useState(false);
   const failedRef = useRef(false);
+  // The source that last reported 'ready'; the ready timeout leaves it alone.
+  const readyId = useRef<string | null>(null);
   const [paused, setPaused] = useState(false);
+  const [external, setExternal] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [trying, setTrying] = useState<string | null>(null);
@@ -93,8 +103,8 @@ export function PlayerScreen({ item, onClose }: Props) {
 
   useEffect(() => {
     let alive = true;
-    // The official sources start right away; the third-party extractors are
-    // slower and only matter when the first ones fail.
+    // The official sources start right away; the third-party ones are slower
+    // and only matter when the first ones fail.
     getPrimarySources(item).then((primary) => {
       if (!alive) return;
       sources.current = primary;
@@ -103,15 +113,22 @@ export function PlayerScreen({ item, onClose }: Props) {
         index.current = 0;
         setCurrent(primary[0]);
       }
-      getExtraSources(item).then((extra) => {
-        if (!alive || extra.length === 0) return;
-        sources.current = [...primary, ...extra];
-        setList(sources.current);
-        // Sources that took a while to arrive may still be worth a try.
-        if (failedRef.current && index.current + 1 < sources.current.length) {
-          advance(index.current);
-        }
-      });
+
+      // Direct streams are tried before the embed frontends: they are the
+      // ones that still work when a channel refuses embeds.
+      Promise.all([getDirectSources(item), getFrontendSources(item)]).then(
+        ([direct, frontends]) => {
+          if (!alive) return;
+          const rest = [...direct, ...frontends];
+          if (rest.length === 0) return;
+          sources.current = [...primary, ...rest];
+          setList(sources.current);
+          // Sources that took a while to arrive may still be worth a try.
+          if (failedRef.current && index.current + 1 < sources.current.length) {
+            advance(index.current);
+          }
+        },
+      );
     });
     return () => {
       alive = false;
@@ -129,6 +146,8 @@ export function PlayerScreen({ item, onClose }: Props) {
   useEffect(() => {
     if (!current) return;
     const timer = setTimeout(() => {
+      // A source that already started playing is fine, however long ago that was.
+      if (readyId.current === current.id) return;
       if (index.current === sources.current.indexOf(current)) {
         markFailed(current.provider);
         advance(index.current);
@@ -145,10 +164,13 @@ export function PlayerScreen({ item, onClose }: Props) {
       return;
     }
     if (msg.type === 'ready') {
+      readyId.current = current?.id ?? null;
       markWorked(current?.provider ?? 'unknown');
       failedRef.current = false;
       setTrying(null);
       setFailed(false);
+      // A player on another site plays, but the remote cannot steer it.
+      setExternal(msg.data === 'external');
     } else if (msg.type === 'state') {
       setPaused(msg.data === 2);
     } else if (msg.type === 'error') {
@@ -193,7 +215,7 @@ export function PlayerScreen({ item, onClose }: Props) {
   const portraitPhone = !isTV && height > width;
 
   return (
-    <View style={[styles.screen, !isTV && { paddingTop: insets.top }]}>
+    <View style={styles.screen}>
       {current && !failed && (
         <View style={portraitPhone ? styles.videoPortrait : styles.video}>
           <WebView
@@ -249,8 +271,9 @@ export function PlayerScreen({ item, onClose }: Props) {
         </View>
       )}
 
-      {portraitPhone && !failed && (
-        <View style={styles.info}>
+      {portraitPhone && !failed && !mini && (
+        // Dragging the title block down shrinks the player into the corner.
+        <RelatedPanel item={item} onPlay={onPlay} dragHandlers={shell?.dragHandlers}>
           <Text style={styles.infoTitle}>
             {item.kind === 'live' ? '● LIVE  ' : ''}
             {item.title}
@@ -260,16 +283,22 @@ export function PlayerScreen({ item, onClose }: Props) {
               {trying ? `Trying ${trying}…` : `Source: ${current?.label ?? '…'}`}
             </Text>
           </Pressable>
-        </View>
+        </RelatedPanel>
       )}
 
-      {!isTV && (
+      {!isTV && !mini && (
         <Pressable
           onPress={onClose}
           hitSlop={12}
-          style={[styles.close, { top: insets.top + (portraitPhone && !failed ? width * (9 / 16) : 0) + 8 }]}
+          style={[styles.close, { top: (portraitPhone && !failed ? width * (9 / 16) : 0) + 8 }]}
         >
           <Text style={styles.closeText}>✕</Text>
+        </Pressable>
+      )}
+
+      {!isTV && !mini && shell && (
+        <Pressable onPress={shell.minimize} hitSlop={12} style={styles.minimize}>
+          <Text style={styles.minimizeText}>⌄</Text>
         </Pressable>
       )}
 
@@ -292,14 +321,16 @@ export function PlayerScreen({ item, onClose }: Props) {
           <Text style={styles.hintKeys}>
             {trying
               ? `Trying ${trying}…`
-              : item.kind === 'live'
-                ? 'OK: pause / play    Back: home'
-                : 'OK: pause / play    ◀ ▶: 10 seconds    Back: home'}
+              : external
+                ? 'Playing in the site’s own player    Back: home'
+                : item.kind === 'live'
+                  ? 'OK: pause / play    Back: home'
+                  : 'OK: pause / play    ◀ ▶: 10 seconds    Back: home'}
           </Text>
         </View>
       )}
 
-      {pickerOpen && (
+      {pickerOpen && !mini && (
         <SourcePicker
           sources={list}
           currentId={current?.id ?? ''}
@@ -316,7 +347,6 @@ const styles = StyleSheet.create({
   video: { flex: 1, backgroundColor: '#000' },
   videoPortrait: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' },
   webview: { flex: 1, backgroundColor: '#000' },
-  info: { flex: 1, padding: 16, paddingRight: 56, backgroundColor: colors.background },
   infoTitle: { color: colors.text, fontSize: 17, fontWeight: '700', lineHeight: 24 },
   link: { marginTop: 8 },
   linkText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
@@ -331,6 +361,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  minimize: {
+    position: 'absolute',
+    top: 8,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  minimizeText: { color: '#fff', fontSize: 22, fontWeight: '800', lineHeight: 22 },
   sourcesButton: {
     position: 'absolute',
     top: isTV ? 24 : 12,

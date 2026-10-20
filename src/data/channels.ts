@@ -28,6 +28,8 @@ export const SHOWS: VideoSource[] = [
   { name: 'Zee Keralam', channelId: 'UCbrfwFuwMVRtxUTtEYJUKKg' },
   { name: 'Mazhavil Manorama', channelId: 'UCUPD0jQo-EP0B1Nf4uzeIMA' },
   { name: 'Kairali TV', channelId: 'UCqIIigEiYyPnWRxwd3drHwg' },
+  // Manorama's own channel: full Marimayam and Oru Chiri episodes.
+  { name: 'manoramaMAX', channelId: 'UCz1ht-a2eKE_s1vMh3OHtIg' },
   // Asianet keeps full episodes on JioHotstar; YouTube has promos and clips.
   { name: 'Asianet (promos & clips)', channelId: 'UCp_r6Z-Oh0YTf-ym71z5Nqg' },
 ];
@@ -39,5 +41,18 @@ const FULL_MOVIE = /full movie|full length/i;
 export const MOVIES: VideoSource[] = [
   { name: 'Speed Audio & Video', channelId: 'UCCylGvN1jEnQ3dB4iajSMCA', titleFilter: FULL_MOVIE },
   { name: 'Matinee Now', channelId: 'UCN8O3J_z9fdoF1xrYK89uOQ', titleFilter: FULL_MOVIE },
+  { name: 'Matinee Now HD', channelId: 'UCKH7E8Jr7_pFraJ9QEF5wdg', titleFilter: FULL_MOVIE },
   { name: 'Musiczone Movies', channelId: 'UCVgAX4cKkI3VhYtVmHUBASg', titleFilter: FULL_MOVIE },
 ];
+
+// Official channels that only appear in search results, with no row of their own.
+const SEARCH_ONLY: VideoSource[] = [
+  // Mohanlal's production house; recent uploads are mostly scenes.
+  { name: 'Aashirvad Cinemas', channelId: 'UC_J44kyEsEB8LPlhfm2Xb4g' },
+];
+
+// Search covers YouTube as a whole, which is full of pirated re-uploads, so it
+// only keeps results from these channels.
+export const TRUSTED_CHANNELS = new Map(
+  [...LIVE_NEWS, ...SHOWS, ...MOVIES, ...SEARCH_ONLY].map((c) => [c.channelId, c.name]),
+);
