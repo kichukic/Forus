@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, View } from 'react-native';
-import { loadVideos, type Video } from '../api/youtube';
+import { loadVideoPage, loadVideos, type Video } from '../api/youtube';
 import { MOVIES, SHOWS, type VideoSource } from '../data/channels';
 import { GUTTER, colors, isTV } from '../theme';
 import { FocusCard, cardImageStyle } from './FocusCard';
@@ -10,17 +10,54 @@ type Props = {
   onPlay: (video: Video) => void;
 };
 
+// A channel's row. It starts with the newest uploads and keeps loading older
+// ones as it is scrolled sideways, for as long as the channel has any.
 export function VideoRow({ source, onPlay }: Props) {
   const [videos, setVideos] = useState<Video[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const continuation = useRef<string | undefined>(undefined);
+  const busy = useRef(false);
 
   useEffect(() => {
-    loadVideos(source)
-      .then(setVideos)
+    loadVideoPage(source)
+      .then((page) => {
+        continuation.current = page.continuation;
+        setVideos(page.videos);
+      })
       .catch(() => setFailed(true));
   }, [source]);
 
-  return <VideoList title={source.name} videos={videos} failed={failed} onPlay={onPlay} />;
+  const loadMore = () => {
+    if (busy.current || !continuation.current) return;
+    busy.current = true;
+    setLoadingMore(true);
+    loadVideoPage(source, continuation.current)
+      .then((page) => {
+        continuation.current = page.continuation;
+        // Pages can overlap when the channel uploads in the meantime.
+        setVideos((old) => {
+          const seen = new Set(old?.map((v) => v.id));
+          return [...(old ?? []), ...page.videos.filter((v) => !seen.has(v.id))];
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        busy.current = false;
+        setLoadingMore(false);
+      });
+  };
+
+  return (
+    <VideoList
+      title={source.name}
+      videos={videos}
+      failed={failed}
+      onPlay={onPlay}
+      onEndReached={loadMore}
+      loadingMore={loadingMore}
+    />
+  );
 }
 
 const NEW_ROW_SIZE = 24;
@@ -50,9 +87,11 @@ type ListProps = {
   videos: (Video & { channel?: string })[] | null;
   failed: boolean;
   onPlay: (video: Video) => void;
+  onEndReached?: () => void;
+  loadingMore?: boolean;
 };
 
-function VideoList({ title, videos, failed, onPlay }: ListProps) {
+function VideoList({ title, videos, failed, onPlay, onEndReached, loadingMore }: ListProps) {
   return (
     <View style={styles.row}>
       <Text style={styles.heading}>{title}</Text>
@@ -69,9 +108,18 @@ function VideoList({ title, videos, failed, onPlay }: ListProps) {
           keyExtractor={(v) => v.id}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.list}
+          // Start fetching while a couple of screens of cards are still ahead.
+          onEndReached={onEndReached}
+          onEndReachedThreshold={2}
+          ListFooterComponent={
+            loadingMore ? <ActivityIndicator color={colors.accent} style={styles.more} /> : null
+          }
           renderItem={({ item }) => (
             <FocusCard onPress={() => onPlay(item)}>
-              <Image source={{ uri: item.thumbnail }} style={cardImageStyle} />
+              <View>
+                <Image source={{ uri: item.thumbnail }} style={cardImageStyle} />
+                {item.duration ? <Text style={styles.duration}>{item.duration}</Text> : null}
+              </View>
               <Text style={styles.title} numberOfLines={2}>
                 {item.channel ? <Text style={styles.channel}>{item.channel} · </Text> : null}
                 {item.title}
@@ -98,4 +146,18 @@ const styles = StyleSheet.create({
   channel: { color: colors.accent, fontWeight: '700' },
   note: { color: colors.muted, fontSize: isTV ? 16 : 14, marginLeft: GUTTER },
   loading: { alignSelf: 'flex-start', marginLeft: GUTTER },
+  more: { alignSelf: 'center', marginHorizontal: 24 },
+  duration: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
 });
