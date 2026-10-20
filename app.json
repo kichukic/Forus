@@ -1,9 +1,14 @@
 {
   "expo": {
+    "name": "MyTV Malayalam",
+    "slug": "MytvstreamApp",
+    "version": "1.0.0",
+    "orientation": "default",
     "plugins": [
       [
         "@react-native-tvos/config-tv",
         {
+          "isTV": true,
           "androidTVBanner": "./assets/images/icon-400x240.png",
           "appleTVImages": {
             "icon": "./assets/images/icon-1280x768.png",
@@ -15,19 +20,19 @@
             "topShelfWide2x": "./assets/images/icon-4640x1440.png"
           }
         }
-      ]
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon-1920x720.png",
+          "imageWidth": 400,
+          "backgroundColor": "#0b0d12"
+        }
+      ],
+      "expo-video"
     ],
     "android": {
-      "splash": {
-        "image": "./assets/images/icon-1920x720.png"
-      }
-    },
-    "ios": {
-      "splash": {
-        "image": "./assets/images/icon-1920x720.png"
-      }
-    },
-    "name": "MytvstreamApp",
-    "slug": "MytvstreamApp"
+      "package": "com.mytvstream.malayalam"
+    }
   }
 }
