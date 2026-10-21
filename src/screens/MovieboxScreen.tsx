@@ -245,7 +245,10 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
       if (!(subject.genre ?? '').toLowerCase().includes(genreFilter.toLowerCase())) return false;
     }
     if (langFilter && langFilter !== 'All') {
-      const hay = `${subject.language ?? ''} ${subject.country ?? ''}`.toLowerCase();
+      // The shelves do not carry a language field, so the language is taken
+      // from the title's own tag (most films are filed as "Title [Hindi]"),
+      // with the country as a fallback for the films that have none.
+      const hay = `${subject.title ?? ''} ${subject.country ?? ''}`.toLowerCase();
       if (!hay.includes(langFilter.toLowerCase())) return false;
     }
     return true;
