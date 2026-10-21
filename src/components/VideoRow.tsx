@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { loadVideoPage, loadVideos, searchVideoPage, stripEmoji, type Video } from '../api/youtube';
 import { FULL_MOVIE, MOVIES, SHOWS, TRUSTED_CHANNELS, type VideoSource } from '../data/channels';
@@ -18,7 +18,7 @@ type Props = {
 
 // A channel's row. It starts with the newest uploads and keeps loading older
 // ones as it is scrolled sideways, for as long as the channel has any.
-export function VideoRow({ source, onPlay }: Props) {
+export const VideoRow = memo(function VideoRow({ source, onPlay }: Props) {
   const [videos, setVideos] = useState<Video[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -64,7 +64,7 @@ export function VideoRow({ source, onPlay }: Props) {
       loadingMore={loadingMore}
     />
   );
-}
+});
 
 const NEW_ROW_SIZE = 24;
 const NEW_ROW_SOURCES = [...SHOWS, ...MOVIES];
@@ -74,7 +74,7 @@ type ChannelVideo = Video & { channel: string };
 // The newest uploads across every show and movie channel, newest first. It
 // shows a batch at a time as it is scrolled, and once the newest are all out
 // it goes on to older uploads, taking turns between the channels.
-export function NewRow({ onPlay }: { onPlay: (video: Video) => void }) {
+export const NewRow = memo(function NewRow({ onPlay }: { onPlay: (video: Video) => void }) {
   const [videos, setVideos] = useState<ChannelVideo[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -150,7 +150,7 @@ export function NewRow({ onPlay }: { onPlay: (video: Video) => void }) {
       loadingMore={loadingMore}
     />
   );
-}
+});
 
 // A row of one or two cards looks broken; such themes are left out.
 const MIN_THEME_RESULTS = 3;
@@ -158,7 +158,7 @@ const MIN_THEME_RESULTS = 3;
 // A themed row ("Mohanlal movies") filled by a search of the trusted channels,
 // reading further into the search as it is scrolled. It disappears if the
 // search finds too little.
-export function ThemeRow({ theme, onPlay }: { theme: Theme; onPlay: (video: Video) => void }) {
+export const ThemeRow = memo(function ThemeRow({ theme, onPlay }: { theme: Theme; onPlay: (video: Video) => void }) {
   const [videos, setVideos] = useState<Video[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -210,7 +210,7 @@ export function ThemeRow({ theme, onPlay }: { theme: Theme; onPlay: (video: Vide
       loadingMore={loadingMore}
     />
   );
-}
+});
 
 type ListProps = {
   title: string;

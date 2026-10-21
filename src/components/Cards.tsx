@@ -5,7 +5,7 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { resolveLiveVideoId } from '../api/youtubeLive';
+import { resolveLiveVideoIdForTile, savedLiveVideoId } from '../api/youtubeLive';
 import { LIVE_NEWS } from '../data/channels';
 import { CARD_HEIGHT, RADIUS, colors, sz } from '../theme';
 
@@ -124,8 +124,19 @@ function useLiveFrame(channelId?: string) {
   useEffect(() => {
     if (!channelId) return;
     let cancelled = false;
-    resolveLiveVideoId(channelId)
-      .then((id) => !cancelled && id && setLive({ videoId: id, bucket: Math.floor(Date.now() / FRAME_REFRESH_MS) }))
+    const show = (id: string | null) =>
+      !cancelled && id && setLive({ videoId: id, bucket: Math.floor(Date.now() / FRAME_REFRESH_MS) });
+    // The stream found last time shows at once, unless the fresh lookup is
+    // already back; the fresh one replaces it either way.
+    let fresh = false;
+    savedLiveVideoId(channelId)
+      .then((id) => !fresh && show(id))
+      .catch(() => {});
+    resolveLiveVideoIdForTile(channelId)
+      .then((id) => {
+        fresh = true;
+        show(id);
+      })
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -148,6 +159,11 @@ export function Chip({ text }: { text: string }) {
   );
 }
 
+// The badge's dot pulses a few times when it appears and then holds steady. A
+// pulse that never stops keeps the phone redrawing the whole screen every
+// frame for as long as a live tile is anywhere on it.
+const LIVE_PULSES = 3;
+
 export function LiveBadge() {
   // The value is made once, and not read out of a ref while drawing.
   const pulse = useMemo(() => new Animated.Value(1), []);
@@ -157,6 +173,7 @@ export function LiveBadge() {
         Animated.timing(pulse, { toValue: 0.25, duration: 700, useNativeDriver: true }),
         Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
       ]),
+      { iterations: LIVE_PULSES },
     );
     loop.start();
     return () => loop.stop();

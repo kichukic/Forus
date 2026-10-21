@@ -1,4 +1,4 @@
-import { Children, useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
+import { Children, isValidElement, memo, useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import {
   Animated,
   AppState,
@@ -37,12 +37,14 @@ import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope 
 import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
 import { GLOW, GUTTER, colors, isTV, sz } from '../theme';
-import { Loader } from '../components/Loader';
 import { TransferList } from '../components/TransferList';
 import type { Playable } from '../types';
+import { useEvent } from '../hooks/useEvent';
 
-const THEMES_AT_START = 3;
-const THEMES_PER_STEP = 3;
+// Each themed row is a search of about 0.7 MB. A TV starts with one and reads
+// the rest as the page is scrolled down to them.
+const THEMES_AT_START = isTV ? 1 : 3;
+const THEMES_PER_STEP = isTV ? 2 : 3;
 // Back in the app after this long, the rows reload by themselves.
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
@@ -68,14 +70,10 @@ const ALL_CHANNELS = [...SHOWS, ...MOVIES];
 // kept here instead of in the tab itself.
 const scrollPositions = new Map<string, number>();
 // The page of the tab in front, for the TV Back button to scroll to the top.
-const activePage: { current: ScrollView | null } = { current: null };
+const activePage: { current: FlatList<ReactNode> | null } = { current: null };
 // TV: how long a tab must stay highlighted before it opens, so moving across
 // several tabs doesn't load each one on the way.
 const TAB_FOCUS_DELAY_MS = 350;
-// TV: a tab opens with its first rows and adds the rest one at a time, so its
-// chip isn't building a dozen rows of cards in the moment the tab changes.
-const TV_FIRST_ROWS = 2;
-const TV_ROW_STAGGER_MS = 140;
 // The news channels' recorded uploads, one row each on the News tab.
 const NEWS_SOURCES = LIVE_NEWS.map(({ name, channelId }) => ({ name, channelId }));
 
@@ -108,7 +106,11 @@ export type HomeHandle = {
   openTab: (id: Tab) => void;
 };
 
-export function HomeScreen({
+// Memoized: the app redraws for many reasons (the player, other screens, the
+// splash's progress) that change nothing here.
+export const HomeScreen = memo(HomeScreenView);
+
+function HomeScreenView({
   history,
   torboxVersion,
   onPlay,
@@ -147,7 +149,7 @@ export function HomeScreen({
   useImperativeHandle(ref, () => ({
     goTop: () => {
       if ((scrollPositions.get(tab) ?? 0) > 40) {
-        activePage.current?.scrollTo({ y: 0, animated: true });
+        activePage.current?.scrollToOffset({ offset: 0, animated: true });
         scrollPositions.set(tab, 0);
       } else if (tab !== 'all') {
         open('all');
@@ -159,7 +161,7 @@ export function HomeScreen({
     },
     openTab: (id) => {
       setTab(id);
-      activePage.current?.scrollTo({ y: 0, animated: true });
+      activePage.current?.scrollToOffset({ offset: 0, animated: true });
     },
   }));
 
@@ -239,7 +241,8 @@ export function HomeScreen({
     />
   );
 
-  const playVideo = (v: { id: string; title: string }) => onPlay({ kind: 'video', videoId: v.id, title: v.title });
+  // One identity for good, so the memoized rows don't redraw with the page.
+  const playVideo = useEvent((v: { id: string; title: string }) => onPlay({ kind: 'video', videoId: v.id, title: v.title }));
 
   // Only the tab in front is mounted. Keeping the others alive holds their
   // images and rows in memory, and a phone with little of it gets killed when
@@ -462,18 +465,12 @@ type TabScrollProps = {
   tabKey?: string;
 };
 
-// One tab's scrolling page, ending in its themed rows and the credit line.
+// One tab's scrolling page, ending in its themed rows and the credit line. It
+// is a list, so only the rows near the screen are built: the rest of a long
+// tab costs nothing until it is scrolled to, and rows far behind are let go.
 function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay, tabKey }: TabScrollProps) {
   const [themeCount, setThemeCount] = useState(THEMES_AT_START);
-  const rows = Children.toArray(children);
-  const [rowCount, setRowCount] = useState(isTV ? TV_FIRST_ROWS : rows.length);
-  const allRows = !isTV || rowCount >= rows.length;
-  useEffect(() => {
-    if (allRows) return;
-    const timer = setTimeout(() => setRowCount((n) => n + 1), TV_ROW_STAGGER_MS);
-    return () => clearTimeout(timer);
-  }, [rowCount, allRows]);
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<FlatList<ReactNode>>(null);
   useEffect(() => {
     activePage.current = scroll.current;
     return () => {
@@ -488,49 +485,61 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
     if (tabKey) scrollPositions.set(tabKey, y);
     // The place to come back to is kept until it is actually reached.
     if (restore.current > 0 && y >= restore.current - 4) restore.current = 0;
-    const fromBottom = e.contentSize.height - (y + e.layoutMeasurement.height);
-    if (fromBottom < e.layoutMeasurement.height) {
-      setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length));
-    }
   };
 
-  // The rows come back in one by one, so the place to come back to is put
-  // back each time the page grows.
+  // The rows come back in a few at a time, so the place to come back to is
+  // put back each time the page grows.
   const restorePlace = () => {
-    if (restore.current > 0) scroll.current?.scrollTo({ y: restore.current, animated: false });
+    if (restore.current > 0) scroll.current?.scrollToOffset({ offset: restore.current, animated: false });
   };
+
+  const rows: ReactNode[] = [
+    ...Children.toArray(children),
+    ...(onPlay
+      ? themes
+          .slice(0, themeCount)
+          .map((theme) => <ThemeRow key={`${theme.query}-${refreshKey}`} theme={theme} onPlay={onPlay} />)
+      : []),
+    <Text key="credit" style={styles.credit}>
+      Made with <Text style={styles.heart}>♥</Text> by Kishor
+    </Text>,
+  ];
 
   return (
-    <ScrollView
+    <FlatList
       ref={scroll}
+      data={rows}
+      keyExtractor={rowKey}
+      renderItem={renderRow}
       style={styles.panel}
       contentContainerStyle={styles.content}
-      onScroll={themes.length || tabKey ? onScroll : undefined}
+      // A new tab's first frame builds just the top two rows, so the switch
+      // itself is quick; the rest follow a row at a time.
+      initialNumToRender={2}
+      maxToRenderPerBatch={1}
+      windowSize={isTV ? 5 : 7}
+      updateCellsBatchingPeriod={isTV ? 120 : 60}
+      // The remote's focus search needs the rows near the screen attached.
+      removeClippedSubviews={false}
+      // More themed rows once the end is a screen or so away.
+      onEndReached={() => setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length))}
+      onEndReachedThreshold={1.2}
+      onScroll={tabKey ? onScroll : undefined}
+      scrollEventThrottle={250}
       onContentSizeChange={restorePlace}
       onTouchStart={() => {
         // A touch means the user is here now, not on their way back.
         restore.current = 0;
       }}
-      scrollEventThrottle={250}
       refreshControl={refreshControl}
-    >
-      {allRows ? rows : rows.slice(0, rowCount)}
-
-      {allRows && themes.length > 0 && onPlay && (
-        <>
-          {themes.slice(0, themeCount).map((theme) => (
-            <ThemeRow key={`${theme.query}-${refreshKey}`} theme={theme} onPlay={onPlay} />
-          ))}
-          {themeCount < themes.length && <Loader label="More rows coming" icon="sparkles-outline" style={styles.moreRows} />}
-        </>
-      )}
-
-      <Text style={styles.credit}>
-        Made with <Text style={styles.heart}>♥</Text> by Kishor
-      </Text>
-    </ScrollView>
+      showsVerticalScrollIndicator={false}
+    />
   );
 }
+
+const rowKey = (row: ReactNode, index: number) =>
+  isValidElement(row) && row.key != null ? String(row.key) : String(index);
+const renderRow = ({ item }: { item: ReactNode }) => <>{item}</>;
 
 // A tab's new content fades in and slides a little from the side being moved
 // towards.
@@ -539,13 +548,16 @@ function SlideIn({ direction, children }: { direction: number; children: ReactNo
   useEffect(() => {
     Animated.timing(progress, {
       toValue: 1,
-      duration: 320,
+      duration: isTV ? 220 : 320,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, []);
-  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [direction * 36, 0] });
-  return <Animated.View style={[styles.panel, { opacity: progress, transform: [{ translateX }] }]}>{children}</Animated.View>;
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [direction * (isTV ? 24 : 36), 0] });
+  // TV: only the slide. Fading a whole page of pictures makes a TV redraw every
+  // one of them each frame, while it is also building the tab.
+  const opacity = isTV ? 1 : progress;
+  return <Animated.View style={[styles.panel, { opacity, transform: [{ translateX }] }]}>{children}</Animated.View>;
 }
 
 function TabButton({
@@ -650,7 +662,6 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#fff' },
   row: { marginBottom: sz(24, 30) },
   list: { paddingHorizontal: GUTTER, paddingVertical: sz(2, 8) },
-  moreRows: { marginVertical: 24, alignSelf: 'center' },
   heart: { color: colors.accent },
   credit: { color: colors.faint, fontSize: sz(12.5, 15), textAlign: 'center', marginTop: 8, fontWeight: '600' },
 });

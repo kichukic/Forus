@@ -10,7 +10,10 @@ import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
 import { addToHistory, clearHistory, loadHistory, playableKey } from './src/data/history';
 import { askToRemind, startReminders } from './src/data/reminders';
+import { useEvent } from './src/hooks/useEvent';
 import { addTransfer, loadTransfers, playableFrom } from './src/data/transfers';
+import { showToast } from './src/data/toasts';
+import { checkForUpdate, type Update } from './src/api/updates';
 import { setupTransferNotices } from './src/data/transferNotices';
 import type { CatalogMovie } from './src/api/catalog';
 import type { MovieboxSubject } from './src/api/moviebox';
@@ -25,7 +28,9 @@ import { MovieScreen } from './src/screens/MovieScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
 import { TransferBar } from './src/components/TransferBar';
+import { ToastHost } from './src/components/ToastHost';
 import { TransferToast } from './src/components/TransferToast';
+import { UpdateScreen } from './src/screens/UpdateScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TorboxSetupScreen } from './src/screens/TorboxSetupScreen';
 import { colors, isTV } from './src/theme';
@@ -70,6 +75,7 @@ export default function App() {
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
   // The film open from MovieBox, in the same way.
   const [moviebox, setMoviebox] = useState<MovieboxSubject | null>(null);
+  const [update, setUpdate] = useState<Update | null>(null);
   // Transfers now run in the background, so there is no full-screen sender.
   // An error that nothing else caught. The app stays open and shows it.
   const [crash, setCrash] = useState<Error | null>(null);
@@ -78,6 +84,9 @@ export default function App() {
     loadHistory().then(setHistory);
     loadTransfers();
     setupTransferNotices();
+    checkForUpdate().then((u) => {
+      if (u) showToast({ text: `ForUs ${u.version} is available`, action: { label: 'Download', onPress: () => setUpdate(u) }, duration: 8000 });
+    });
   }, []);
 
   useEffect(() => {
@@ -99,13 +108,13 @@ export default function App() {
   // Anything fatal is shown on screen rather than ending the app.
   useEffect(() => subscribeErrors((error, isFatal) => isFatal && setCrash(error)), []);
 
-  const play = (item: Playable) => {
+  const play = useEvent((item: Playable) => {
     setHistory((h) => addToHistory(h, item));
     setPlaying(item);
     setMini(false);
     // Phones only: the first play asks to allow "Continue watching" reminders.
     if (!isTV) askToRemind();
-  };
+  });
 
   // Phones: a reminder of the last thing watched, a few hours after leaving.
   const latest = useRef<{ history: Playable[]; playing: Playable | null; play: typeof play }>({ history, playing, play });
@@ -126,10 +135,18 @@ export default function App() {
     setMini(false);
   };
 
-  const openTorbox = () => {
+  const openTorbox = useEvent(() => {
     if (screen !== 'torbox') setTorboxFrom(screen);
     setScreen('torbox');
-  };
+  });
+  // The home screen is memoized, so what it's handed keeps one identity.
+  const openSearch = useEvent((scope: SearchScope) => {
+    setSearchScope(scope);
+    setScreen('search');
+  });
+  const sendRelease = useEvent((option: TorrentOption) => addTransfer(option));
+  const openHistory = useEvent(() => setScreen('history'));
+  const openSettings = useEvent(() => setScreen('settings'));
 
   const closeTorbox = useCallback(() => {
     setTorboxVersion((v) => v + 1);
@@ -173,15 +190,12 @@ export default function App() {
             torboxVersion={torboxVersion}
             onPlay={play}
             onOpenTorbox={openTorbox}
-            onOpenSearch={(scope) => {
-              setSearchScope(scope);
-              setScreen('search');
-            }}
+            onOpenSearch={openSearch}
             onOpenMovie={setMovie}
             onOpenMoviebox={setMoviebox}
-            onSendRelease={(option) => addTransfer(option)}
-            onOpenHistory={() => setScreen('history')}
-            onOpenSettings={() => setScreen('settings')}
+            onSendRelease={sendRelease}
+            onOpenHistory={openHistory}
+            onOpenSettings={openSettings}
             ref={home}
           />
         </View>
@@ -210,6 +224,12 @@ export default function App() {
               torboxVersion={torboxVersion}
               onOpenTorbox={openTorbox}
               onClearHistory={() => setHistory(clearHistory())}
+              onCheckForUpdates={() => {
+                checkForUpdate(true).then((u) => {
+                  if (u) setUpdate(u);
+                  else showToast({ text: 'You are on the latest version.' });
+                });
+              }}
             />
           </View>
         )}
@@ -227,6 +247,14 @@ export default function App() {
           }}
           onOpenTorbox={openTorbox}
         />
+
+        <ToastHost />
+
+        {update && (
+          <View style={StyleSheet.absoluteFill}>
+            <UpdateScreen update={update} onClose={() => setUpdate(null)} />
+          </View>
+        )}
 
         {showNav && (
           <TransferBar

@@ -94,21 +94,36 @@ function ageToDate(age?: string): string {
   return m ? new Date(Date.now() - Number(m[1]) * AGE_UNITS[m[2]]).toISOString() : '';
 }
 
-// A channel's latest long-form uploads from the browse endpoint.
+// The channel's Videos tab, newest first. It leaves out Shorts like the UULF
+// list but holds 30 uploads instead of 100, so the answer is under half the
+// size: that matters on a TV, which reads a dozen of these while starting up.
+const VIDEOS_TAB = 'EgZ2aWRlb3PyBgQKAjoA';
+
+// A channel's latest long-form uploads from the browse endpoint: the Videos
+// tab, or the UULF list if the tab comes back empty.
 async function browseLatest(channelId: string): Promise<Video[]> {
-  const res = await fetchWithTimeout(BROWSE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ context: { client: SEARCH_CLIENT }, browseId: `VLUULF${channelId.slice(2)}` }),
-  });
-  if (!res.ok) return [];
-  return collectLockups(await res.json()).lockups.map((l) => ({
+  const lockups =
+    (await browseLockups({ browseId: channelId, params: VIDEOS_TAB })) ??
+    (await browseLockups({ browseId: `VLUULF${channelId.slice(2)}` })) ??
+    [];
+  return lockups.map((l) => ({
     id: l.id,
     title: l.title,
     published: ageToDate(l.age),
     thumbnail: thumbnailUrl(l.id),
     duration: l.duration,
   }));
+}
+
+async function browseLockups(body: object): Promise<Lockup[] | null> {
+  const res = await fetchWithTimeout(BROWSE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context: { client: SEARCH_CLIENT }, ...body }),
+  });
+  if (!res.ok) return null;
+  const { lockups } = collectLockups(await res.json());
+  return lockups.length ? lockups : null;
 }
 
 export async function loadVideos(source: VideoSource): Promise<Video[]> {

@@ -1,6 +1,6 @@
 // The big featured card at the top of a tab: the newest uploads from its
 // channels, one at a time, with a Watch Now button and page dots.
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -35,7 +35,7 @@ const SLIDES = 6;
 const HERO_SIZES = ['maxresdefault', 'hq720', 'mqdefault'];
 const ROTATE_MS = 6000;
 
-export function HeroCarousel({ sources, label, onPlay, takeFocus = false }: Props) {
+export const HeroCarousel = memo(function HeroCarousel({ sources, label, onPlay, takeFocus = false }: Props) {
   const { width, height } = useWindowDimensions();
   const [slides, setSlides] = useState<Featured[]>([]);
   const [index, setIndex] = useState(0);
@@ -115,7 +115,7 @@ export function HeroCarousel({ sources, label, onPlay, takeFocus = false }: Prop
       </View>
     </View>
   );
-}
+});
 
 function Slide({
   video,

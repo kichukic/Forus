@@ -12,9 +12,11 @@ type Props = {
   torboxVersion: number;
   onOpenTorbox: () => void;
   onClearHistory: () => void;
+  // Checks GitHub Releases for a newer build.
+  onCheckForUpdates: () => void;
 };
 
-export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory }: Props) {
+export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory, onCheckForUpdates }: Props) {
   const insets = useSafeAreaInsets();
   const [connected, setConnected] = useState<boolean | null>(null);
   const [cleared, setCleared] = useState(false);
@@ -58,6 +60,16 @@ export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory }: 
             detail={`${LIVE_NEWS.length} live · ${SHOWS.length} shows · ${MOVIES.length} movies`}
           />
           <Row icon="shield-checkmark-outline" title="Only free, official uploads" detail="No pirated sources" />
+        </Group>
+
+        <Group title="App">
+          <Row
+            icon="cloud-download-outline"
+            title="Check for updates"
+            detail="Looks on GitHub Releases"
+            onPress={onCheckForUpdates}
+            first
+          />
         </Group>
 
         <View style={styles.credit}>
