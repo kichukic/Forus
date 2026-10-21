@@ -49,7 +49,7 @@ export async function notifyTransferAdded(transfer: Transfer) {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Added to TorBox',
-        body: `${transfer.title} — it will play here when it's ready.`,
+        body: `${transfer.title} — checking TorBox, you'll be notified when it's ready.`,
         data: { transferId: transfer.id },
         color: colors.accent,
       },
@@ -85,7 +85,7 @@ export async function notifyTransferReady(transfer: Transfer, playable: { kind: 
       identifier: `${READY_ID_PREFIX}${transfer.id}`,
       content: {
         title: 'Ready in TorBox',
-        body: `${transfer.title} — tap to play.`,
+        body: `${transfer.title} is added and ready to stream.`,
         data: { item: playable },
         color: colors.accent,
       },

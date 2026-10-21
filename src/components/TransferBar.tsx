@@ -25,9 +25,9 @@ export function TransferBar({ onOpen }: Props) {
   const stateText =
     active.state === 'sending'
       ? 'Sending to TorBox…'
-      : active.progress >= 100
-        ? 'Finishing…'
-        : `Downloading — ${Math.round(progress)}%`;
+      : progress > 0
+        ? `Downloading — ${Math.round(progress)}%`
+        : 'Checking TorBox…';
 
   return (
     <Pressable

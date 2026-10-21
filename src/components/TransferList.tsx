@@ -38,7 +38,9 @@ export function TransferList({ onPlay }: Props) {
                   ? 'Sending to TorBox…'
                   : ready
                     ? 'Ready in TorBox'
-                    : `Downloading — ${Math.round(progress)}%${t.speed ? ` · ${Math.max(1, Math.round(t.speed / 1000))} KB/s` : ''}${t.eta ? ` · ${Math.round(t.eta / 60)} min left` : ''}`}
+                    : progress > 0
+                      ? `Downloading — ${Math.round(progress)}%${t.speed ? ` · ${Math.max(1, Math.round(t.speed / 1000))} KB/s` : ''}${t.eta ? ` · ${Math.round(t.eta / 60)} min left` : ''}`
+                      : 'Checking TorBox…'}
               </Text>
               {t.state === 'error' && t.message ? <Text style={styles.error}>{t.message}</Text> : null}
             </View>

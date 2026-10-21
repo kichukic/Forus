@@ -29,7 +29,7 @@ export type Transfer = {
 };
 
 const STORAGE_KEY = 'torbox-transfers';
-const POLL_MS = 5000;
+const POLL_MS = 60000;
 
 type Listener = (list: Transfer[]) => void;
 type Notice = { kind: 'added' | 'ready' | 'error' | 'needsKey'; transfer: Transfer };

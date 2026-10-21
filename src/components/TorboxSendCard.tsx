@@ -31,7 +31,9 @@ export function TorboxSendCard({ title, torrent, sending, onCancel }: Props) {
           ? 'Sending to TorBox…'
           : ready
             ? 'Ready in TorBox'
-            : `Downloading — ${progress}%`}
+            : progress > 0
+              ? `Downloading — ${progress}%`
+              : 'Checking TorBox…'}
       </Text>
 
       <View style={styles.bar}>
