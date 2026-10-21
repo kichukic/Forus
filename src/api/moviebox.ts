@@ -49,6 +49,20 @@ export type MovieboxSubject = {
   hasResource: boolean;
   /** Whether the full film is behind a membership in the app. */
   membersOnly: boolean;
+  /**
+   * The other language versions of the same film, each a subject of its own.
+   * A film dubbed into Hindi is listed there as "Hindi dub".
+   */
+  dubs: MovieboxDub[];
+};
+
+export type MovieboxDub = {
+  id: string;
+  /** "Hindi dub", "Original Audio" and so on. */
+  name: string;
+  /** "hi", "te" and so on. */
+  code: string;
+  original: boolean;
 };
 
 export type MovieboxShelf = {
@@ -111,6 +125,7 @@ type RawSubject = {
   stills?: RawCover;
   vipInfo?: { requireMemberType?: number; previewSeconds?: number };
   staffList?: { name?: string; character?: string }[];
+  dubs?: { subjectId?: string; lanName?: string; lanCode?: string; original?: boolean }[];
 };
 
 // Whether the service has marked this film as one for adults.
@@ -145,6 +160,14 @@ function toSubject(raw: RawSubject): MovieboxSubject | null {
     seasons: raw.seNum,
     hasResource: raw.hasResource !== false,
     membersOnly: (raw.vipInfo?.requireMemberType ?? 0) > 0,
+    dubs: (raw.dubs ?? [])
+      .filter((dub) => dub.subjectId)
+      .map((dub) => ({
+        id: String(dub.subjectId),
+        name: dub.lanName || 'Original Audio',
+        code: dub.lanCode ?? '',
+        original: dub.original === true,
+      })),
   };
 }
 

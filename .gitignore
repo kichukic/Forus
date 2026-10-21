@@ -22,3 +22,6 @@ expo-env.d.ts
 # @end expo-cli
 # APKs made by build-apk.sh
 /builds/
+
+# Release signing key and its passwords (back these up somewhere safe)
+/signing/

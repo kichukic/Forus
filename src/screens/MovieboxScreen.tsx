@@ -74,6 +74,12 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   // The sections of the app: Trending, Movie, Anime, TV and the rest.
   const [tabs, setTabs] = useState<{ id: number; name: string }[]>([]);
   const [tab, setTab] = useState<number | null>(null);
+  // The sections that answered with nothing. The service ships a few of them
+  // (its Hindi section holds no films at all), and an empty chip is no use.
+  const [emptyTabs, setEmptyTabs] = useState<number[]>([]);
+  // The same lists, for the code that runs outside a render.
+  const tabsRef = useRef<{ id: number; name: string }[]>([]);
+  const emptyRef = useRef<number[]>([]);
   // The rows are kept with the section they came from, so the rows of the
   // section before are not on screen while the new ones are on their way.
   const [shelves, setShelves] = useState<{ tab: number; rows: MovieboxShelf[] } | null>(null);
@@ -100,6 +106,7 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
     browseTabs()
       .then((list) => {
         if (!alive || list.length === 0) return;
+        tabsRef.current = list;
         setTabs(list);
         setTab(list[0].id);
       })
@@ -116,6 +123,17 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
     browseShelves(tab)
       .then((rows) => {
         if (!alive) return;
+        if (rows.length === 0) {
+          const empties = emptyRef.current.includes(tab)
+            ? emptyRef.current
+            : [...emptyRef.current, tab];
+          emptyRef.current = empties;
+          setEmptyTabs(empties);
+          // The section in front would be a blank one, so the next is opened.
+          const next = tabsRef.current.find((entry) => !empties.includes(entry.id));
+          if (next && next.id !== tab) setTab(next.id);
+          return;
+        }
         setShelves({ tab, rows });
         setError(null);
       })
@@ -199,13 +217,15 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
     </View>
   );
 
-  const tabsRow = tabs.length > 1 && (
+  const shownTabs = tabs.filter((entry) => !emptyTabs.includes(entry.id));
+
+  const tabsRow = shownTabs.length > 1 && (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.tabs}
     >
-      {tabs.map((entry) => (
+      {shownTabs.map((entry) => (
         <Pressable
           key={entry.id}
           onPress={() => setTab(entry.id)}

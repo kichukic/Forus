@@ -19,6 +19,7 @@ import {
   seasonEpisodes,
   seasonList,
   subjectDetails,
+  type MovieboxDub,
   type MovieboxEpisode,
   type MovieboxSeason,
   type MovieboxSubject,
@@ -47,6 +48,11 @@ function plainTitle(title: string): string {
     .trim();
 }
 
+// "Hindi dub" reads as "Hindi"; "Original Audio" as "Original".
+function dubLabel(dub: MovieboxDub): string {
+  return dub.original ? 'Original' : dub.name.replace(/\s*dub$/i, '');
+}
+
 export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }: Props) {
   const insets = useSafeAreaInsets();
   const [details, setDetails] = useState<MovieboxSubject | null>(null);
@@ -57,6 +63,10 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
   const [releases, setReleases] = useState<TorrentOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
+  // The language version in front. A film dubbed into Hindi is a subject of
+  // its own, so changing the audio means changing the film.
+  const [currentId, setCurrentId] = useState(subject.id);
+  const [switching, setSwitching] = useState(false);
 
   // Whether it has episodes is asked of the service, not guessed from the
   // type: a short drama and a long series are counted apart there. Until the
@@ -69,23 +79,25 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
     let alive = true;
     (async () => {
       try {
-        const found = await subjectDetails(subject.id);
+        const found = await subjectDetails(currentId);
         if (!alive) return;
         setDetails(found.subject);
         setCast(found.cast.slice(0, 12));
       } catch {
         if (alive) setError("Couldn't load the details. Check the internet connection.");
+      } finally {
+        if (alive) setSwitching(false);
       }
     })();
     return () => {
       alive = false;
     };
-  }, [subject.id]);
+  }, [currentId]);
 
   // The seasons it has. A film has none, and is played as a whole.
   useEffect(() => {
     let alive = true;
-    seasonList(subject.id)
+    seasonList(currentId)
       .then((list) => {
         if (!alive) return;
         setSeasons(list);
@@ -100,7 +112,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
     return () => {
       alive = false;
     };
-  }, [subject.id]);
+  }, [currentId]);
 
   // The episodes of the season in front. They are kept with the season they
   // came from, so the episodes of the season before are not on screen while
@@ -110,13 +122,13 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
     let alive = true;
     const current = seasons?.find((s) => s.season === season);
     if (!current) return;
-    seasonEpisodes(subject.id, season, current.episodes)
+    seasonEpisodes(currentId, season, current.episodes)
       .then((list) => alive && setEpisodes({ season, list }))
       .catch(() => alive && setError("Couldn't load the episodes."));
     return () => {
       alive = false;
     };
-  }, [isSeries, season, seasons, subject.id]);
+  }, [isSeries, season, seasons, currentId]);
 
   // The releases the film's name has on the torrent indexes.
   useEffect(() => {
@@ -138,15 +150,15 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
     setPreparing(true);
     setError(null);
     try {
-      const rows = await playableRows(subject.id, 0, 0);
+      const rows = await playableRows(currentId, 0, 0);
       if (rows.length === 0) throw new Error('This film has no file to play.');
       onPlay({
         kind: 'moviebox',
-        subjectId: subject.id,
+        subjectId: currentId,
         season: 0,
         episode: 0,
-        title: subject.title,
-        poster: subject.poster,
+        title: details?.title ?? subject.title,
+        poster: details?.poster ?? subject.poster,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "This film can't be played.");
@@ -158,12 +170,23 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
   const playEpisode = (episode: MovieboxEpisode) => {
     onPlay({
       kind: 'moviebox',
-      subjectId: subject.id,
+      subjectId: currentId,
       season: episode.season,
       episode: episode.episode,
-      title: `${subject.title} · Episode ${episode.episode}`,
-      poster: subject.poster,
+      title: `${details?.title ?? subject.title} · Episode ${episode.episode}`,
+      poster: details?.poster ?? subject.poster,
     });
+  };
+
+  // The language versions of this film, as the service lists them.
+  const dubs = details?.dubs ?? [];
+
+  const switchDub = (id: string) => {
+    if (id === currentId) return;
+    setSwitching(true);
+    setCurrentId(id);
+    setEpisodes(null);
+    setError(null);
   };
 
   const shown = details ?? subject;
@@ -205,6 +228,39 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
             {shown.country ? <Text style={styles.meta}>{shown.country}</Text> : null}
           </View>
         </View>
+
+        {dubs.length > 1 && (
+          <View style={styles.dubs}>
+            <View style={styles.dubsHead}>
+              <Text style={styles.dubsLabel}>Audio</Text>
+              {switching ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dubRow}
+            >
+              {dubs.map((dub) => {
+                const active = dub.id === currentId;
+                return (
+                  <Pressable
+                    key={dub.id}
+                    onPress={() => switchDub(dub.id)}
+                    style={({ focused, pressed }) => [
+                      styles.dub,
+                      active && styles.dubActive,
+                      (focused || pressed) && styles.dubFocused,
+                    ]}
+                  >
+                    <Text style={[styles.dubText, active && styles.dubTextActive]}>
+                      {dubLabel(dub)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {shown.description ? <Text style={styles.description}>{shown.description}</Text> : null}
 
@@ -377,6 +433,28 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cast: { color: colors.muted, fontSize: isTV ? 15 : 13, lineHeight: isTV ? 23 : 20 },
+  dubs: { marginBottom: 16 },
+  dubsHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  dubsLabel: {
+    color: colors.muted,
+    fontSize: isTV ? 15 : 12,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  dubRow: { gap: 8, paddingRight: GUTTER },
+  dub: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  dubActive: { backgroundColor: colors.accent },
+  dubFocused: { borderColor: colors.text },
+  dubText: { color: colors.muted, fontSize: isTV ? 15 : 13, fontWeight: '800' },
+  dubTextActive: { color: '#fff' },
   seasons: { gap: 8, paddingVertical: 8, paddingRight: GUTTER },
   season: {
     paddingHorizontal: 14,

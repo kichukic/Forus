@@ -39,6 +39,15 @@ DEFS = """
     <stop offset="0" stop-color="#241a3d"/>
     <stop offset="1" stop-color="#0c0a12"/>
   </linearGradient>
+  <linearGradient id="board" x1="0" y1="0" x2="0.6" y2="1">
+    <stop offset="0" stop-color="#2d2250"/>
+    <stop offset="1" stop-color="#120e1e"/>
+  </linearGradient>
+  <!-- The clapsticks' diagonal black-and-white stripes. -->
+  <pattern id="stripes" width="120" height="120" patternUnits="userSpaceOnUse" patternTransform="rotate(-32)">
+    <rect width="60" height="120" fill="#f6f4fa"/>
+    <rect x="60" width="60" height="120" fill="#1a1430"/>
+  </pattern>
   <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
     <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#2a0f6b" flood-opacity="0.55"/>
   </filter>
@@ -63,6 +72,28 @@ def mark(scale=1.0, white_heart=True, glow=False):
 </g>"""
 
 
+def clapper(scale=1.0, dx=0, dy=0):
+    """A film clapperboard with the heart-play on its board, the top stick
+    tilted open. Drawn around (512, 560) on the 1024 grid."""
+    t = f"translate({512 + dx} {560 + dy}) scale({scale}) translate(-512 -560)"
+    return f"""
+<g transform="{t}" filter="url(#shadow)">
+  <!-- The board. -->
+  <rect x="232" y="468" width="560" height="324" rx="44" fill="url(#board)"/>
+  <rect x="232" y="468" width="560" height="324" rx="44" fill="none" stroke="#9b5cff" stroke-opacity="0.35" stroke-width="6"/>
+  <!-- The lower clapstick, fixed to the board. -->
+  <rect x="232" y="398" width="560" height="78" rx="16" fill="url(#stripes)"/>
+  <!-- The upper clapstick, swung open from the hinge on the left. -->
+  <g transform="rotate(-17 248 398)">
+    <rect x="232" y="312" width="560" height="78" rx="16" fill="url(#stripes)"/>
+  </g>
+  <circle cx="250" cy="398" r="20" fill="#f6f4fa"/>
+  <circle cx="250" cy="398" r="8" fill="#9b5cff"/>
+  <!-- The ForUs mark on the board. -->
+  <g transform="translate(0 118)">{mark(0.34)}</g>
+</g>"""
+
+
 def svg(width, height, body):
     return f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">{DEFS}{body}</svg>'
 
@@ -73,23 +104,24 @@ def render(name, content, width, height):
     subprocess.run(["rsvg-convert", "-w", str(width), "-h", str(height), "-o", str(OUT / f"{name}.png"), str(src)], check=True)
 
 
-# Full app icon: the white mark on the purple gradient.
-render("icon", svg(1024, 1024, f'<rect width="1024" height="1024" fill="url(#bg)"/><rect width="1024" height="1024" fill="url(#shine)"/>{mark(0.78)}'), 1024, 1024)
+# Full app icon: the clapperboard on the purple gradient.
+render("icon", svg(1024, 1024, f'<rect width="1024" height="1024" fill="url(#bg)"/><rect width="1024" height="1024" fill="url(#shine)"/>{clapper(1.08, dy=-20)}'), 1024, 1024)
 
 # Adaptive icon: Android masks it to a circle or squircle, so the mark stays
 # inside the central safe zone and the gradient is a separate layer.
-render("adaptive-icon", svg(1024, 1024, mark(0.64)), 1024, 1024)
+render("adaptive-icon", svg(1024, 1024, clapper(0.82, dy=-12)), 1024, 1024)
 render("adaptive-background", svg(1024, 1024, '<rect width="1024" height="1024" fill="url(#bg)"/><rect width="1024" height="1024" fill="url(#shine)"/>'), 1024, 1024)
 
 # Splash: the purple mark with a soft glow, on transparent (the splash
 # background colour is the app's own dark).
 render("splash-icon", svg(1024, 1024, mark(0.82, white_heart=False, glow=True)), 1024, 1024)
 
-# Android TV launcher banner (320x180 dp, rendered at 2x) with the wordmark.
+# Android TV launcher banner (320x180 dp, rendered at 2x): the clapperboard and
+# the wordmark.
 banner = f"""
 <rect width="1280" height="720" fill="url(#dark)"/>
 <circle cx="340" cy="360" r="260" fill="#9b5cff" opacity="0.18" filter="url(#glow)"/>
-<g transform="translate(-170 -152)">{mark(0.5, white_heart=False, glow=True)}</g>
+<g transform="translate(-170 -190)">{clapper(0.62)}</g>
 <text x="540" y="425" font-family="Noto Sans" font-weight="900" font-size="190" fill="#f6f4fa" letter-spacing="-6">For<tspan fill="#a06bff">Us</tspan></text>
 """
 render("tv-banner", svg(1280, 720, banner), 400, 240)
