@@ -233,7 +233,7 @@ export function HomeScreen({
       {panel(
         'disha',
         <TabScroll refreshControl={refreshControl} themes={HINDI_THEMES} tabKey="disha" refreshKey={refreshKey} onPlay={playVideo}>
-          <HeroCarousel key={`hero-disha-${refreshKey}`} sources={HINDI_MOVIES} label="Picked for Disha" onPlay={playVideo} />
+          <HeroCarousel key={`hero-disha-${refreshKey}`} sources={HINDI_MOVIES} label="Picked for Disha ♥" onPlay={playVideo} />
           {HINDI_MOVIES.map((source) => (
             <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
           ))}
@@ -364,7 +364,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
       )}
 
       <Text style={styles.credit}>
-        Made with love by Kishor
+        Made with <Text style={styles.heart}>♥</Text> by Kishor
       </Text>
     </ScrollView>
   );
@@ -450,5 +450,6 @@ const styles = StyleSheet.create({
   row: { marginBottom: sz(24, 30) },
   list: { paddingHorizontal: GUTTER, paddingVertical: sz(2, 8) },
   moreRows: { marginVertical: 24 },
+  heart: { color: colors.accent },
   credit: { color: colors.faint, fontSize: sz(12.5, 15), textAlign: 'center', marginTop: 8, fontWeight: '600' },
 });

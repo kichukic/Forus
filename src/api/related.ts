@@ -40,7 +40,7 @@ async function relatedToVideo(videoId: string, title: string): Promise<RelatedCa
 
   const related = await relatedVideos(videoId, TRUSTED_CHANNELS).catch(() => []);
   for (const r of related) {
-    add(videoCard(r.id, r.title, [r.channel, r.live ? 'LIVE' : r.duration].filter(Boolean).join(' · ')), r.id);
+    add(videoCard(r.id, r.title, [r.channel, r.live ? '● LIVE' : r.duration].filter(Boolean).join(' · ')), r.id);
   }
 
   // Films are followed by films (Hindi ones by Hindi ones), everything else by

@@ -103,7 +103,7 @@ function Thumbnail({ card }: { card: RelatedCard }) {
   if (card.liveColor) {
     return (
       <View style={[styles.thumb, styles.liveThumb, { backgroundColor: card.liveColor }]}>
-        <Text style={styles.liveBadge}>LIVE</Text>
+        <Text style={styles.liveBadge}>● LIVE</Text>
       </View>
     );
   }

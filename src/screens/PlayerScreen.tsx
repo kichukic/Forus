@@ -358,7 +358,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
         // Dragging the title block down shrinks the player into the corner.
         <RelatedPanel item={item} onPlay={onPlay} dragHandlers={shell?.dragHandlers}>
           <Text style={styles.infoTitle}>
-            {item.kind === 'live' ? 'LIVE · ' : ''}
+            {item.kind === 'live' ? '● LIVE  ' : ''}
             {item.title}
           </Text>
           <Pressable onPress={() => setPickerOpen(true)} style={styles.link}>
@@ -398,7 +398,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
       {isTV && !failed && (showHint || paused) && (
         <View style={styles.hint}>
           <Text style={styles.hintTitle} numberOfLines={1}>
-            {item.kind === 'live' ? 'LIVE · ' : ''}
+            {item.kind === 'live' ? '● LIVE  ' : ''}
             {item.title}
           </Text>
           <Text style={styles.hintKeys}>
@@ -408,7 +408,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
                 ? 'Playing in the site’s own player    Back: home'
                 : item.kind === 'live'
                   ? 'OK: pause / play    Back: home'
-                  : 'OK: pause / play    Left / Right: 10 seconds    Back: home'}
+                  : 'OK: pause / play    ◀ ▶: 10 seconds    Back: home'}
           </Text>
           {!external && <ProgressLine time={time} live={item.kind === 'live'} target={seekTarget} />}
         </View>

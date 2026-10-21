@@ -44,7 +44,7 @@ export function TorboxSetupScreen({ onDone }: Props) {
     <View style={[styles.screen, { paddingTop: insets.top + GUTTER }]}>
       <Text style={styles.title}>{connected ? 'TorBox is connected' : 'Connect TorBox'}</Text>
       <Text style={styles.body}>
-        Paste your API key from the Settings page on torbox.app. The app lists the video files already in
+        Paste your API key from torbox.app → Settings. The app lists the video files already in
         your TorBox account and plays them here. The key is saved only on this device.
       </Text>
 
