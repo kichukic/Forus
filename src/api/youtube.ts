@@ -19,6 +19,16 @@ export function thumbnailUrl(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
 }
 
+// Channels decorate titles with emoji (😂 🔥 🤣 ❤️); the app shows titles
+// without them. These ranges cover the picture emoji, plus the invisible
+// characters that join or colour them, but not letters of any script.
+const EMOJI =
+  /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}]/gu;
+
+export function stripEmoji(title: string): string {
+  return title.replace(EMOJI, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 function decode(text: string): string {
   return text
     .replace(/&quot;/g, '"')
@@ -38,7 +48,7 @@ function parseFeed(xml: string): Video[] {
     if (!id || title === undefined) continue;
     videos.push({
       id,
-      title: decode(title),
+      title: stripEmoji(decode(title)),
       published: entry.match(/<published>([^<]+)<\/published>/)?.[1] ?? '',
       thumbnail: thumbnailUrl(id),
     });
@@ -145,7 +155,7 @@ function collectLockups(json: any): { lockups: Lockup[]; continuation?: string }
       const meta = lockup.metadata?.lockupMetadataViewModel;
       lockups.push({
         id: lockup.contentId,
-        title: meta?.title?.content ?? '',
+        title: stripEmoji(meta?.title?.content ?? ''),
         // Both sit deep in nested view models; searching the text is simplest.
         duration: JSON.stringify(lockup.contentImage ?? {}).match(/"thumbnailBadgeViewModel":\{"text":"([^"]+)"/)?.[1],
         channelId: JSON.stringify(meta ?? {}).match(/"browseId":"(UC[\w-]{22})"/)?.[1],
@@ -225,7 +235,7 @@ function parseSearch(json: any, trusted: Map<string, string>): SearchPage {
       if (v.videoId && channel) {
         page.results.push({
           id: v.videoId,
-          title: text(v.title),
+          title: stripEmoji(text(v.title)),
           published: text(v.publishedTimeText),
           thumbnail: thumbnailUrl(v.videoId),
           channel,
