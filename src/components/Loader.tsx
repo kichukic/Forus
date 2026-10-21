@@ -6,7 +6,7 @@
 // "more is coming" (still) is drawn once, and every loader pauses while the
 // app is in the background, so an idle screen never keeps redrawing.
 import { useEffect, useState, type ComponentProps } from 'react';
-import { Animated, AppState, Easing, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, sz } from '../theme';
 
@@ -16,15 +16,12 @@ type Props = {
   size?: 'small' | 'large';
   color?: string;
   style?: StyleProp<ViewStyle>;
-  // A hint that sits still, for "more coming" footers. The endless animation
-  // there is what kept the screen redrawing while idle.
-  still?: boolean;
 };
 
 const WAVE_MS = 1100;
 
-export function Loader({ label, icon, size = 'small', color = colors.accent, style, still = false }: Props) {
-  const [wave] = useState(() => new Animated.Value(still ? 0.5 : 0));
+export function Loader({ label, icon, size = 'small', color = colors.accent, style }: Props) {
+  const [wave] = useState(() => new Animated.Value(0));
   const [scan] = useState(() => new Animated.Value(0));
   const [pulse] = useState(() => new Animated.Value(0));
   const [appear] = useState(() => new Animated.Value(0));
@@ -32,8 +29,6 @@ export function Loader({ label, icon, size = 'small', color = colors.accent, sty
 
   useEffect(() => {
     Animated.timing(appear, { toValue: 1, duration: 260, useNativeDriver: true }).start();
-
-    if (still) return;
 
     const loops = [
       Animated.loop(Animated.timing(wave, { toValue: 3, duration: WAVE_MS, easing: Easing.linear, useNativeDriver: true })),
@@ -50,21 +45,9 @@ export function Loader({ label, icon, size = 'small', color = colors.accent, sty
         ]),
       ),
     ];
-    const startLoops = () => loops.forEach((l) => l.start());
-    const stopLoops = () => loops.forEach((l) => l.stop());
-
-    if (AppState.currentState === 'active') startLoops();
-
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') startLoops();
-      else stopLoops();
-    });
-
-    return () => {
-      stopLoops();
-      sub.remove();
-    };
-  }, [still]);
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
+  }, []);
 
   const dot = large ? sz(11, 14) : sz(6, 8);
   const lift = large ? dot * 0.9 : dot * 0.8;
@@ -99,7 +82,7 @@ export function Loader({ label, icon, size = 'small', color = colors.accent, sty
 
   return (
     <Animated.View style={[large ? styles.large : styles.small, { opacity: appear }, style]} pointerEvents="none">
-      {large && !still && (
+      {large && (
         <Animated.View
           style={[
             styles.glow,
@@ -111,7 +94,7 @@ export function Loader({ label, icon, size = 'small', color = colors.accent, sty
           ]}
         />
       )}
-      {icon && !still && (
+      {icon && (
         <Animated.View
           style={{
             transform: [

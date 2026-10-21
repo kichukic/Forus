@@ -15,36 +15,29 @@ type Props = {
   icon?: ComponentProps<typeof Ionicons>['name'];
   rows?: number;
   style?: StyleProp<ViewStyle>;
-  // A hint that sits still, for "more coming" footers. The sweep there would
-  // keep the screen redrawing for nothing.
-  still?: boolean;
 };
 
 const SWEEP_MS = 1400;
 
-export function SkeletonLoader({ columns, cardWidth, label, icon = 'search', rows = 3, style, still = false }: Props) {
+export function SkeletonLoader({ columns, cardWidth, label, icon = 'search', rows = 3, style }: Props) {
   const [sweep] = useState(() => new Animated.Value(0));
   const [appear] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
-    if (still) {
-      Animated.timing(appear, { toValue: 1, duration: 260, useNativeDriver: true }).start();
-      return;
-    }
     const loop = Animated.loop(
       Animated.timing(sweep, { toValue: 1, duration: SWEEP_MS, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
     );
     loop.start();
     Animated.timing(appear, { toValue: 1, duration: 260, useNativeDriver: true }).start();
     return () => loop.stop();
-  }, [still]);
+  }, []);
 
   const pictureHeight = (cardWidth * 9) / 16;
   const rowWidth = cardWidth * columns + CARD_GAP * (columns - 1);
 
   return (
     <Animated.View style={[{ opacity: appear }, style]} pointerEvents="none">
-      {label ? <Loader label={label} icon={icon} style={styles.status} still={still} /> : null}
+      {label ? <Loader label={label} icon={icon} style={styles.status} /> : null}
 
       {Array.from({ length: rows }, (_, r) => (
         <View key={r} style={[styles.row, { width: rowWidth }]}>
@@ -54,13 +47,13 @@ export function SkeletonLoader({ columns, cardWidth, label, icon = 'search', row
             return (
               <View key={c} style={{ width: cardWidth, marginRight: c === columns - 1 ? 0 : CARD_GAP }}>
                 <View style={[styles.block, { height: pictureHeight, borderRadius: RADIUS }]}>
-                  {still ? null : <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />}
+                  <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />
                 </View>
                 <View style={[styles.block, styles.line, { width: '88%' }]}>
-                  {still ? null : <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />}
+                  <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />
                 </View>
                 <View style={[styles.block, styles.line, styles.lineShort]}>
-                  {still ? null : <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />}
+                  <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />
                 </View>
               </View>
             );
