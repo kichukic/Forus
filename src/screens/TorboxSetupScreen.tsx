@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { checkApiKey, getApiKey, setApiKey } from '../api/torbox';
 import { GUTTER, colors, sz } from '../theme';
+import { Loader } from '../components/Loader';
 
 type Props = {
   onDone: () => void;
@@ -67,7 +68,7 @@ export function TorboxSetupScreen({ onDone }: Props) {
         {connected && <Button label="Disconnect" onPress={disconnect} />}
         <Button label="Back" onPress={onDone} />
       </View>
-      {checking && <ActivityIndicator color={colors.accent} style={styles.spinner} />}
+      {checking && <Loader label="Checking the key" icon="key-outline" style={styles.spinner} />}
     </View>
   );
 }

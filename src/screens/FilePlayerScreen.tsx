@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { getApiKey, getStreamUrl } from '../api/torbox';
 import type { ShellControls } from '../components/PlayerShell';
+import { Loader } from '../components/Loader';
 import { RelatedPanel } from '../components/RelatedPanel';
+import { VideoOverlay } from '../components/VideoOverlay';
+import { useRemoteSeek } from '../hooks/useRemoteSeek';
 import { colors, isTV, sz } from '../theme';
 import type { FilePlayable, Playable } from '../types';
 
@@ -28,6 +31,14 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
     p.staysActiveInBackground = false;
   });
   const { status, error } = useEvent(player, 'statusChange', { status: player.status });
+  const { currentTime } = useEvent(player, 'timeUpdate', { currentTime: 0, currentLiveTimestamp: 0, currentOffsetFromLive: 0, bufferedPosition: 0 });
+  const [showOverlay, setShowOverlay] = useState(true);
+  useRemoteSeek(player, () => setShowOverlay(true));
+  useEffect(() => {
+    if (!showOverlay) return;
+    const timer = setTimeout(() => setShowOverlay(false), 4000);
+    return () => clearTimeout(timer);
+  }, [showOverlay, currentTime]);
   const [linkError, setLinkError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,14 +64,14 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
         player={player}
         style={portraitPhone ? styles.videoPortrait : styles.video}
         // In the corner window a tap opens the player instead.
-        nativeControls={!mini}
+        nativeControls={!mini && !isTV}
         contentFit="contain"
         fullscreenOptions={{ enable: !isTV }}
       />
 
       {!failure && status !== 'readyToPlay' && (
         <View style={styles.overlay} pointerEvents="none">
-          <ActivityIndicator size="large" color={colors.accent} />
+          <Loader size="large" />
           <Text style={styles.overlayText} numberOfLines={2}>
             {item.title}
           </Text>
@@ -83,6 +94,18 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
           <Text style={styles.infoTitle}>{item.title}</Text>
           <Text style={styles.infoNote}>From your TorBox</Text>
         </RelatedPanel>
+      )}
+
+      {isTV && !mini && (
+        <VideoOverlay
+          player={player}
+          paused={!player.playing}
+          time={{ t: currentTime ?? 0, d: player.duration ?? 0 }}
+          buffering={status !== 'readyToPlay'}
+          show={showOverlay}
+          onToggle={() => (player.playing ? player.pause() : player.play())}
+          onSeekBy={(seconds) => player.seekBy(seconds)}
+        />
       )}
 
       {!isTV && !mini && (

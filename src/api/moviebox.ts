@@ -3,6 +3,7 @@
 // with "Signature invalid", so the signing lives here instead of being spread
 // over the app.
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isAdultGenre, isAdultTitle } from '../data/safe';
 import { stripEmoji } from '../data/text';
 import { hexBytes, hmacMd5Base64, md5Hex, utf8Bytes } from './md5';
 
@@ -48,6 +49,20 @@ export type MovieboxSubject = {
   hasResource: boolean;
   /** Whether the full film is behind a membership in the app. */
   membersOnly: boolean;
+  /**
+   * The other language versions of the same film, each a subject of its own.
+   * A film dubbed into Hindi is listed there as "Hindi dub".
+   */
+  dubs: MovieboxDub[];
+};
+
+export type MovieboxDub = {
+  id: string;
+  /** "Hindi dub", "Original Audio" and so on. */
+  name: string;
+  /** "hi", "te" and so on. */
+  code: string;
+  original: boolean;
 };
 
 export type MovieboxShelf = {
@@ -104,14 +119,27 @@ type RawSubject = {
   imdbRatingValue?: string;
   seNum?: number;
   hasResource?: boolean;
+  // The service marks the films that are not for children.
+  restrictKid?: number;
   cover?: RawCover;
   stills?: RawCover;
   vipInfo?: { requireMemberType?: number; previewSeconds?: number };
   staffList?: { name?: string; character?: string }[];
+  dubs?: { subjectId?: string; lanName?: string; lanCode?: string; original?: boolean }[];
 };
+
+// Whether the service has marked this film as one for adults.
+function isAdult(raw: RawSubject): boolean {
+  // The service also flags ordinary films that are rated for adults only.
+  if (raw.restrictKid === 1) return true;
+  if (isAdultGenre(raw.genre)) return true;
+  return isAdultTitle(raw.title ?? '');
+}
 
 function toSubject(raw: RawSubject): MovieboxSubject | null {
   if (!raw?.subjectId || !raw.title) return null;
+  // Films for adults are left out, so they turn up nowhere in the app.
+  if (isAdult(raw)) return null;
   return {
     id: String(raw.subjectId),
     // The service puts emoji in its titles too, so they are taken out.
@@ -132,6 +160,14 @@ function toSubject(raw: RawSubject): MovieboxSubject | null {
     seasons: raw.seNum,
     hasResource: raw.hasResource !== false,
     membersOnly: (raw.vipInfo?.requireMemberType ?? 0) > 0,
+    dubs: (raw.dubs ?? [])
+      .filter((dub) => dub.subjectId)
+      .map((dub) => ({
+        id: String(dub.subjectId),
+        name: dub.lanName || 'Original Audio',
+        code: dub.lanCode ?? '',
+        original: dub.original === true,
+      })),
   };
 }
 
@@ -353,8 +389,14 @@ export async function browseTabs(): Promise<{ id: number; name: string }[]> {
   return tabs;
 }
 
+// The sections are kept for a few minutes, so a tab opens straight away.
+const shelfCache = new Map<number, { at: number; shelves: MovieboxShelf[] }>();
+const SHELF_CACHE_MS = 3 * 60 * 1000;
+
 /** The rows of films on one of those sections. */
 export async function browseShelves(tabId: number): Promise<MovieboxShelf[]> {
+  const held = shelfCache.get(tabId);
+  if (held && Date.now() - held.at < SHELF_CACHE_MS) return held.shelves;
   const data = await request<{ items?: { title?: string; subjects?: RawSubject[] }[] }>(
     'GET',
     '/wefeed-mobile-bff/tab-operating',
@@ -374,7 +416,13 @@ export async function browseShelves(tabId: number): Promise<MovieboxShelf[]> {
     // The headings come with emoji of their own ("💗Bollywood Love Stories").
     shelves.push({ title: stripEmoji(item.title || 'Films'), subjects });
   }
+  if (shelves.length > 0) shelfCache.set(tabId, { at: Date.now(), shelves });
   return shelves;
+}
+
+/** Forgets the sections, so the next visit fetches them again. */
+export function clearMovieboxCache(): void {
+  shelfCache.clear();
 }
 
 export type MovieboxSearch = {
@@ -604,6 +652,69 @@ export async function directStream(
     // The preview is a small file; anything bigger is the whole thing.
     whole: size > episode.size * 4,
   };
+}
+
+export type MovieboxCaption = {
+  id: string;
+  /** The language, as the service writes it: en, ml, hi. */
+  language: string;
+  /** The name of the language, for the person watching. */
+  label: string;
+  url: string;
+};
+
+/**
+ * The subtitles for one film or episode.
+ *
+ * They belong to the file, so the id of the file is needed as well.
+ */
+export async function captions(
+  subjectId: string,
+  resourceId: string,
+): Promise<MovieboxCaption[]> {
+  if (!resourceId) return [];
+  const data = await request<{
+    extCaptions?: { id?: string; lan?: string; lanName?: string; url?: string }[];
+  }>('GET', `${BFF}/subject-api/get-ext-captions`, [
+    ['subjectId', subjectId],
+    ['resourceId', resourceId],
+  ]);
+  return (data?.extCaptions ?? [])
+    .filter((caption) => !!caption.url)
+    .map((caption) => ({
+      id: caption.id ?? caption.lan ?? 'caption',
+      language: caption.lan ?? 'und',
+      label: caption.lanName ?? caption.lan ?? 'Subtitles',
+      url: caption.url as string,
+    }));
+}
+
+/**
+ * Films to watch next.
+ *
+ * The service has no "more like this" of its own, so the films are taken
+ * from the sections it shows, with the ones of the same sort first.
+ */
+export async function recommendations(subject: {
+  id: string;
+  genre?: string;
+}): Promise<MovieboxSubject[]> {
+  const shelves = await browseShelves(1).catch(() => [] as MovieboxShelf[]);
+  const all: MovieboxSubject[] = [];
+  const seen = new Set<string>();
+  for (const shelf of shelves) {
+    for (const candidate of shelf.subjects) {
+      if (candidate.id === subject.id || seen.has(candidate.id)) continue;
+      seen.add(candidate.id);
+      all.push(candidate);
+    }
+  }
+  // The same sort of film comes first, then the rest.
+  const genre = subject.genre?.split(',')[0]?.trim().toLowerCase();
+  if (!genre) return all.slice(0, 12);
+  const same = all.filter((candidate) => candidate.genre?.toLowerCase().includes(genre));
+  const rest = all.filter((candidate) => !same.includes(candidate));
+  return [...same, ...rest].slice(0, 12);
 }
 
 /** Drops the saved visitor token, so the next call signs in again. */

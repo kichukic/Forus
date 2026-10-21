@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Platform,
   StyleSheet,
@@ -15,6 +14,7 @@ import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, GUTTER, RADIUS, colors, isTV, sz } f
 import type { FilePlayable } from '../types';
 import { FileCardContent } from './FileCardContent';
 import { FocusCard } from './FocusCard';
+import { SkeletonLoader } from './SkeletonLoader';
 
 type Props = {
   // Bumped by the parent after the API key changes, to reload the list.
@@ -77,7 +77,7 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
   }, [version]);
 
   if (state.status === 'loading' && !grid) {
-    return <ActivityIndicator color={colors.accent} style={styles.loading} />;
+    return <SkeletonLoader columns={rowColumns} cardWidth={CARD_WIDTH} rows={1} label="Opening your TorBox" icon="cloud-outline" style={styles.loading} />;
   }
 
   const cards: Card[] =
@@ -89,7 +89,7 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
 
   const note =
     state.status === 'loading' ? (
-      <ActivityIndicator color={colors.accent} style={styles.loading} />
+      <SkeletonLoader columns={columns} cardWidth={cardWidth} rows={2} label="Opening your TorBox" icon="cloud-outline" style={styles.loading} />
     ) : state.status === 'error' ? (
       <Text style={styles.note}>Couldn&apos;t load TorBox: {state.message}</Text>
     ) : state.status === 'ready' && state.files.length === 0 ? (

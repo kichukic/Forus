@@ -2,6 +2,7 @@
 // needs no key and no account, and every film it lists has an IMDb id, which
 // is all that is needed to look the film up on a torrent index.
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isAdultTitle } from '../data/safe';
 
 const CINEMETA = 'https://v3-cinemeta.strem.io/catalog';
 // The browsable catalog lives behind this host, which is also the one that
@@ -44,6 +45,8 @@ function biggerPoster(url: string | undefined): string | undefined {
 function parse(metas: Meta[] | undefined): CatalogMovie[] {
   return (metas ?? [])
     .filter((m) => m?.id && m?.name)
+    // Films for adults are not shown.
+    .filter((m) => !isAdultTitle(m.name as string))
     .map((m) => ({
       id: m.id as string,
       title: m.name as string,

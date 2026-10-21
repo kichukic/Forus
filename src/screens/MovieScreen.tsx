@@ -13,8 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CatalogMovie } from '../api/catalog';
 import { findTorrents, type TorrentOption } from '../api/torrents';
 import { ReleaseList } from '../components/ReleaseList';
-import { TorboxSendCard } from '../components/TorboxSendCard';
-import { useTorboxSend } from '../hooks/useTorboxSend';
+import { addTransfer } from '../data/transfers';
 import { GUTTER, RADIUS, SCRIM, colors, isTV } from '../theme';
 import type { Playable } from '../types';
 
@@ -30,13 +29,7 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
   const insets = useSafeAreaInsets();
   const [torrents, setTorrents] = useState<TorrentOption[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
-  const [chosen, setChosen] = useState<TorrentOption | null>(null);
-  const { phase, start, cancel } = useTorboxSend({
-    onPlay: (item) => {
-      onPlay(item);
-      onClose();
-    },
-  });
+  // Sending now runs in the background, so this screen never blocks on it.
 
   useEffect(() => {
     let alive = true;
@@ -48,8 +41,6 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
     };
   }, [movie.id]);
 
-  const busy = phase.kind === 'sending' || phase.kind === 'downloading';
-  const error = phase.kind === 'error' ? phase : null;
 
   return (
     <View style={styles.screen}>
@@ -67,15 +58,7 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
         </Text>
       </View>
 
-      {busy ? (
-        <TorboxSendCard
-          title={chosen?.name || movie.title}
-          torrent={phase.kind === 'downloading' ? phase.torrent : null}
-          sending={phase.kind === 'sending'}
-          onCancel={cancel}
-        />
-      ) : (
-        <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView contentContainerStyle={styles.list}>
           <View style={styles.head}>
             {movie.poster ? (
               <Image source={{ uri: movie.poster }} style={styles.poster} resizeMode="cover" />
@@ -91,23 +74,6 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
           </View>
           {movie.description ? <Text style={styles.description}>{movie.description}</Text> : null}
 
-          {error && (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error.message}</Text>
-              {error.needsKey && (
-                <Pressable
-                  onPress={onOpenTorbox}
-                  style={({ focused, pressed }) => [
-                    styles.connect,
-                    (focused || pressed) && styles.cancelActive,
-                  ]}
-                >
-                  <Text style={styles.connectText}>Connect TorBox</Text>
-                </Pressable>
-              )}
-            </View>
-          )}
-
           <Text style={styles.sectionTitle}>
             {torrents === null ? 'Looking for releases…' : 'Releases'}
           </Text>
@@ -115,14 +81,12 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
           <ReleaseList
             releases={torrents}
             onSend={(item) => {
-              setChosen(item);
-              start(item);
+              addTransfer(item);
             }}
             error={listError}
             emptyText="No releases found for this film."
           />
         </ScrollView>
-      )}
     </View>
   );
 }

@@ -1,6 +1,5 @@
-import { useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
+import { Children, useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   AppState,
   Easing,
@@ -38,6 +37,8 @@ import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope 
 import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
 import { GLOW, GUTTER, colors, isTV, sz } from '../theme';
+import { Loader } from '../components/Loader';
+import { TransferList } from '../components/TransferList';
 import type { Playable } from '../types';
 
 const THEMES_AT_START = 3;
@@ -47,7 +48,7 @@ const STALE_AFTER_MS = 10 * 60 * 1000;
 
 const TABS = [
   { id: 'all', label: 'All' },
-  { id: 'moviebox', label: 'MovieBox' },
+  { id: 'moviebox', label: 'MovieBox by Kishor' },
   { id: 'movies', label: 'Malayalam Movies' },
   { id: 'shows', label: 'Shows' },
   { id: 'disha', label: 'For Disha Chotu' },
@@ -71,6 +72,10 @@ const activePage: { current: ScrollView | null } = { current: null };
 // TV: how long a tab must stay highlighted before it opens, so moving across
 // several tabs doesn't load each one on the way.
 const TAB_FOCUS_DELAY_MS = 350;
+// TV: a tab opens with its first rows and adds the rest one at a time, so its
+// chip isn't building a dozen rows of cards in the moment the tab changes.
+const TV_FIRST_ROWS = 2;
+const TV_ROW_STAGGER_MS = 140;
 // The news channels' recorded uploads, one row each on the News tab.
 const NEWS_SOURCES = LIVE_NEWS.map(({ name, channelId }) => ({ name, channelId }));
 
@@ -99,6 +104,8 @@ export type HomeHandle = {
    * back to the All tab. False when already there, so Back can leave the app.
    */
   goTop: () => boolean;
+  /** Opens one of the tabs by name, used by the transfer bar. */
+  openTab: (id: Tab) => void;
 };
 
 export function HomeScreen({
@@ -123,10 +130,15 @@ export function HomeScreen({
 
   // Which way the content slides in: from the right when moving to a tab
   // further along, from the left when moving back.
-  const direction = useRef(1);
+  const [direction, setDirection] = useState(1);
+  // TV: the All tab's carousel takes the remote's focus once, when the app
+  // opens. After that the All tab is rebuilt each time it is opened, and its
+  // carousel would pull focus down off the tabs.
+  const [launchFocus, setLaunchFocus] = useState(true);
   const open = (t: Tab) => {
     if (t === tab) return;
-    direction.current = TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1;
+    setLaunchFocus(false);
+    setDirection(TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1);
     setTab(t);
   };
   // Bumped to hand the remote's focus back to the tab bar.
@@ -145,6 +157,10 @@ export function HomeScreen({
       setFocusTabs((n) => n + 1);
       return true;
     },
+    openTab: (id) => {
+      setTab(id);
+      activePage.current?.scrollTo({ y: 0, animated: true });
+    },
   }));
 
 
@@ -152,8 +168,8 @@ export function HomeScreen({
   // width, instead of jumping.
   const tabBar = useRef<ScrollView>(null);
   const tabLayouts = useRef<Partial<Record<Tab, { x: number; width: number }>>>({});
-  const pillX = useRef(new Animated.Value(0)).current;
-  const pillWidth = useRef(new Animated.Value(0)).current;
+  const [pillX] = useState(() => new Animated.Value(0));
+  const [pillWidth] = useState(() => new Animated.Value(0));
   const pillPlaced = useRef(false);
 
   const movePill = (animated: boolean) => {
@@ -186,6 +202,7 @@ export function HomeScreen({
   };
 
   const refresh = () => {
+    setLaunchFocus(false);
     clearVideoCache();
     clearCatalogCache();
     setRefreshKey((k) => k + 1);
@@ -229,7 +246,7 @@ export function HomeScreen({
   // a heavy tab is opened on top of them.
   const panel = (t: Tab, content: ReactNode) =>
     t === tab ? (
-      <SlideIn key={t} direction={direction.current}>
+      <SlideIn key={t} direction={direction}>
         <ErrorBoundary label={TABS.find((entry) => entry.id === t)?.label}>{content}</ErrorBoundary>
       </SlideIn>
     ) : null;
@@ -275,8 +292,11 @@ export function HomeScreen({
             <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]} />
             {TABS.map((t) => (
               <TabButton
-                // Remounting the active tab is what hands it the remote's focus.
-                key={tab === t.id ? `${t.id}-${focusTabs}` : t.id}
+                // Remounting is what hands the active tab the remote's focus on
+                // Back. The key must not change when a tab opens: that would
+                // remount the focused tab, and the TV would drop its focus onto
+                // another tab, which then opens.
+                key={`${t.id}-${focusTabs}`}
                 label={t.label}
                 active={tab === t.id}
                 takeFocus={focusTabs > 0 && tab === t.id}
@@ -305,7 +325,7 @@ export function HomeScreen({
             label="New today"
             onPlay={playVideo}
             // On TV the remote starts on Watch Now, until Back sends it to the tabs.
-            takeFocus={focusTabs === 0}
+            takeFocus={focusTabs === 0 && launchFocus}
           />
 
           {/* A row of films from MovieBox, so the page holds everything. */}
@@ -394,6 +414,7 @@ export function HomeScreen({
           refreshControl={refreshControl}
           header={
             <View style={styles.row}>
+              <TransferList onPlay={onPlay} />
               <SectionHeader title="My TorBox" subtitle="Your own cloud files, played right here" />
               <TorboxRow
                 version={torboxVersion + refreshKey}
@@ -444,6 +465,14 @@ type TabScrollProps = {
 // One tab's scrolling page, ending in its themed rows and the credit line.
 function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay, tabKey }: TabScrollProps) {
   const [themeCount, setThemeCount] = useState(THEMES_AT_START);
+  const rows = Children.toArray(children);
+  const [rowCount, setRowCount] = useState(isTV ? TV_FIRST_ROWS : rows.length);
+  const allRows = !isTV || rowCount >= rows.length;
+  useEffect(() => {
+    if (allRows) return;
+    const timer = setTimeout(() => setRowCount((n) => n + 1), TV_ROW_STAGGER_MS);
+    return () => clearTimeout(timer);
+  }, [rowCount, allRows]);
   const scroll = useRef<ScrollView>(null);
   useEffect(() => {
     activePage.current = scroll.current;
@@ -485,14 +514,14 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
       scrollEventThrottle={250}
       refreshControl={refreshControl}
     >
-      {children}
+      {allRows ? rows : rows.slice(0, rowCount)}
 
-      {themes.length > 0 && onPlay && (
+      {allRows && themes.length > 0 && onPlay && (
         <>
           {themes.slice(0, themeCount).map((theme) => (
             <ThemeRow key={`${theme.query}-${refreshKey}`} theme={theme} onPlay={onPlay} />
           ))}
-          {themeCount < themes.length && <ActivityIndicator color={colors.accent} style={styles.moreRows} />}
+          {themeCount < themes.length && <Loader label="More rows coming" icon="sparkles-outline" style={styles.moreRows} />}
         </>
       )}
 
@@ -506,7 +535,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
 // A tab's new content fades in and slides a little from the side being moved
 // towards.
 function SlideIn({ direction, children }: { direction: number; children: ReactNode }) {
-  const progress = useRef(new Animated.Value(0)).current;
+  const [progress] = useState(() => new Animated.Value(0));
   useEffect(() => {
     Animated.timing(progress, {
       toValue: 1,
@@ -621,7 +650,7 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#fff' },
   row: { marginBottom: sz(24, 30) },
   list: { paddingHorizontal: GUTTER, paddingVertical: sz(2, 8) },
-  moreRows: { marginVertical: 24 },
+  moreRows: { marginVertical: 24, alignSelf: 'center' },
   heart: { color: colors.accent },
   credit: { color: colors.faint, fontSize: sz(12.5, 15), textAlign: 'center', marginTop: 8, fontWeight: '600' },
 });

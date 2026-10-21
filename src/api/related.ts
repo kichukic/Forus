@@ -2,6 +2,7 @@
 // topped up from the app's own rows so the list is never short.
 import { FULL_MOVIE, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, TRUSTED_CHANNELS } from '../data/channels';
 import type { Playable } from '../types';
+import { recommendations, subjectDetails } from './moviebox';
 import { getApiKey, listVideoFiles } from './torbox';
 import { loadVideos, relatedVideos, thumbnailUrl } from './youtube';
 
@@ -20,8 +21,8 @@ const MAX_CARDS = 20;
 export async function getRelated(item: Playable): Promise<RelatedCard[]> {
   if (item.kind === 'file') return relatedFiles(item);
   if (item.kind === 'live') return relatedLive(item.channelId);
-  // A MovieBox film has nothing on the channels to relate it to.
-  if (item.kind === 'moviebox') return [];
+  // A MovieBox film is related to the other films of its own sort.
+  if (item.kind === 'moviebox') return relatedMoviebox(item);
   return relatedToVideo(item.videoId, item.title);
 }
 
@@ -53,6 +54,27 @@ async function relatedToVideo(videoId: string, title: string): Promise<RelatedCa
   for (const v of latest) add(videoCard(v.id, v.title, v.channel), v.id);
 
   return cards;
+}
+
+// The films to watch after a MovieBox one: the same sort of film first.
+async function relatedMoviebox(item: Extract<Playable, { kind: 'moviebox' }>): Promise<RelatedCard[]> {
+  const details = await subjectDetails(item.subjectId).catch(() => null);
+  const genre = details?.subject.genre;
+  const films = await recommendations({ id: item.subjectId, genre }).catch(() => []);
+  return films.slice(0, MAX_CARDS).map((film) => ({
+    key: `moviebox:${film.id}`,
+    item: {
+      kind: 'moviebox',
+      subjectId: film.id,
+      season: 0,
+      episode: 0,
+      title: film.title,
+      poster: film.poster,
+    },
+    title: film.title,
+    subtitle: [film.year, film.genre?.split(',')[0]].filter(Boolean).join(' · '),
+    thumbnail: film.poster,
+  }));
 }
 
 function relatedLive(channelId: string): RelatedCard[] {

@@ -2,7 +2,6 @@
 // these are what the viewer sees and touches.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   PanResponder,
   Pressable,
@@ -15,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, sz } from '../theme';
 import { LiveBadge } from './Cards';
+import { Loader } from './Loader';
 
 export type PlaybackTime = { t: number; d: number };
 
@@ -92,7 +92,7 @@ export function PlayerControls({ paused, buffering, time, live, onToggle, onSeek
 
       {buffering && !paused && (
         <View style={styles.center} pointerEvents="none">
-          <ActivityIndicator size="large" color="#fff" />
+          <Loader size="large" color="#fff" />
         </View>
       )}
 

@@ -1,5 +1,6 @@
 // A film in a row or a grid: its poster with the name and year underneath.
 import { Platform, Image, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { MovieboxSubject } from '../api/moviebox';
 import { RADIUS, colors, isTV } from '../theme';
@@ -20,18 +21,35 @@ export const POSTER_ROW_PROPS = {
   removeClippedSubviews: Platform.OS === 'android' && !isTV,
 };
 
+// A handful of deep colours, so a missing poster is not a black square.
+const POSTER_COLOURS = ['#3a2a5c', '#2a3a5c', '#5c2a3a', '#2a5c3a', '#5c3a2a', '#2a4a5c'];
+function posterColour(title: string): string {
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) >>> 0;
+  return POSTER_COLOURS[hash % POSTER_COLOURS.length];
+}
+
 export function MovieboxPoster({ subject }: { subject: MovieboxSubject }) {
+  // A poster that does not load leaves a black tile behind, so a failed load
+  // is shown the same way as a missing one: the title on a coloured field.
+  const [failed, setFailed] = useState(false);
+  const showBlank = !subject.poster || failed;
   return (
     <View>
       <View style={styles.poster}>
-        {subject.poster ? (
-          <Image source={{ uri: subject.poster }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, styles.posterBlank]}>
+        {showBlank ? (
+          <View style={[StyleSheet.absoluteFill, styles.posterBlank, { backgroundColor: posterColour(subject.title) }]}>
             <Text style={styles.posterBlankText} numberOfLines={3}>
               {subject.title}
             </Text>
           </View>
+        ) : (
+          <Image
+            source={{ uri: subject.poster }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            onError={() => setFailed(true)}
+          />
         )}
         {subject.rating ? (
           <View style={styles.rating}>

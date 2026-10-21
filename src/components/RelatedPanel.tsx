@@ -2,7 +2,6 @@
 // down to shrink the player) and a scrolling list of what to watch next.
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   StyleSheet,
@@ -14,6 +13,7 @@ import { Image } from 'expo-image';
 import { findArtwork } from '../api/artwork';
 import { getRelated, type RelatedCard } from '../api/related';
 import { colors } from '../theme';
+import { Loader } from './Loader';
 import type { Playable } from '../types';
 
 type Props = {
@@ -55,11 +55,13 @@ export function RelatedPanel({ item, onPlay, dragHandlers, children }: Props) {
         keyExtractor={(c) => c.key}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <Text style={styles.heading}>{item.kind === 'live' ? 'More live channels' : 'Up next'}</Text>
+          <Text style={styles.heading}>
+            {item.kind === 'live' ? 'More live channels' : item.kind === 'moviebox' ? 'More like this' : 'Up next'}
+          </Text>
         }
         ListEmptyComponent={
           cards === null ? (
-            <ActivityIndicator color={colors.accent} style={styles.loading} />
+            <Loader label="Finding what to watch next" icon="film-outline" style={styles.loading} />
           ) : (
             <Text style={styles.empty}>Nothing related right now.</Text>
           )
@@ -138,7 +140,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
   },
-  loading: { marginTop: 24 },
+  loading: { marginTop: 24, alignSelf: 'center' },
   empty: { color: colors.muted, fontSize: 14, marginHorizontal: 16 },
   row: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 6 },
   pressed: { opacity: 0.6 },

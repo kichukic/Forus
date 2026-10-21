@@ -215,7 +215,7 @@ const SEARCH_CLIENT = { clientName: 'WEB', clientVersion: '2.20250101.00.00', hl
 const MAX_PAGES = 3;
 const ENOUGH_RESULTS = 15;
 
-type SearchPage = { results: SearchResult[]; continuation?: string };
+export type SearchPage = { results: SearchResult[]; continuation?: string };
 
 function text(node: any): string {
   return node?.simpleText ?? node?.runs?.map((r: any) => r.text).join('') ?? '';
@@ -284,8 +284,19 @@ export async function searchVideos(
   // Narrow scopes keep fewer results per page, so they may read further.
   maxPages = MAX_PAGES,
 ): Promise<SearchResult[]> {
+  return (await searchVideoPage(query, trusted, undefined, maxPages)).results;
+}
+
+// The same search a batch at a time, for rows that keep loading as they are
+// scrolled. Pass the previous batch's continuation for the next one.
+export async function searchVideoPage(
+  query: string,
+  trusted: Map<string, string>,
+  after?: string,
+  maxPages = MAX_PAGES,
+): Promise<SearchPage> {
   const results: SearchResult[] = [];
-  let continuation: string | undefined;
+  let continuation = after;
   for (let i = 0; i < maxPages && results.length < ENOUGH_RESULTS; i++) {
     const body = { context: { client: SEARCH_CLIENT }, ...(continuation ? { continuation } : { query }) };
     const res = await fetchWithTimeout(SEARCH_URL, {
@@ -298,8 +309,8 @@ export async function searchVideos(
     for (const r of page.results) {
       if (!results.some((o) => o.id === r.id)) results.push(r);
     }
-    if (!page.continuation) break;
     continuation = page.continuation;
+    if (!continuation) break;
   }
-  return results;
+  return { results, continuation };
 }

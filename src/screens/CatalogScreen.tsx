@@ -10,6 +10,8 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type RefreshControlProps,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { loadCatalog, loadCatalogPage, searchCatalog, type CatalogMovie } from '../api/catalog';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { FocusCard } from '../components/FocusCard';
+import { Loader } from '../components/Loader';
 import { SectionHeader } from '../components/Section';
 import { GUTTER, RADIUS, colors, isTV } from '../theme';
 
@@ -33,9 +36,17 @@ type Props = {
 };
 
 // Typing on a TV remote is slow, so a search runs once typing pauses.
-const DEBOUNCE_MS = 600;
+const DEBOUNCE_MS = 700;
+// Two letters are half a word, and a search on half a word finds nothing but
+// noise, so the search waits for a word that could be meant.
+const MIN_SEARCH = 3;
 // How many releases a search shows before the films take over.
 const MAX_RELEASES = 60;
+// The catalog is let in a few at a time as the page is scrolled, the way the
+// All tab lets its rows in. Each card holds a poster, and a phone with little
+// memory feels every one of them.
+const FILMS_AT_START = 12;
+const FILMS_PER_STEP = 12;
 // Only a few cards are built at a time. A phone with little memory cannot
 // hold fifty posters at once, and the ones it does hold are the ones that
 // crash it.
@@ -65,9 +76,9 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   // How many films have been passed over, so the next page starts where the
   // last one ended.
   const skip = useRef(0);
-  // A search of less than two letters is not a search, so the browsed list
+  // A search of less than a few letters is not a search, so the browsed list
   // stays on screen until there is something to replace it with.
-  const searching = query.trim().length >= 2;
+  const searching = query.trim().length >= MIN_SEARCH;
 
   useEffect(() => {
     let alive = true;
@@ -113,7 +124,7 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   useEffect(() => {
     const q = query.trim();
     latest.current = q;
-    if (q.length < 2) return;
+    if (q.length < MIN_SEARCH) return;
     const timer = setTimeout(async () => {
       setLoading(true);
       setError(null);
@@ -140,6 +151,27 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   const cardWidth = Math.max(120, Math.floor((width - GUTTER * 2) / columns));
 
   const movies = searching ? (results ?? []) : browse;
+
+  // A list starts with a few cards, and the rest come as it is scrolled. A new
+  // search or a new page of the catalog starts the count again.
+  const listKey = searching ? `q:${query.trim().toLowerCase()}` : 'browse';
+  const [reveal, setReveal] = useState({ key: listKey, count: FILMS_AT_START });
+  if (reveal.key !== listKey) setReveal({ key: listKey, count: FILMS_AT_START });
+  const shownMovies = movies ? movies.slice(0, reveal.count) : null;
+  const moreFilms = (movies?.length ?? 0) > reveal.count;
+
+  // The same measure the All tab uses: within a screen of the bottom.
+  const growFilms = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!movies) return;
+    const left = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
+    if (left < e.layoutMeasurement.height) {
+      setReveal((current) =>
+        current.count >= movies.length
+          ? current
+          : { ...current, count: Math.min(current.count + FILMS_PER_STEP, movies.length) },
+      );
+    }
+  };
 
   const searchBox = (
     <View style={styles.inputWrap}>
@@ -259,7 +291,7 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
     <View style={styles.screen}>
       <FlatList
         key={columns}
-        data={movies ?? []}
+        data={shownMovies ?? []}
         numColumns={columns}
         keyExtractor={(m) => m.id}
         columnWrapperStyle={styles.gridRow}
@@ -268,6 +300,8 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
         {...LIST_PERF}
         onEndReached={loadMore}
         onEndReachedThreshold={0.6}
+        onScroll={growFilms}
+        scrollEventThrottle={200}
         ListHeaderComponent={
           <View>
             {header}
@@ -293,6 +327,8 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
         ListFooterComponent={
           loadingMore ? (
             <ActivityIndicator color={colors.accent} style={styles.spinner} />
+          ) : moreFilms ? (
+            <Loader label="More films coming" icon="film-outline" style={styles.moreFilms} />
           ) : null
         }
       />
@@ -354,6 +390,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: colors.text, fontSize: isTV ? 22 : 16, paddingVertical: isTV ? 13 : 11 },
   note: { color: colors.muted, fontSize: isTV ? 15 : 13, marginHorizontal: GUTTER, marginTop: 10 },
   spinner: { marginTop: 24, marginBottom: 24 },
+  moreFilms: { marginVertical: 24, alignSelf: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: GUTTER - 4, paddingTop: 4 },
   gridRow: { marginBottom: 4 },
   cell: { padding: 4, marginBottom: 8 },
