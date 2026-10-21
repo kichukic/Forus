@@ -165,10 +165,11 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
     if (!movies) return;
     const left = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
     if (left < e.layoutMeasurement.height) {
-      setReveal((current) => ({
-        ...current,
-        count: Math.min(current.count + FILMS_PER_STEP, movies.length),
-      }));
+      setReveal((current) =>
+        current.count >= movies.length
+          ? current
+          : { ...current, count: Math.min(current.count + FILMS_PER_STEP, movies.length) },
+      );
     }
   };
 

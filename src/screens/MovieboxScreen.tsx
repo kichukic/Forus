@@ -246,10 +246,11 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   const growRows = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     const left = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
     if (left < e.layoutMeasurement.height) {
-      setReveal((current) => ({
-        ...current,
-        count: Math.min(current.count + SHELVES_PER_STEP, rows.length),
-      }));
+      setReveal((current) =>
+        current.count >= rows.length
+          ? current
+          : { ...current, count: Math.min(current.count + SHELVES_PER_STEP, rows.length) },
+      );
     }
   };
 
