@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
+import { Children, useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import {
   Animated,
   AppState,
@@ -71,6 +71,10 @@ const activePage: { current: ScrollView | null } = { current: null };
 // TV: how long a tab must stay highlighted before it opens, so moving across
 // several tabs doesn't load each one on the way.
 const TAB_FOCUS_DELAY_MS = 350;
+// TV: a tab opens with its first rows and adds the rest one at a time, so its
+// chip isn't building a dozen rows of cards in the moment the tab changes.
+const TV_FIRST_ROWS = 2;
+const TV_ROW_STAGGER_MS = 140;
 // The news channels' recorded uploads, one row each on the News tab.
 const NEWS_SOURCES = LIVE_NEWS.map(({ name, channelId }) => ({ name, channelId }));
 
@@ -124,8 +128,13 @@ export function HomeScreen({
   // Which way the content slides in: from the right when moving to a tab
   // further along, from the left when moving back.
   const [direction, setDirection] = useState(1);
+  // TV: the All tab's carousel takes the remote's focus once, when the app
+  // opens. After that the All tab is rebuilt each time it is opened, and its
+  // carousel would pull focus down off the tabs.
+  const [launchFocus, setLaunchFocus] = useState(true);
   const open = (t: Tab) => {
     if (t === tab) return;
+    setLaunchFocus(false);
     setDirection(TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1);
     setTab(t);
   };
@@ -186,6 +195,7 @@ export function HomeScreen({
   };
 
   const refresh = () => {
+    setLaunchFocus(false);
     clearVideoCache();
     clearCatalogCache();
     setRefreshKey((k) => k + 1);
@@ -275,8 +285,11 @@ export function HomeScreen({
             <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]} />
             {TABS.map((t) => (
               <TabButton
-                // Remounting the active tab is what hands it the remote's focus.
-                key={tab === t.id ? `${t.id}-${focusTabs}` : t.id}
+                // Remounting is what hands the active tab the remote's focus on
+                // Back. The key must not change when a tab opens: that would
+                // remount the focused tab, and the TV would drop its focus onto
+                // another tab, which then opens.
+                key={`${t.id}-${focusTabs}`}
                 label={t.label}
                 active={tab === t.id}
                 takeFocus={focusTabs > 0 && tab === t.id}
@@ -305,7 +318,7 @@ export function HomeScreen({
             label="New today"
             onPlay={playVideo}
             // On TV the remote starts on Watch Now, until Back sends it to the tabs.
-            takeFocus={focusTabs === 0}
+            takeFocus={focusTabs === 0 && launchFocus}
           />
 
           {/* A row of films from MovieBox, so the page holds everything. */}
@@ -444,6 +457,14 @@ type TabScrollProps = {
 // One tab's scrolling page, ending in its themed rows and the credit line.
 function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay, tabKey }: TabScrollProps) {
   const [themeCount, setThemeCount] = useState(THEMES_AT_START);
+  const rows = Children.toArray(children);
+  const [rowCount, setRowCount] = useState(isTV ? TV_FIRST_ROWS : rows.length);
+  const allRows = !isTV || rowCount >= rows.length;
+  useEffect(() => {
+    if (allRows) return;
+    const timer = setTimeout(() => setRowCount((n) => n + 1), TV_ROW_STAGGER_MS);
+    return () => clearTimeout(timer);
+  }, [rowCount, allRows]);
   const scroll = useRef<ScrollView>(null);
   useEffect(() => {
     activePage.current = scroll.current;
@@ -485,9 +506,9 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
       scrollEventThrottle={250}
       refreshControl={refreshControl}
     >
-      {children}
+      {allRows ? rows : rows.slice(0, rowCount)}
 
-      {themes.length > 0 && onPlay && (
+      {allRows && themes.length > 0 && onPlay && (
         <>
           {themes.slice(0, themeCount).map((theme) => (
             <ThemeRow key={`${theme.query}-${refreshKey}`} theme={theme} onPlay={onPlay} />
