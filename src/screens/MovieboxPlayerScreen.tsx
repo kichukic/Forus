@@ -218,7 +218,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         // player into the corner.
         <RelatedPanel item={item} onPlay={onPlay} dragHandlers={shell?.dragHandlers}>
           <Text style={styles.infoTitle}>{item.title}</Text>
-          <Text style={styles.infoNote}>From MovieBox by Kishor</Text>
+          <Text style={styles.infoNote}>From MovieBox</Text>
           {captionOptions.length > 0 && (
             <ScrollView
               horizontal

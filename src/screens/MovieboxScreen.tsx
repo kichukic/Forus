@@ -305,13 +305,13 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
 
   const heading = embedded ? (
     <SectionHeader
-      title="MovieBox by Kishor"
+      title="MovieBox"
       subtitle="Films and series, played here as they are"
       style={styles.sectionHeader}
     />
   ) : (
     <View style={[styles.header, { paddingTop: insets.top + (isTV ? 20 : 10) }]}>
-      <Text style={styles.heading}>MovieBox by Kishor</Text>
+      <Text style={styles.heading}>MovieBox</Text>
       <Text style={styles.subheading}>Films and series, played here as they are.</Text>
     </View>
   );
