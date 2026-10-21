@@ -25,8 +25,15 @@ export async function setupTransferNotices() {
       importance: Notifications.AndroidImportance.HIGH,
       lightColor: colors.accent,
     });
-  } catch {
-    // The channel calls are a no-op on iOS and on older Android.
+    // Ask for permission up front, so the first transfer doesn't have to.
+    // (Android 13+ only shows the prompt once; if denied, the user enables it
+    // in Settings → Apps → ForUs → Notifications.)
+    const { granted, canAskAgain } = await Notifications.getPermissionsAsync();
+    if (!granted && canAskAgain) {
+      await Notifications.requestPermissionsAsync();
+    }
+  } catch (e) {
+    console.log('setupTransferNotices failed:', String(e));
   }
 }
 
