@@ -12,6 +12,8 @@ export function playableKey(item: Playable): string {
       return `video:${item.videoId}`;
     case 'file':
       return `file:${item.source}:${item.itemId}:${item.fileId}`;
+    case 'moviebox':
+      return `moviebox:${item.subjectId}:${item.season}:${item.episode}`;
   }
 }
 

@@ -20,6 +20,8 @@ const MAX_CARDS = 20;
 export async function getRelated(item: Playable): Promise<RelatedCard[]> {
   if (item.kind === 'file') return relatedFiles(item);
   if (item.kind === 'live') return relatedLive(item.channelId);
+  // A MovieBox film has nothing on the channels to relate it to.
+  if (item.kind === 'moviebox') return [];
   return relatedToVideo(item.videoId, item.title);
 }
 

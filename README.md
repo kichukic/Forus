@@ -67,6 +67,32 @@ The public indexes turn away bursts and are sometimes blocked outright, so
 each one is optional: one that stops answering is remembered and left alone
 for a while, and the search carries on with whatever else answers.
 
+## MovieBox
+
+The **MovieBox** tab is a second film catalog, on the same lines as the
+MovieBoxTV app: the sections it shows (Trending, Movie, Anime, TV, Kids,
+Indian, Hindi, Tamil, Telugu) as rows of posters, a search over the same
+catalogue, and a page for each film with its seasons and episodes.
+
+- The catalogue and the streams come from the MovieBox API the app itself
+  uses, on `api6.aoneroom.com` and the hosts behind it. No account is needed:
+  the app signs in as a visitor and keeps that token on the device.
+- Every request is signed the way the app signs it, in
+  [src/api/moviebox.ts](src/api/moviebox.ts). The MD5 it needs is written
+  out in [src/api/md5.ts](src/api/md5.ts), so nothing native is added to the
+  app.
+- **Play now** streams the file itself, in the app's own player. The service
+  offers a short preview to everyone, and the whole file is fetched by its id
+  — the same request the patched app makes. The links expire, so a fresh one
+  is fetched each time and again if the video stops.
+- **Send to TorBox** is there as well: the same film is looked up by name on
+  the torrent indexes, and a release can be sent to your TorBox like any
+  other film in the catalog.
+
+The service is not a public API and can change or refuse requests at any
+time, so this tab is kept separate from the rest of the app: if it stops
+answering, only this tab is affected.
+
 ## Remote
 
 | Button | On the home screen | In the player |

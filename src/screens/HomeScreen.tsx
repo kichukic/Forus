@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clearVideoCache, thumbnailUrl } from '../api/youtube';
 import { clearCatalogCache, type CatalogMovie } from '../api/catalog';
+import type { MovieboxSubject } from '../api/moviebox';
 import type { TorrentOption } from '../api/torrents';
 import { LiveTileContent, VideoCardContent } from '../components/Cards';
 import { FileCardContent } from '../components/FileCardContent';
@@ -27,6 +28,7 @@ import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
 import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
 import { CatalogScreen } from './CatalogScreen';
+import { MovieboxScreen } from './MovieboxScreen';
 import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
@@ -43,6 +45,7 @@ const TABS = [
   { id: 'disha', label: 'For Disha Chotu' },
   { id: 'news', label: 'News' },
   { id: 'torbox', label: 'TorBox' },
+  { id: 'moviebox', label: 'MovieBox' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
 
@@ -65,6 +68,8 @@ type Props = {
   onOpenSearch: (scope: SearchScope) => void;
   // Opens a film from the catalog.
   onOpenMovie: (movie: CatalogMovie) => void;
+  // Opens a film from MovieBox.
+  onOpenMoviebox: (subject: MovieboxSubject) => void;
   // Sends a release found by searching to TorBox.
   onSendRelease: (option: TorrentOption) => void;
 };
@@ -76,6 +81,7 @@ export function HomeScreen({
   onOpenTorbox,
   onOpenSearch,
   onOpenMovie,
+  onOpenMoviebox,
   onSendRelease,
 }: Props) {
   // Keeps the header clear of a phone's status bar and notch. Zero on TVs.
@@ -149,7 +155,7 @@ export function HomeScreen({
             </Text>
           </View>
           {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
-          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab)} />
+          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' ? 'all' : tab)} />
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
           {TABS.map((t) => (
@@ -254,6 +260,16 @@ export function HomeScreen({
           }
         />,
       )}
+
+      {panel(
+        'moviebox',
+        <MovieboxScreen
+          key={`moviebox-${refreshKey}`}
+          embedded
+          onOpen={onOpenMoviebox}
+          refreshControl={refreshControl}
+        />,
+      )}
     </View>
   );
 }
@@ -264,6 +280,9 @@ function HistoryCard({ item }: { item: Playable }) {
     return <LiveTileContent name={item.title} color={color} />;
   }
   if (item.kind === 'file') return <FileCardContent fileName={item.title} detail="TorBox" />;
+  if (item.kind === 'moviebox') {
+    return <VideoCardContent image={item.poster} title={item.title} subtitle="Watch again" />;
+  }
   return <VideoCardContent image={thumbnailUrl(item.videoId)} title={cleanTitle(item.title)} subtitle="Watch again" />;
 }
 

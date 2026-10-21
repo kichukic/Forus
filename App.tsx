@@ -10,11 +10,14 @@ import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
 import { addToHistory, clearHistory, loadHistory, playableKey } from './src/data/history';
 import type { CatalogMovie } from './src/api/catalog';
+import type { MovieboxSubject } from './src/api/moviebox';
 import type { TorrentOption } from './src/api/torrents';
 import { FatalErrorScreen } from './src/screens/FatalErrorScreen';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
+import { MovieboxPlayerScreen } from './src/screens/MovieboxPlayerScreen';
 import { MovieScreen } from './src/screens/MovieScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
@@ -56,6 +59,8 @@ export default function App() {
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
   // The film open from the catalog, over whatever screen is showing.
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
+  // The film open from MovieBox, in the same way.
+  const [moviebox, setMoviebox] = useState<MovieboxSubject | null>(null);
   // A release found by searching for its name, on its way to TorBox.
   const [sending, setSending] = useState<TorrentOption | null>(null);
   // An error that nothing else caught. The app stays open and shows it.
@@ -108,6 +113,7 @@ export default function App() {
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (sending) setSending(null);
+      else if (moviebox) setMoviebox(null);
       else if (movie) setMovie(null);
       else if (playing && !mini) {
         if (isTV) closePlayer();
@@ -119,11 +125,11 @@ export default function App() {
       return true;
     });
     return () => sub.remove();
-  }, [playing, mini, screen, torboxFrom, movie, sending]);
+  }, [playing, mini, screen, torboxFrom, movie, moviebox, sending]);
 
   // On TV nothing behind a player may keep remote focus, so it's hidden.
-  const hideBackground = isTV && (!!playing || !!movie || !!sending);
-  const showNav = !isTV && screen !== 'torbox' && !movie && !sending;
+  const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!sending);
+  const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox && !sending;
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
 
   return (
@@ -143,6 +149,7 @@ export default function App() {
               setScreen('search');
             }}
             onOpenMovie={setMovie}
+            onOpenMoviebox={setMoviebox}
             onSendRelease={setSending}
           />
         </View>
@@ -218,6 +225,22 @@ export default function App() {
           </View>
         )}
 
+        {moviebox && (
+          <View style={StyleSheet.absoluteFill}>
+            <MovieboxDetailScreen
+              key={moviebox.id}
+              subject={moviebox}
+              onClose={() => setMoviebox(null)}
+              onPlay={play}
+              onSendRelease={(option) => {
+                // The film screen is below this one, so it is closed first.
+                setMoviebox(null);
+                setSending(option);
+              }}
+            />
+          </View>
+        )}
+
         {playing && (
           <PlayerShell
             mini={mini}
@@ -228,6 +251,8 @@ export default function App() {
             {(shell) =>
               playing.kind === 'file' ? (
                 <FilePlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
+              ) : playing.kind === 'moviebox' ? (
+                <MovieboxPlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               ) : (
                 <PlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               )

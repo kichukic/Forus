@@ -70,6 +70,9 @@ function Card({ item }: { item: Playable }) {
     return <LiveTileContent name={item.title} color={color} />;
   }
   if (item.kind === 'file') return <FileCardContent fileName={item.title} detail="TorBox" />;
+  if (item.kind === 'moviebox') {
+    return <VideoCardContent image={item.poster} title={item.title} subtitle="MovieBox" />;
+  }
   return <VideoCardContent image={thumbnailUrl(item.videoId)} title={cleanTitle(item.title)} />;
 }
 
