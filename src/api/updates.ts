@@ -19,8 +19,9 @@ export type Update = {
 // The manifest lives in the same release as the APK, so it is always current
 // without needing a git push of the source tree.
 const MANIFEST_URL = 'https://github.com/kichukic/Forus/releases/latest/download/version.json';
-const CHECK_KEY = 'updater-last-check';
-const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
+const CHECK_KEY = 'updater-last-check-v2';
+// The manifest is about 200 bytes, so checking often costs nothing.
+const CHECK_EVERY_MS = 30 * 60 * 1000;
 
 export function installedVersionCode(): number {
   const raw = Application.nativeBuildVersion;
@@ -32,34 +33,45 @@ export function installedVersionName(): string {
   return Application.nativeApplicationVersion ?? '0';
 }
 
+// A release newer than the one installed, or null.
+function newer(update: Update | null | undefined): Update | null {
+  return update && update.versionCode > installedVersionCode() ? update : null;
+}
+
 export async function checkForUpdate(force = false): Promise<Update | null> {
   if (Platform.OS !== 'android') return null;
+  let cached: { at: number; update: Update | null } | null = null;
   try {
-    const last = await AsyncStorage.getItem(CHECK_KEY);
-    if (!force && last) {
-      const { at, versionCode } = JSON.parse(last);
-      if (Date.now() - at < CHECK_EVERY_MS) {
-        // Still within the cache window; report "no update" unless the cached
-        // answer said there was one.
-        return null;
-      }
-    }
-    const res = await fetch(MANIFEST_URL, { headers: { Accept: 'application/json' } });
-    if (!res.ok) return null;
+    const raw = await AsyncStorage.getItem(CHECK_KEY);
+    cached = raw ? JSON.parse(raw) : null;
+  } catch {
+    cached = null;
+  }
+  // Within the window the last answer stands, including "there is an update":
+  // that one keeps being offered until it is installed.
+  if (!force && cached?.update !== undefined && Date.now() - cached.at < CHECK_EVERY_MS) {
+    return newer(cached.update);
+  }
+  try {
+    // The time in the address stops a cached copy of an older manifest being
+    // served in place of the one just published.
+    const res = await fetch(`${MANIFEST_URL}?t=${Date.now()}`, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return newer(cached?.update);
     const manifest = (await res.json()) as Partial<Update>;
     const remoteCode = Number(manifest.versionCode);
-    if (!Number.isFinite(remoteCode) || !manifest.url) return null;
-    await AsyncStorage.setItem(CHECK_KEY, JSON.stringify({ at: Date.now(), versionCode: remoteCode }));
-    if (remoteCode <= installedVersionCode()) return null;
-    return {
+    if (!Number.isFinite(remoteCode) || !manifest.url) return newer(cached?.update);
+    const update: Update = {
       version: String(manifest.version ?? remoteCode),
       versionCode: remoteCode,
       url: String(manifest.url),
       size: manifest.size,
       notes: manifest.notes,
     };
+    await AsyncStorage.setItem(CHECK_KEY, JSON.stringify({ at: Date.now(), update }));
+    return newer(update);
   } catch {
-    return null;
+    // Offline: whatever was found last time still applies.
+    return newer(cached?.update);
   }
 }
 

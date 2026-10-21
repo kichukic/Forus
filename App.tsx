@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
@@ -76,6 +76,8 @@ export default function App() {
   // The film open from MovieBox, in the same way.
   const [moviebox, setMoviebox] = useState<MovieboxSubject | null>(null);
   const [update, setUpdate] = useState<Update | null>(null);
+  // The prompt shown on launch (and from Settings) when an update is found.
+  const [updatePrompt, setUpdatePrompt] = useState<Update | null>(null);
   // Transfers now run in the background, so there is no full-screen sender.
   // An error that nothing else caught. The app stays open and shows it.
   const [crash, setCrash] = useState<Error | null>(null);
@@ -85,7 +87,7 @@ export default function App() {
     loadTransfers();
     setupTransferNotices();
     checkForUpdate().then((u) => {
-      if (u) showToast({ text: `ForUs ${u.version} is available`, action: { label: 'Download', onPress: () => setUpdate(u) }, duration: 8000 });
+      if (u) setUpdatePrompt(u);
     });
   }, []);
 
@@ -250,6 +252,35 @@ export default function App() {
 
         <ToastHost />
 
+        {updatePrompt && (
+          <View style={StyleSheet.absoluteFill}>
+            <View style={styles.updatePrompt}>
+              <Text style={styles.updatePromptTitle}>Update available</Text>
+              <Text style={styles.updatePromptBody}>
+                ForUs {updatePrompt.version} is ready. Update now?
+              </Text>
+              <View style={styles.updatePromptButtons}>
+                <Pressable
+                  onPress={() => setUpdatePrompt(null)}
+                  style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptCancel, (focused || pressed) && styles.updatePromptBtnFocused]}
+                >
+                  <Text style={styles.updatePromptBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  hasTVPreferredFocus
+                  onPress={() => {
+                    setUpdate(updatePrompt);
+                    setUpdatePrompt(null);
+                  }}
+                  style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptUpdate, (focused || pressed) && styles.updatePromptBtnFocused]}
+                >
+                  <Text style={[styles.updatePromptBtnText, { color: '#fff' }]}>Update</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        )}
+
         {update && (
           <View style={StyleSheet.absoluteFill}>
             <UpdateScreen update={update} onClose={() => setUpdate(null)} />
@@ -350,4 +381,25 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   hidden: { display: 'none' },
+  updatePrompt: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(12,10,18,0.85)',
+    padding: 24,
+  },
+  updatePromptTitle: { color: colors.text, fontSize: isTV ? 26 : 22, fontWeight: '900', textAlign: 'center' },
+  updatePromptBody: { color: colors.muted, fontSize: isTV ? 16 : 14, marginTop: 10, textAlign: 'center' },
+  updatePromptButtons: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  updatePromptBtn: {
+    paddingHorizontal: 26,
+    paddingVertical: 12,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  updatePromptCancel: { backgroundColor: colors.surface },
+  updatePromptUpdate: { backgroundColor: colors.accent },
+  updatePromptBtnFocused: { borderColor: colors.text },
+  updatePromptBtnText: { color: colors.text, fontSize: isTV ? 16 : 14, fontWeight: '800' },
 });
