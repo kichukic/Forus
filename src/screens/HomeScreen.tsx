@@ -53,10 +53,10 @@ const STALE_AFTER_MS = 10 * 60 * 1000;
 
 const TABS = [
   { id: 'all', label: 'All' },
-  { id: 'moviebox', label: 'MovieBox by Kishor' },
+  { id: 'moviebox', label: 'MovieBox' },
   { id: 'movies', label: 'Malayalam Movies' },
   { id: 'shows', label: 'Shows' },
-  { id: 'disha', label: 'For Disha Chotu' },
+  { id: 'hindi', label: 'Hindi' },
   { id: 'news', label: 'News' },
   { id: 'torbox', label: 'TorBox' },
 ] as const;
@@ -384,9 +384,9 @@ function HomeScreenView({
       )}
 
       {panel(
-        'disha',
-        <TabScroll refreshControl={refreshControl} themes={HINDI_THEMES} tabKey="disha" refreshKey={refreshKey} onPlay={playVideo}>
-          <HeroCarousel key={`hero-disha-${refreshKey}`} sources={HINDI_MOVIES} label="Picked for Disha ♥" onPlay={playVideo} />
+        'hindi',
+        <TabScroll refreshControl={refreshControl} themes={HINDI_THEMES} tabKey="hindi" refreshKey={refreshKey} onPlay={playVideo}>
+          <HeroCarousel key={`hero-hindi-${refreshKey}`} sources={HINDI_MOVIES} label="Hindi pick of the day" onPlay={playVideo} />
           {HINDI_MOVIES.map((source) => (
             <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
           ))}
@@ -539,7 +539,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
         ]
       : []),
     <Text key="credit" style={styles.credit}>
-      Made with <Text style={styles.heart}>♥</Text> by Kishor
+      Made with <Text style={styles.heart}>♥</Text>
     </Text>,
   ];
 

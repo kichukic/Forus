@@ -2,8 +2,8 @@
 // Update now button that downloads it right here, with its progress, before
 // handing it to Android's installer. Everything animates on the native side
 // and there is no blur, so it stays light on a slow phone or TV.
-import { useEffect, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -109,9 +109,9 @@ export function UpdatePrompt({ update, onClose }: Props) {
 
   return (
     <Modal visible={!!update} transparent animationType="none" onRequestClose={busy ? () => {} : close}>
-      <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill}>
+      <Frost intensity={70} style={[StyleSheet.absoluteFill, styles.center, isTV && styles.tvBackdrop]}>
         {!busy && <Pressable style={StyleSheet.absoluteFill} onPress={close} />}
-        <BlurView intensity={25} tint="dark" style={styles.cardBlur}>
+        <Frost intensity={25} style={[styles.cardBlur, isTV && styles.tvCard]}>
           <Animated.View
             style={[
               styles.cardInner,
@@ -232,8 +232,8 @@ export function UpdatePrompt({ update, onClose }: Props) {
             </View>
           </View>
           </Animated.View>
-        </BlurView>
-      </BlurView>
+        </Frost>
+      </Frost>
     </Modal>
   );
 }
@@ -287,7 +287,22 @@ function Button({
   );
 }
 
+// Frosted glass on phones. Android's blur is an experimental effect that TV
+// chips draw badly (smeared, black or flickering, over the whole screen), so a
+// TV gets solid, dimmed surfaces instead.
+function Frost({ intensity, style, children }: { intensity: number; style: StyleProp<ViewStyle>; children: ReactNode }) {
+  if (isTV) return <View style={style}>{children}</View>;
+  return (
+    <BlurView intensity={intensity} tint="dark" style={style}>
+      {children}
+    </BlurView>
+  );
+}
+
 const styles = StyleSheet.create({
+  center: { alignItems: 'center', justifyContent: 'center', padding: 20 },
+  tvBackdrop: { backgroundColor: 'rgba(6,4,12,0.86)' },
+  tvCard: { backgroundColor: colors.surface },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(6,4,12,0.82)',

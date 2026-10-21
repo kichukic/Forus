@@ -77,7 +77,7 @@ export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory, on
             For<Text style={{ color: colors.accent }}>Us</Text>
           </Text>
           <Text style={styles.creditText}>
-            Made with <Text style={{ color: colors.accent }}>♥</Text> by Kishor
+            Made with <Text style={{ color: colors.accent }}>♥</Text>
           </Text>
         </View>
       </ScrollView>
