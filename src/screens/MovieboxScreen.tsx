@@ -13,6 +13,8 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type RefreshControlProps,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +34,7 @@ import {
   POSTER_ROW_PROPS,
   POSTER_WIDTH,
 } from '../components/MovieboxPoster';
+import { Loader } from '../components/Loader';
 import { SectionHeader } from '../components/Section';
 import { GUTTER, colors, isTV, sz } from '../theme';
 
@@ -48,6 +51,11 @@ const DEBOUNCE_MS = 700;
 // Two letters are half a word, and a search on half a word finds nothing but
 // noise, so the search waits for a word that could be meant.
 const MIN_SEARCH = 3;
+// The rows are let in a few at a time as the page is scrolled, the way the
+// All tab lets its themed rows in. A section can hold twenty rows, and every
+// row holds a shelf of posters.
+const SHELVES_AT_START = 3;
+const SHELVES_PER_STEP = 3;
 // Only a few cards are built at a time. A phone with little memory cannot
 // hold fifty posters at once.
 const LIST_PERF = {
@@ -89,6 +97,8 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   const [results, setResults] = useState<{ query: string; subjects: MovieboxSubject[] } | null>(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  // How many rows of the section in front have been let in.
+  const [reveal, setReveal] = useState({ tab: -1, count: SHELVES_AT_START });
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +236,23 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
 
   const shownTabs = tabs.filter((entry) => !emptyTabs.includes(entry.id));
 
+  // A section starts with a few rows, and the rest come as it is scrolled.
+  if (reveal.tab !== (tab ?? -1)) setReveal({ tab: tab ?? -1, count: SHELVES_AT_START });
+  const rows = shelfRows ?? [];
+  const shownRows = rows.slice(0, reveal.count);
+  const moreRows = reveal.count < rows.length;
+
+  // The same measure the All tab uses: within a screen of the bottom.
+  const growRows = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const left = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
+    if (left < e.layoutMeasurement.height) {
+      setReveal((current) => ({
+        ...current,
+        count: Math.min(current.count + SHELVES_PER_STEP, rows.length),
+      }));
+    }
+  };
+
   const tabsRow = shownTabs.length > 1 && (
     <ScrollView
       horizontal
@@ -310,11 +337,13 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   return (
     <View style={styles.screen}>
       <FlatList
-        data={shelfRows ?? []}
+        data={shownRows}
         keyExtractor={(shelf) => shelf.title}
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}
         {...SHELF_PERF}
+        onScroll={growRows}
+        scrollEventThrottle={200}
         ListHeaderComponent={
           <View>
             {heading}
@@ -353,6 +382,9 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
             </FocusRow>
           </View>
         )}
+        ListFooterComponent={
+          moreRows ? <Loader label="More rows coming" icon="albums-outline" style={styles.moreRows} /> : null
+        }
         ListEmptyComponent={
           !waiting ? <Text style={styles.note}>Nothing to show in this section right now.</Text> : null
         }
@@ -369,6 +401,7 @@ const styles = StyleSheet.create({
   // The heading's own gutter is cancelled by the one around it.
   sectionHeader: { paddingHorizontal: GUTTER, marginBottom: 10 },
   content: { paddingBottom: sz(110, 40) },
+  moreRows: { marginVertical: 24, alignSelf: 'center' },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',

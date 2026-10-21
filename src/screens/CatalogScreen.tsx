@@ -10,6 +10,8 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type RefreshControlProps,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { loadCatalog, loadCatalogPage, searchCatalog, type CatalogMovie } from '../api/catalog';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { FocusCard } from '../components/FocusCard';
+import { Loader } from '../components/Loader';
 import { SectionHeader } from '../components/Section';
 import { GUTTER, RADIUS, colors, isTV } from '../theme';
 
@@ -39,6 +42,11 @@ const DEBOUNCE_MS = 700;
 const MIN_SEARCH = 3;
 // How many releases a search shows before the films take over.
 const MAX_RELEASES = 60;
+// The catalog is let in a few at a time as the page is scrolled, the way the
+// All tab lets its rows in. Each card holds a poster, and a phone with little
+// memory feels every one of them.
+const FILMS_AT_START = 12;
+const FILMS_PER_STEP = 12;
 // Only a few cards are built at a time. A phone with little memory cannot
 // hold fifty posters at once, and the ones it does hold are the ones that
 // crash it.
@@ -143,6 +151,26 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   const cardWidth = Math.max(120, Math.floor((width - GUTTER * 2) / columns));
 
   const movies = searching ? (results ?? []) : browse;
+
+  // A list starts with a few cards, and the rest come as it is scrolled. A new
+  // search or a new page of the catalog starts the count again.
+  const listKey = searching ? `q:${query.trim().toLowerCase()}` : 'browse';
+  const [reveal, setReveal] = useState({ key: listKey, count: FILMS_AT_START });
+  if (reveal.key !== listKey) setReveal({ key: listKey, count: FILMS_AT_START });
+  const shownMovies = movies ? movies.slice(0, reveal.count) : null;
+  const moreFilms = (movies?.length ?? 0) > reveal.count;
+
+  // The same measure the All tab uses: within a screen of the bottom.
+  const growFilms = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!movies) return;
+    const left = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
+    if (left < e.layoutMeasurement.height) {
+      setReveal((current) => ({
+        ...current,
+        count: Math.min(current.count + FILMS_PER_STEP, movies.length),
+      }));
+    }
+  };
 
   const searchBox = (
     <View style={styles.inputWrap}>
@@ -262,7 +290,7 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
     <View style={styles.screen}>
       <FlatList
         key={columns}
-        data={movies ?? []}
+        data={shownMovies ?? []}
         numColumns={columns}
         keyExtractor={(m) => m.id}
         columnWrapperStyle={styles.gridRow}
@@ -271,6 +299,8 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
         {...LIST_PERF}
         onEndReached={loadMore}
         onEndReachedThreshold={0.6}
+        onScroll={growFilms}
+        scrollEventThrottle={200}
         ListHeaderComponent={
           <View>
             {header}
@@ -296,6 +326,8 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
         ListFooterComponent={
           loadingMore ? (
             <ActivityIndicator color={colors.accent} style={styles.spinner} />
+          ) : moreFilms ? (
+            <Loader label="More films coming" icon="film-outline" style={styles.moreFilms} />
           ) : null
         }
       />
@@ -357,6 +389,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: colors.text, fontSize: isTV ? 22 : 16, paddingVertical: isTV ? 13 : 11 },
   note: { color: colors.muted, fontSize: isTV ? 15 : 13, marginHorizontal: GUTTER, marginTop: 10 },
   spinner: { marginTop: 24, marginBottom: 24 },
+  moreFilms: { marginVertical: 24, alignSelf: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: GUTTER - 4, paddingTop: 4 },
   gridRow: { marginBottom: 4 },
   cell: { padding: 4, marginBottom: 8 },
