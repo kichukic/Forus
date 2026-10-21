@@ -110,23 +110,54 @@ async function runSend(id: string, option: TorrentOption) {
   }
   try {
     const existing = await findTorrentByHash(key, option.hash);
-    let torrent: TorboxTorrent | null;
+    let torrent: TorboxTorrent | null = null;
     if (existing) {
       torrent = existing;
-      setTransfer(id, { state: 'downloading', torrentId: existing.id, progress: existing.progress, speed: existing.downloadSpeed, eta: existing.eta });
+      // A cached or completed torrent is ready right away, even when its
+      // progress field says 0.
       if (existing.downloadFinished) {
         await finish(id, existing);
         return;
       }
+      setTransfer(id, { state: 'downloading', torrentId: existing.id, progress: existing.progress, speed: existing.downloadSpeed, eta: existing.eta });
     } else {
       const created = await createTorrent(key, option.magnet, option.name);
-      setTransfer(id, { state: 'downloading', torrentId: created.torrentId, progress: 0 });
-      torrent = await getTorrent(key, created.torrentId).catch(() => null);
-      if (torrent) setTransfer(id, { progress: torrent.progress, speed: torrent.downloadSpeed, eta: torrent.eta });
-    }
-    if (torrent?.downloadFinished) {
-      await finish(id, torrent);
-      return;
+      // TorBox may already have the file cached; the create response says so.
+      if (created.downloadFinished) {
+        // Build a torrent-like object from the create response.
+        const cached: TorboxTorrent = {
+          id: created.torrentId,
+          hash: created.hash || option.hash,
+          name: option.name,
+          progress: 100,
+          downloadState: created.downloadState || 'cached',
+          downloadFinished: true,
+          downloadPresent: true,
+          files: (created.files ?? []).map((f) => ({
+            id: f.id ?? 0,
+            name: f.short_name || f.name || '',
+            size: f.size ?? 0,
+            mimetype: f.mimetype,
+          })),
+        };
+        await finish(id, cached);
+        return;
+      }
+      setTransfer(id, { state: 'downloading', torrentId: created.torrentId, progress: created.progress ?? 0 });
+      // TorBox may take a moment to register a freshly created torrent, so
+      // retry a few times before giving up and letting the poller take over.
+      for (let attempt = 0; attempt < 5 && !torrent; attempt++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (!transfers.has(id)) return;
+        torrent = await getTorrent(key, created.torrentId).catch(() => null);
+      }
+      if (torrent) {
+        if (torrent.downloadFinished) {
+          await finish(id, torrent);
+          return;
+        }
+        setTransfer(id, { progress: torrent.progress, speed: torrent.downloadSpeed, eta: torrent.eta });
+      }
     }
     ensurePoller();
   } catch (e) {

@@ -127,14 +127,22 @@ function toTorrent(item: ApiTorrent): TorboxTorrent {
   // TorBox reports progress as a fraction in some places and a percent in others.
   const raw = item.progress ?? 0;
   const progress = raw > 0 && raw <= 1 ? Math.round(raw * 100) : Math.round(raw);
+  const downloadState = item.downloadState ?? item.download_state ?? 'unknown';
+  const downloadFinished = item.downloadFinished ?? item.download_finished ?? false;
+  // A cached or completed torrent is already done, even if its progress field
+  // says 0 (which TorBox does for cached files).
+  const finished =
+    downloadFinished ||
+    ['cached', 'completed', 'finished', 'seeded', 'ready'].includes(downloadState.toLowerCase()) ||
+    (item.downloadPresent ?? item.download_present ?? false) && progress >= 100;
   return {
     id: item.id ?? 0,
     hash: item.hash ?? '',
     name: item.name ?? '',
-    progress: Math.min(100, Math.max(0, progress)),
-    downloadState: item.downloadState ?? item.download_state ?? 'unknown',
-    downloadFinished: item.downloadFinished ?? item.download_finished ?? false,
-    downloadPresent: item.downloadPresent ?? item.download_present ?? false,
+    progress: finished ? 100 : Math.min(100, Math.max(0, progress)),
+    downloadState,
+    downloadFinished: finished,
+    downloadPresent: item.downloadPresent ?? item.download_present ?? finished,
     eta: item.eta,
     downloadSpeed: item.downloadSpeed ?? item.download_speed,
     files: (item.files ?? []).map((f) => ({
@@ -169,7 +177,7 @@ export async function createTorrent(
   key: string,
   magnet: string,
   name?: string,
-): Promise<{ torrentId: number; hash: string }> {
+): Promise<{ torrentId: number; hash: string; downloadFinished: boolean; downloadState: string; progress: number; files?: ApiTorrent["files"] }> {
   const form = new FormData();
   form.append('magnet', magnet);
   form.append('seed', '1');
@@ -184,7 +192,17 @@ export async function createTorrent(
   if (!res.ok || !body?.success) {
     throw new Error(body?.detail || body?.error || `TorBox returned ${res.status}`);
   }
-  return { torrentId: body.data?.torrent_id, hash: body.data?.hash ?? '' };
+  // TorBox may already have the file cached, in which case the create response
+  // carries the finished state. Surface it so the caller doesn't have to wait.
+  const data = body.data ?? {};
+  return {
+    torrentId: data.torrent_id,
+    hash: data.hash ?? '',
+    downloadFinished: data.download_finished ?? data.downloadFinished ?? false,
+    downloadState: data.download_state ?? data.downloadState ?? 'unknown',
+    progress: data.progress ?? 0,
+    files: data.files,
+  };
 }
 
 /** The biggest video file of a torrent, which is the one to play. */
