@@ -43,6 +43,8 @@ import { useEvent } from '../hooks/useEvent';
 
 // Each themed row is a search of about 0.7 MB. A TV starts with one and reads
 // the rest as the page is scrolled down to them.
+// How long a tab that opens tries to get back to where it was left.
+const RESTORE_WINDOW_MS = 1500;
 const THEMES_AT_START = isTV ? 1 : 3;
 const THEMES_PER_STEP = isTV ? 2 : 3;
 // Back in the app after this long, the rows reload by themselves.
@@ -479,6 +481,13 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
   }, []);
   // Where this tab was left, put back once the rows have their height.
   const restore = useRef(tabKey ? (scrollPositions.get(tabKey) ?? 0) : 0);
+  // Only while the tab is opening. After that the page grows and shrinks as
+  // rows load and are let go, and chasing the old place would drag the page
+  // about on its own (a TV remote never touches the screen to stop it).
+  useEffect(() => {
+    const timer = setTimeout(() => (restore.current = 0), RESTORE_WINDOW_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   const onScroll = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.contentOffset.y;
@@ -531,6 +540,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
         // A touch means the user is here now, not on their way back.
         restore.current = 0;
       }}
+      onScrollBeginDrag={() => (restore.current = 0)}
       refreshControl={refreshControl}
       showsVerticalScrollIndicator={false}
     />

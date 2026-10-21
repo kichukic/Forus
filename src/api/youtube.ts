@@ -155,6 +155,21 @@ export type VideoPage = { videos: Video[]; continuation?: string };
 
 type Lockup = { id: string; title: string; duration?: string; channelId?: string; age?: string };
 
+const CHANNEL_ID = /^UC[\w-]{22}$/;
+const AGE_TEXT = /^\d+ \w+ ago$/;
+
+// The first value `pick` finds anywhere inside `o`, depth first.
+function findIn(o: any, pick: (o: any) => string | undefined): string | undefined {
+  if (!o || typeof o !== 'object') return undefined;
+  const hit = pick(o);
+  if (hit !== undefined) return hit;
+  for (const key in o) {
+    const found = findIn(o[key], pick);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
 // YouTube's newer list items ("lockups"), as used by playlists and "watch next",
 // plus the token for the following page when there is one.
 function collectLockups(json: any): { lockups: Lockup[]; continuation?: string } {
@@ -169,16 +184,18 @@ function collectLockups(json: any): { lockups: Lockup[]; continuation?: string }
       lockups.push({
         id: lockup.contentId,
         title: stripEmoji(meta?.title?.content ?? ''),
-        // Both sit deep in nested view models; searching the text is simplest.
-        duration: JSON.stringify(lockup.contentImage ?? {}).match(/"thumbnailBadgeViewModel":\{"text":"([^"]+)"/)?.[1],
-        channelId: JSON.stringify(meta ?? {}).match(/"browseId":"(UC[\w-]{22})"/)?.[1],
-        age: JSON.stringify(meta ?? {}).match(/"content":"(\d+ \w+ ago)"/)?.[1],
+        // These sit deep in nested view models, at depths that vary, so they
+        // are searched for. Walking the objects is several times cheaper than
+        // turning them back into text, which counts on a slow TV.
+        duration: findIn(lockup.contentImage, (o) => o.thumbnailBadgeViewModel?.text),
+        channelId: findIn(meta, (o) => (typeof o.browseId === 'string' && CHANNEL_ID.test(o.browseId) ? o.browseId : undefined)),
+        age: findIn(meta, (o) => (typeof o.content === 'string' && AGE_TEXT.test(o.content) ? o.content : undefined)),
       });
       return;
     }
     const command = o.continuationCommand;
     if (command?.request === 'CONTINUATION_REQUEST_TYPE_BROWSE' && command.token) continuation = command.token;
-    Object.values(o).forEach(walk);
+    for (const key in o) walk(o[key]);
   };
   walk(json);
   return { lockups, continuation };
@@ -260,7 +277,7 @@ function parseSearch(json: any, trusted: Map<string, string>): SearchPage {
       return;
     }
     if (o.continuationCommand?.token) page.continuation = o.continuationCommand.token;
-    Object.values(o).forEach(walk);
+    for (const key in o) walk(o[key]);
   };
   walk(json);
   return page;

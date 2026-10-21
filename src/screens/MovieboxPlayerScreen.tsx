@@ -11,9 +11,9 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useEvent } from 'expo';
+import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { captions, directStream, playableRows, type MovieboxCaption } from '../api/moviebox';
+import { captions, directStream, playableRows, seasonList, type MovieboxCaption, type MovieboxSeason } from '../api/moviebox';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { VideoOverlay } from '../components/VideoOverlay';
@@ -53,6 +53,8 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const [loading, setLoading] = useState(true);
   // How many times a stale link has been fetched again.
   const attempts = useRef(0);
+  // Stops the next episode from being started twice.
+  const playedNext = useRef(false);
   // The subtitles the file has, and the one being shown.
   const [captionOptions, setCaptionOptions] = useState<MovieboxCaption[]>([]);
   const [chosen, setChosen] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   }, [item.episode, item.season, item.subjectId, player]);
 
   useEffect(() => {
+    playedNext.current = false;
     let cancelled = false;
     (async () => {
       if (cancelled) return;
@@ -131,6 +134,28 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
       cancelled = true;
     };
   }, [chosen, captionOptions]);
+
+  // When an episode ends, the next one starts on its own. Films have no
+  // "next", so they are left alone.
+  useEventListener(player, 'playToEnd', async () => {
+    if (item.season === 0 || playedNext.current) return;
+    playedNext.current = true;
+    try {
+      const seasons = await seasonList(item.subjectId);
+      const current = seasons.find((s: MovieboxSeason) => s.season === item.season);
+      const baseTitle = item.title.replace(/ · Episode \d+$/, '');
+      if (current && item.episode < current.episodes) {
+        onPlay({ kind: 'moviebox', subjectId: item.subjectId, season: item.season, episode: item.episode + 1, title: `${baseTitle} · Episode ${item.episode + 1}`, poster: item.poster });
+        return;
+      }
+      const nextSeason = seasons.find((s: MovieboxSeason) => s.season === item.season + 1);
+      if (nextSeason) {
+        onPlay({ kind: 'moviebox', subjectId: item.subjectId, season: nextSeason.season, episode: 1, title: `${baseTitle} · Episode 1`, poster: item.poster });
+      }
+    } catch {
+      // No next episode; leave the player where it is.
+    }
+  });
 
   const failure = linkError ?? (status === 'error' ? error?.message ?? 'This file could not be played.' : null);
   const spoken =
@@ -179,7 +204,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
       {failure && (
         <View style={styles.overlay}>
-          <Text style={styles.errorTitle}>{"Couldn't play this episode"}</Text>
+          <Text style={styles.errorTitle}>{"Couldn&apos;t play this episode"}</Text>
           <Text style={styles.overlayText}>{failure}</Text>
           <Pressable onPress={resolve} style={styles.retry}>
             <Text style={styles.retryText}>Try again</Text>

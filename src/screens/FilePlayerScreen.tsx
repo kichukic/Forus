@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { getApiKey, getStreamUrl } from '../api/torbox';
+import { searchByName as searchSubtitles, loadSubtitle } from '../api/opensubtitles';
+import { cueAt, type SubtitleCue } from '../api/subtitles';
 import type { ShellControls } from '../components/PlayerShell';
 import { Loader } from '../components/Loader';
 import { RelatedPanel } from '../components/RelatedPanel';
@@ -40,6 +42,14 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
     return () => clearTimeout(timer);
   }, [showOverlay, currentTime]);
   const [linkError, setLinkError] = useState<string | null>(null);
+  // Subtitles for this file, searched on OpenSubtitles.
+  const [captionOptions, setCaptionOptions] = useState<{ id: string; name: string; language: string; rating: string; downloads: number; url: string }[]>([]);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<{ id: string; list: SubtitleCue[] } | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLang, setSearchLang] = useState('eng');
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +66,42 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
     };
   }, [item, player]);
 
+  const spoken =
+    loaded && loaded.id === chosen && loaded.list.length > 0
+      ? cueAt(loaded.list, currentTime ?? 0)
+      : null;
+
+  // Bring down the subtitle file when one is chosen.
+  useEffect(() => {
+    const option = captionOptions.find((o) => o.id === chosen);
+    if (!option) return;
+    let cancelled = false;
+    loadSubtitle(option.url)
+      .then((list) => !cancelled && setLoaded({ id: option.id, list }))
+      .catch(() => !cancelled && setLoaded({ id: option.id, list: [] }));
+    return () => {
+      cancelled = true;
+    };
+  }, [chosen, captionOptions]);
+
   const failure = linkError ?? (status === 'error' ? error?.message ?? 'This file could not be played.' : null);
+
+  const runSubtitleSearch = async () => {
+    const q = searchQuery.trim() || cleanName(item.title);
+    if (q.length < 2) return;
+    setSearching(true);
+    try {
+      const results = await searchSubtitles(q, searchLang);
+      setCaptionOptions(results.map((r) => ({ id: r.id, name: r.name, language: r.language, rating: r.rating, downloads: r.downloads, url: r.url })));
+    } catch {
+      setCaptionOptions([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const cleanName = (name: string) =>
+    name.replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
 
   return (
     <View style={styles.screen}>
@@ -69,6 +114,12 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
         fullscreenOptions={{ enable: !isTV }}
       />
 
+      {spoken ? (
+        <View style={[styles.cue, { bottom: 28 }]} pointerEvents="none">
+          <Text style={styles.cueText}>{spoken}</Text>
+        </View>
+      ) : null}
+
       {!failure && status !== 'readyToPlay' && (
         <View style={styles.overlay} pointerEvents="none">
           <Loader size="large" />
@@ -80,11 +131,76 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
       {failure && (
         <View style={styles.overlay}>
-          <Text style={styles.errorTitle}>Couldn't play this file</Text>
+          <Text style={styles.errorTitle}>Couldn&apos;t play this file</Text>
           <Text style={styles.overlayText}>{failure}</Text>
           <Text style={styles.hint}>
-            Some MKV files use audio (like DTS) that phones and TVs can't decode.
+            Some MKV files use audio (like DTS) that phones and TVs can&apos;t decode.
           </Text>
+        </View>
+      )}
+
+      {!isTV && !mini && (
+        <Pressable
+          onPress={() => {
+            setSearchQuery(cleanName(item.title));
+            setSearchOpen(true);
+          }}
+          style={styles.ccButton}
+        >
+          <Text style={styles.ccText}>CC</Text>
+        </Pressable>
+      )}
+
+      {searchOpen && (
+        <View style={styles.searchOverlay}>
+          <View style={styles.searchCard}>
+            <Text style={styles.searchTitle}>Subtitles</Text>
+            <View style={styles.searchRow}>
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Film name…"
+                placeholderTextColor={colors.muted}
+                style={styles.searchInput}
+                autoCorrect={false}
+              />
+              <Pressable onPress={runSubtitleSearch} style={styles.searchGo}>
+                <Text style={styles.searchGoText}>{searching ? '…' : 'Search'}</Text>
+              </Pressable>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.langRow}>
+              {['eng', 'hin', 'mal', 'tam', 'tel', 'spa', 'fre', 'ger', 'ita', 'por', 'rus', 'ara', 'chi', 'jpn', 'kor'].map((lang) => (
+                <Pressable
+                  key={lang}
+                  onPress={() => setSearchLang(lang)}
+                  style={({ focused, pressed }) => [styles.langChip, searchLang === lang && styles.langChipActive, (focused || pressed) && styles.langChipFocused]}
+                >
+                  <Text style={[styles.langText, searchLang === lang && styles.langTextActive]}>{lang}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <ScrollView style={styles.results} contentContainerStyle={styles.resultsContent}>
+              {captionOptions.length === 0 && !searching ? (
+                <Text style={styles.resultNote}>No subtitles yet. Type a name and search.</Text>
+              ) : null}
+              {captionOptions.map((opt) => (
+                <Pressable
+                  key={opt.id}
+                  onPress={() => {
+                    setChosen(opt.id);
+                    setSearchOpen(false);
+                  }}
+                  style={({ focused, pressed }) => [styles.result, (focused || pressed) && styles.resultActive]}
+                >
+                  <Text style={styles.resultName} numberOfLines={1}>{opt.name}</Text>
+                  <Text style={styles.resultMeta}>{opt.language} · ★ {opt.rating} · {opt.downloads} downloads</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable onPress={() => setSearchOpen(false)} style={styles.closeSearch}>
+              <Text style={styles.closeSearchText}>Close</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -164,4 +280,76 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
+  ccButton: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  ccText: { color: colors.text, fontSize: 12, fontWeight: '800' },
+  cue: { position: 'absolute', left: 16, right: 16, alignItems: 'center' },
+  cueText: {
+    color: '#fff',
+    fontSize: sz(14, 18),
+    lineHeight: sz(20, 25),
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  searchOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    zIndex: 60,
+  },
+  searchCard: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '80%',
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 10 },
+  searchRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  searchInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchGo: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: colors.accent, justifyContent: 'center' },
+  searchGoText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  langRow: { gap: 6, paddingVertical: 6 },
+  langChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border },
+  langChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  langChipFocused: { borderColor: colors.text },
+  langText: { color: colors.muted, fontSize: 11, fontWeight: '700' },
+  langTextActive: { color: '#fff' },
+  results: { maxHeight: 260, marginTop: 8 },
+  resultsContent: { gap: 6 },
+  result: { padding: 10, borderRadius: 10, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border },
+  resultActive: { borderColor: colors.accent },
+  resultName: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  resultMeta: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  resultNote: { color: colors.muted, fontSize: 12, textAlign: 'center', paddingVertical: 20 },
+  closeSearch: { marginTop: 12, alignSelf: 'center', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 14, backgroundColor: colors.surfaceRaised },
+  closeSearchText: { color: colors.text, fontSize: 13, fontWeight: '700' },
 });

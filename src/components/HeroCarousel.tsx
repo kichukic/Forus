@@ -2,6 +2,7 @@
 // channels, one at a time, with a Watch Now button and page dots.
 import { memo, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   FlatList,
   Pressable,
   StyleSheet,
@@ -67,6 +68,8 @@ export const HeroCarousel = memo(function HeroCarousel({ sources, label, onPlay,
   useEffect(() => {
     if (isTV || slides.length < 2) return;
     const timer = setInterval(() => {
+      // Nothing to turn for while the app is out of sight.
+      if (AppState.currentState !== 'active') return;
       if (Date.now() - touched.current < ROTATE_MS) return;
       const next = (index + 1) % slides.length;
       list.current?.scrollToIndex({ index: next, animated: true });
