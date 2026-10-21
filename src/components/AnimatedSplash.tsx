@@ -288,7 +288,7 @@ export function AnimatedSplash({ ready, progress, status, onDone }: Props) {
               },
             ]}
           >
-            Made with <Text style={styles.heart}>♥</Text> by Kishor
+            Made with love by Kishor
           </Animated.Text>
         </Animated.View>
       </View>
@@ -346,7 +346,6 @@ const styles = StyleSheet.create({
   brand: { color: colors.text, fontSize: sz(48, 60), fontWeight: '900', letterSpacing: -1 },
   brandAccent: { color: colors.accent },
   credit: { color: colors.muted, fontSize: sz(14, 18), fontWeight: '600', marginTop: 8, letterSpacing: 0.3 },
-  heart: { color: '#ff6bb5' },
   footer: { position: 'absolute', left: 0, right: 0, bottom: sz(70, 60), alignItems: 'center' },
   track: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 2, overflow: 'hidden' },

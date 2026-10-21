@@ -141,7 +141,7 @@ export function ProgressLine({ time, live, target }: { time: PlaybackTime; live:
         <View style={[styles.fill, { width: `${fraction * 100}%` }]} />
       </View>
       <Text style={styles.timeTotal}>
-        {preview !== null ? <Text style={styles.jump}>→ {formatTime(target!)}   </Text> : null}
+        {preview !== null ? <Text style={styles.jump}>Jump to {formatTime(target!)}   </Text> : null}
         {formatTime(time.d)}
       </Text>
     </View>

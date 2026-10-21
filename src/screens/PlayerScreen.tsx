@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { HWEvent } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { PlayerControls, ProgressLine, type PlaybackTime } from '../components/PlayerControls';
@@ -357,7 +358,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
         // Dragging the title block down shrinks the player into the corner.
         <RelatedPanel item={item} onPlay={onPlay} dragHandlers={shell?.dragHandlers}>
           <Text style={styles.infoTitle}>
-            {item.kind === 'live' ? '● LIVE  ' : ''}
+            {item.kind === 'live' ? 'LIVE · ' : ''}
             {item.title}
           </Text>
           <Pressable onPress={() => setPickerOpen(true)} style={styles.link}>
@@ -374,13 +375,13 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
           hitSlop={12}
           style={[styles.close, { top: (portraitPhone && !failed ? width * (9 / 16) : 0) + 8 }]}
         >
-          <Text style={styles.closeText}>✕</Text>
+          <Ionicons name="close" size={20} color="#fff" />
         </Pressable>
       )}
 
       {!isTV && !mini && shell && (
         <Pressable onPress={shell.minimize} hitSlop={12} style={styles.minimize}>
-          <Text style={styles.minimizeText}>⌄</Text>
+          <Ionicons name="chevron-down" size={22} color="#fff" />
         </Pressable>
       )}
 
@@ -397,7 +398,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
       {isTV && !failed && (showHint || paused) && (
         <View style={styles.hint}>
           <Text style={styles.hintTitle} numberOfLines={1}>
-            {item.kind === 'live' ? '● LIVE  ' : ''}
+            {item.kind === 'live' ? 'LIVE · ' : ''}
             {item.title}
           </Text>
           <Text style={styles.hintKeys}>
@@ -407,7 +408,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
                 ? 'Playing in the site’s own player    Back: home'
                 : item.kind === 'live'
                   ? 'OK: pause / play    Back: home'
-                  : 'OK: pause / play    ◀ ▶: 10 seconds    Back: home'}
+                  : 'OK: pause / play    Left / Right: 10 seconds    Back: home'}
           </Text>
           {!external && <ProgressLine time={time} live={item.kind === 'live'} target={seekTarget} />}
         </View>
@@ -443,7 +444,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
   minimize: {
     position: 'absolute',
     top: 8,
@@ -455,7 +455,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  minimizeText: { color: '#fff', fontSize: 22, fontWeight: '800', lineHeight: 22 },
   sourcesButton: {
     position: 'absolute',
     top: sz(12, 24),

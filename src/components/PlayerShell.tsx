@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   type GestureResponderHandlers,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const MINI_MARGIN = 12;
@@ -110,7 +111,7 @@ export function PlayerShell({ mini, onMiniChange, onClose, bottomOffset = 0, chi
           {/* Covers the video so a tap opens it instead of reaching YouTube's controls. */}
           <Pressable style={StyleSheet.absoluteFill} onPress={() => snapTo(false)} />
           <Pressable onPress={onClose} hitSlop={10} style={styles.miniClose}>
-            <Text style={styles.miniCloseText}>✕</Text>
+            <Ionicons name="close" size={16} color="#fff" />
           </Pressable>
         </>
       )}
@@ -139,5 +140,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.65)',
   },
-  miniCloseText: { color: '#fff', fontSize: 14, fontWeight: '800' },
 });

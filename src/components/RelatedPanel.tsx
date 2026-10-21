@@ -46,7 +46,7 @@ export function RelatedPanel({ item, onPlay, dragHandlers, children }: Props) {
       {/* Only the title block drags; the list below scrolls instead. */}
       <View style={styles.header} {...dragHandlers}>
         <View style={styles.grabber} />
-        {/* Leaves room for the player's ✕ in the top right. */}
+        {/* Leaves room for the player's close button in the top right. */}
         <View style={styles.titleBlock}>{children}</View>
       </View>
 
@@ -103,7 +103,7 @@ function Thumbnail({ card }: { card: RelatedCard }) {
   if (card.liveColor) {
     return (
       <View style={[styles.thumb, styles.liveThumb, { backgroundColor: card.liveColor }]}>
-        <Text style={styles.liveBadge}>● LIVE</Text>
+        <Text style={styles.liveBadge}>LIVE</Text>
       </View>
     );
   }

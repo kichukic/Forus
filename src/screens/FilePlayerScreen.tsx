@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { getApiKey, getStreamUrl } from '../api/torbox';
@@ -90,13 +91,13 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
           hitSlop={12}
           style={[styles.close, { top: (portraitPhone ? (width * 9) / 16 : 0) + 8 }]}
         >
-          <Text style={styles.closeText}>✕</Text>
+          <Ionicons name="close" size={20} color="#fff" />
         </Pressable>
       )}
 
       {!isTV && !mini && shell && (
         <Pressable onPress={shell.minimize} hitSlop={12} style={styles.minimize}>
-          <Text style={styles.minimizeText}>⌄</Text>
+          <Ionicons name="chevron-down" size={22} color="#fff" />
         </Pressable>
       )}
     </View>
@@ -120,7 +121,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  minimizeText: { color: '#fff', fontSize: 22, fontWeight: '800', lineHeight: 22 },
   overlay: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
@@ -141,5 +141,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
 });
