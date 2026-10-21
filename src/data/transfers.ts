@@ -41,7 +41,11 @@ const announced = new Set<string>();
 const listeners = new Set<Listener>();
 const noticeListeners = new Set<(n: Notice) => void>();
 
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
+// How many polls in a row have shown no progress. Used to back the interval off
+// so an idle transfer does not wake the app every twenty seconds forever.
+let stallCount = 0;
+const prevProgress = new Map<string, number>();
 let loaded = false;
 
 function notify() {
@@ -209,31 +213,44 @@ export function playableFrom(transfer: Transfer): Playable | null {
 
 function ensurePoller() {
   if (timer) return;
-  timer = setInterval(async () => {
+  const tick = async () => {
+    timer = null;
     if (AppState.currentState !== 'active') return;
     const active = [...transfers.values()].filter((t) => t.state === 'downloading');
     if (active.length === 0) {
-      clearInterval(timer!);
-      timer = null;
+      prevProgress.clear();
       return;
     }
     const key = await getApiKey().catch(() => null);
     if (!key) return;
+    let moved = false;
     for (const t of active) {
       if (!t.torrentId) continue;
       try {
         const torrent = await getTorrent(key, t.torrentId);
         if (!torrent) continue;
         if (!torrent.downloadFinished) {
+          const before = prevProgress.get(t.id);
+          if (before === undefined || torrent.progress !== before) moved = true;
+          prevProgress.set(t.id, torrent.progress);
           setTransfer(t.id, { state: "downloading", progress: torrent.progress, speed: torrent.downloadSpeed, eta: torrent.eta });
         } else {
           await finish(t.id, torrent);
+          prevProgress.delete(t.id);
+          moved = true;
         }
       } catch {
         // A hiccup is not the end of the download.
       }
     }
-  }, POLL_MS);
+    // Back off when nothing is moving, so an idle transfer does not wake the
+    // app every twenty seconds for an hour. The moment it moves, the beat is
+    // back to twenty seconds.
+    stallCount = moved ? 0 : stallCount + 1;
+    const delay = stallCount >= 2 ? 60000 : 20000;
+    timer = setTimeout(tick, delay);
+  };
+  timer = setTimeout(tick, 20000);
 }
 
 // Pick up transfers that were still running when the app was closed.
@@ -277,7 +294,7 @@ AppState.addEventListener('change', (status: AppStateStatus) => {
   if (status === 'active') {
     if ([...transfers.values()].some((t) => t.state === 'downloading')) ensurePoller();
   } else if (timer) {
-    clearInterval(timer);
+    clearTimeout(timer);
     timer = null;
   }
 });

@@ -245,7 +245,7 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
             onEndReached={onEndReached}
             onEndReachedThreshold={2}
             ListFooterComponent={
-              loadingMore ? <SkeletonLoader columns={2} cardWidth={CARD_WIDTH} rows={1} style={styles.more} /> : null
+              loadingMore ? <SkeletonLoader columns={2} cardWidth={CARD_WIDTH} rows={1} style={styles.more} still /> : null
             }
             renderItem={({ item }) => (
               <FocusCard onPress={() => onPlay(item)}>

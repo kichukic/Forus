@@ -451,7 +451,7 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
           </View>
         )}
         ListFooterComponent={
-          moreRows ? <Loader label="More rows coming" icon="albums-outline" style={styles.moreRows} /> : null
+          moreRows ? <Loader still label="More rows coming" icon="albums-outline" style={styles.moreRows} /> : null
         }
         ListEmptyComponent={
           !waiting ? <Text style={styles.note}>Nothing to show in this section right now.</Text> : null

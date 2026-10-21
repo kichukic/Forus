@@ -328,7 +328,7 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
           loadingMore ? (
             <ActivityIndicator color={colors.accent} style={styles.spinner} />
           ) : moreFilms ? (
-            <Loader label="More films coming" icon="film-outline" style={styles.moreFilms} />
+            <Loader still label="More films coming" icon="film-outline" style={styles.moreFilms} />
           ) : null
         }
       />

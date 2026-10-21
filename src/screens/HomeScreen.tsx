@@ -36,10 +36,11 @@ import { MovieboxScreen } from './MovieboxScreen';
 import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
-import { GLOW, GUTTER, colors, isTV, sz } from '../theme';
+import { CARD_WIDTH, GLOW, GUTTER, colors, isTV, sz } from '../theme';
 import { TransferList } from '../components/TransferList';
 import type { Playable } from '../types';
 import { useEvent } from '../hooks/useEvent';
+import { SkeletonLoader } from '../components/SkeletonLoader';
 
 // Each themed row is a search of about 0.7 MB. A TV starts with one and reads
 // the rest as the page is scrolled down to them.
@@ -509,6 +510,23 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
           .slice(0, themeCount)
           .map((theme) => <ThemeRow key={`${theme.query}-${refreshKey}`} theme={theme} onPlay={onPlay} />)
       : []),
+    // Only built near the bottom of the list, so it animates only when seen.
+    ...(onPlay && themeCount < themes.length
+      ? [
+          // Looks like the next row on its way: its heading, then cards with
+          // light sweeping across them.
+          <SkeletonLoader
+            key="more-rows"
+            columns={isTV ? 6 : 3}
+            cardWidth={CARD_WIDTH}
+            rows={1}
+            label="More rows coming"
+            icon="sparkles-outline"
+            style={styles.moreRows}
+            still
+          />,
+        ]
+      : []),
     <Text key="credit" style={styles.credit}>
       Made with <Text style={styles.heart}>♥</Text> by Kishor
     </Text>,
@@ -673,5 +691,7 @@ const styles = StyleSheet.create({
   row: { marginBottom: sz(24, 30) },
   list: { paddingHorizontal: GUTTER, paddingVertical: sz(2, 8) },
   heart: { color: colors.accent },
+  // The cards run off the right edge, as a real row's do.
+  moreRows: { paddingLeft: GUTTER, marginTop: sz(4, 8), overflow: 'hidden' },
   credit: { color: colors.faint, fontSize: sz(12.5, 15), textAlign: 'center', marginTop: 8, fontWeight: '600' },
 });

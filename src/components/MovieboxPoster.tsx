@@ -1,5 +1,6 @@
 // A film in a row or a grid: its poster with the name and year underneath.
-import { Platform, Image, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { MovieboxSubject } from '../api/moviebox';
@@ -47,7 +48,10 @@ export function MovieboxPoster({ subject }: { subject: MovieboxSubject }) {
           <Image
             source={{ uri: subject.poster }}
             style={StyleSheet.absoluteFill}
-            resizeMode="cover"
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+            recyclingKey={subject.poster}
             onError={() => setFailed(true)}
           />
         )}
