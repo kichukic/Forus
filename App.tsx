@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
@@ -258,38 +261,43 @@ export default function App() {
           animationType="fade"
           onRequestClose={() => setUpdatePrompt(null)}
         >
-          <View style={styles.updatePromptBackdrop}>
-            <View style={styles.updatePromptCard}>
-              <View style={styles.updatePromptIcon}>
-                <Text style={styles.updatePromptIconText}>↑</Text>
-              </View>
-              <Text style={styles.updatePromptTitle}>Update available</Text>
-              <Text style={styles.updatePromptBody}>
-                ForUs {updatePrompt?.version} is ready. Update now?
-              </Text>
-              {updatePrompt?.notes ? (
-                <Text style={styles.updatePromptNotes}>{updatePrompt.notes}</Text>
-              ) : null}
-              <View style={styles.updatePromptButtons}>
-                <Pressable
-                  onPress={() => setUpdatePrompt(null)}
-                  style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptCancel, (focused || pressed) && styles.updatePromptBtnFocused]}
+          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill}>
+            <View style={styles.updatePromptBackdrop}>
+              <BlurView intensity={40} tint="dark" style={styles.updatePromptCard}>
+                <LinearGradient
+                  colors={['rgba(155,92,255,0.35)', 'rgba(155,92,255,0.05)']}
+                  style={styles.updatePromptIcon}
                 >
-                  <Text style={styles.updatePromptBtnText}>Later</Text>
-                </Pressable>
-                <Pressable
-                  hasTVPreferredFocus
-                  onPress={() => {
-                    if (updatePrompt) setUpdate(updatePrompt);
-                    setUpdatePrompt(null);
-                  }}
-                  style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptUpdate, (focused || pressed) && styles.updatePromptBtnFocused]}
-                >
-                  <Text style={[styles.updatePromptBtnText, { color: '#fff' }]}>Update now</Text>
-                </Pressable>
-              </View>
+                  <Ionicons name="cloud-download-outline" size={isTV ? 36 : 28} color="#fff" />
+                </LinearGradient>
+                <Text style={styles.updatePromptTitle}>Update available</Text>
+                <Text style={styles.updatePromptBody}>
+                  ForUs {updatePrompt?.version} is ready. Update now?
+                </Text>
+                {updatePrompt?.notes ? (
+                  <Text style={styles.updatePromptNotes}>{updatePrompt.notes}</Text>
+                ) : null}
+                <View style={styles.updatePromptButtons}>
+                  <Pressable
+                    onPress={() => setUpdatePrompt(null)}
+                    style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptCancel, (focused || pressed) && styles.updatePromptBtnFocused]}
+                  >
+                    <Text style={styles.updatePromptBtnText}>Later</Text>
+                  </Pressable>
+                  <Pressable
+                    hasTVPreferredFocus
+                    onPress={() => {
+                      if (updatePrompt) setUpdate(updatePrompt);
+                      setUpdatePrompt(null);
+                    }}
+                    style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptUpdate, (focused || pressed) && styles.updatePromptBtnFocused]}
+                  >
+                    <Text style={[styles.updatePromptBtnText, { color: '#fff' }]}>Update now</Text>
+                  </Pressable>
+                </View>
+              </BlurView>
             </View>
-          </View>
+          </BlurView>
         </Modal>
 
         {update && (
@@ -394,44 +402,55 @@ const styles = StyleSheet.create({
   hidden: { display: 'none' },
   updatePromptBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(12,10,18,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   updatePromptCard: {
     width: '100%',
-    maxWidth: isTV ? 520 : 360,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: 22,
-    padding: 28,
+    maxWidth: isTV ? 560 : 380,
+    borderRadius: 28,
+    padding: 32,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(255,255,255,0.18)',
+    overflow: 'hidden',
+    // Glass: semi-transparent surface + subtle shadow
+    backgroundColor: 'rgba(20,18,30,0.55)',
+    shadowColor: '#9b5cff',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 12,
   },
   updatePromptIcon: {
-    width: isTV ? 72 : 56,
-    height: isTV ? 72 : 56,
+    width: isTV ? 76 : 60,
+    height: isTV ? 76 : 60,
     borderRadius: 999,
-    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    shadowColor: '#9b5cff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  updatePromptIconText: { color: '#fff', fontSize: isTV ? 36 : 28, fontWeight: '900' },
-  updatePromptTitle: { color: colors.text, fontSize: isTV ? 26 : 22, fontWeight: '900', textAlign: 'center' },
-  updatePromptBody: { color: colors.muted, fontSize: isTV ? 16 : 14, marginTop: 10, textAlign: 'center' },
-  updatePromptNotes: { color: colors.muted, fontSize: isTV ? 14 : 12.5, marginTop: 12, textAlign: 'center', lineHeight: isTV ? 22 : 18 },
+  updatePromptTitle: { color: '#fff', fontSize: isTV ? 28 : 22, fontWeight: '900', textAlign: 'center', letterSpacing: -0.3 },
+  updatePromptBody: { color: 'rgba(255,255,255,0.7)', fontSize: isTV ? 16 : 14, marginTop: 10, textAlign: 'center' },
+  updatePromptNotes: { color: 'rgba(255,255,255,0.5)', fontSize: isTV ? 14 : 12.5, marginTop: 12, textAlign: 'center', lineHeight: isTV ? 22 : 18 },
   updatePromptButtons: { flexDirection: 'row', gap: 12, marginTop: 24 },
   updatePromptBtn: {
     paddingHorizontal: 26,
     paddingVertical: 12,
     borderRadius: 22,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
-  updatePromptCancel: { backgroundColor: colors.surface },
-  updatePromptUpdate: { backgroundColor: colors.accent },
-  updatePromptBtnFocused: { borderColor: colors.text },
-  updatePromptBtnText: { color: colors.text, fontSize: isTV ? 16 : 14, fontWeight: '800' },
+  updatePromptCancel: { backgroundColor: 'rgba(255,255,255,0.08)' },
+  updatePromptUpdate: { backgroundColor: colors.accent, borderColor: colors.accent },
+  updatePromptBtnFocused: { borderColor: '#fff', borderWidth: 2 },
+  updatePromptBtnText: { color: 'rgba(255,255,255,0.85)', fontSize: isTV ? 16 : 14, fontWeight: '800' },
 });
