@@ -1,6 +1,5 @@
 import { useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   AppState,
   Easing,
@@ -38,6 +37,7 @@ import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope 
 import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
 import { GLOW, GUTTER, colors, isTV, sz } from '../theme';
+import { Loader } from '../components/Loader';
 import type { Playable } from '../types';
 
 const THEMES_AT_START = 3;
@@ -492,7 +492,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
           {themes.slice(0, themeCount).map((theme) => (
             <ThemeRow key={`${theme.query}-${refreshKey}`} theme={theme} onPlay={onPlay} />
           ))}
-          {themeCount < themes.length && <ActivityIndicator color={colors.accent} style={styles.moreRows} />}
+          {themeCount < themes.length && <Loader label="More rows coming" icon="sparkles-outline" style={styles.moreRows} />}
         </>
       )}
 
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#fff' },
   row: { marginBottom: sz(24, 30) },
   list: { paddingHorizontal: GUTTER, paddingVertical: sz(2, 8) },
-  moreRows: { marginVertical: 24 },
+  moreRows: { marginVertical: 24, alignSelf: 'center' },
   heart: { color: colors.accent },
   credit: { color: colors.faint, fontSize: sz(12.5, 15), textAlign: 'center', marginTop: 8, fontWeight: '600' },
 });

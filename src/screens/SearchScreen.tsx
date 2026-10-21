@@ -19,7 +19,7 @@ import { searchVideos, type SearchResult } from '../api/youtube';
 import { FileCardContent } from '../components/FileCardContent';
 import { VideoCardContent } from '../components/Cards';
 import { FocusCard } from '../components/FocusCard';
-import { SearchLoader } from '../components/SearchLoader';
+import { SkeletonLoader } from '../components/SkeletonLoader';
 import { MovieboxPoster, POSTER_WIDTH } from '../components/MovieboxPoster';
 import { ReleaseList } from '../components/ReleaseList';
 import { cleanTitle } from '../components/VideoRow';
@@ -233,10 +233,11 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
       <Animated.Text style={[styles.note, { opacity: noteIn }]}>{text.note}</Animated.Text>
 
       {loading && (
-        <SearchLoader
+        <SkeletonLoader
           columns={columns}
           cardWidth={cardWidth}
           label={scope === 'torbox' ? 'Searching your TorBox' : 'Searching the channels'}
+          style={styles.loader}
         />
       )}
       {error && error.query === query.trim() && <Text style={styles.note}>{error.message}</Text>}
@@ -395,6 +396,7 @@ const styles = StyleSheet.create({
   inputWrapFocused: { borderColor: colors.accent, backgroundColor: colors.surfaceRaised },
   input: { flex: 1, color: colors.text, fontSize: sz(16, 22), paddingVertical: sz(12, 14) },
   note: { color: colors.muted, fontSize: sz(13, 15), marginHorizontal: GUTTER, marginTop: 8 },
+  loader: { paddingTop: 18 },
   spinner: { marginTop: 24 },
   grid: { paddingHorizontal: GUTTER, paddingTop: 18, paddingBottom: 120 },
   cell: { marginBottom: 18 },

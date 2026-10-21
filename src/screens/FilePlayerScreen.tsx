@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { getApiKey, getStreamUrl } from '../api/torbox';
 import type { ShellControls } from '../components/PlayerShell';
+import { Loader } from '../components/Loader';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { colors, isTV, sz } from '../theme';
 import type { FilePlayable, Playable } from '../types';
@@ -60,7 +61,7 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
       {!failure && status !== 'readyToPlay' && (
         <View style={styles.overlay} pointerEvents="none">
-          <ActivityIndicator size="large" color={colors.accent} />
+          <Loader size="large" />
           <Text style={styles.overlayText} numberOfLines={2}>
             {item.title}
           </Text>
