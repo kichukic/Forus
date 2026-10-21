@@ -33,7 +33,8 @@
         }
       ],
       "expo-video",
-      "expo-font"
+      "expo-font",
+      "expo-image"
     ],
     "android": {
       "package": "com.kishor.forus",

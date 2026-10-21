@@ -1,6 +1,7 @@
 // Finds a title's artwork from its file name, using Cinemeta (Stremio's free,
 // keyless metadata service backed by IMDb data).
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchWithTimeout } from './http';
 
 const CINEMETA = 'https://v3-cinemeta.strem.io/catalog';
 const CACHE_KEY = 'artwork-cache';
@@ -50,7 +51,7 @@ export function parseFileName(fileName: string): ParsedName {
 type Meta = { name: string; releaseInfo?: string; poster?: string; background?: string };
 
 async function search(type: 'movie' | 'series', title: string): Promise<Meta[]> {
-  const res = await fetch(`${CINEMETA}/${type}/top/search=${encodeURIComponent(title)}.json`);
+  const res = await fetchWithTimeout(`${CINEMETA}/${type}/top/search=${encodeURIComponent(title)}.json`);
   if (!res.ok) return [];
   const body = await res.json().catch(() => null);
   return body?.metas ?? [];

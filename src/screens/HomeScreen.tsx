@@ -41,7 +41,7 @@ const THEMES_PER_STEP = 3;
 const TABS = [
   { id: 'all', label: 'All' },
   { id: 'moviebox', label: 'MovieBox' },
-  { id: 'movies', label: 'Movies' },
+  { id: 'movies', label: 'Malayalam Movies' },
   { id: 'shows', label: 'Shows' },
   { id: 'disha', label: 'For Disha Chotu' },
   { id: 'news', label: 'News' },

@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +11,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { loadVideos, type Video } from '../api/youtube';
@@ -141,9 +141,11 @@ function Slide({
   return (
     <Pressable onPress={onPlay} focusable={false} style={[styles.slide, { height }]}>
       <Image
-        source={{ uri }}
+        source={uri}
         style={StyleSheet.absoluteFill}
-        resizeMode="cover"
+        contentFit="cover"
+        transition={200}
+        cachePolicy="memory-disk"
         onError={() => setSize((n) => Math.min(n + 1, HERO_SIZES.length - 1))}
       />
       <LinearGradient colors={SCRIM} locations={[0.25, 0.6, 1]} style={StyleSheet.absoluteFill} />

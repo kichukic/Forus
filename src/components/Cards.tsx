@@ -1,7 +1,8 @@
 // The insides of the app's cards: a rounded picture with a duration chip and a
 // small play button, and the title with its details underneath.
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Image, StyleSheet, Text, View } from 'react-native';
+import { memo, useEffect, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { resolveLiveVideoId } from '../api/youtubeLive';
@@ -18,12 +19,27 @@ type VideoCardProps = {
   placeholder?: string;
 };
 
-export function VideoCardContent({ image, title, subtitle, duration, live, placeholder }: VideoCardProps) {
+export const VideoCardContent = memo(function VideoCardContent({
+  image,
+  title,
+  subtitle,
+  duration,
+  live,
+  placeholder,
+}: VideoCardProps) {
   return (
     <View>
       <View style={styles.picture}>
         {image ? (
-          <Image source={{ uri: image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image
+            source={image}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+            // Lists reuse card views; this stops a reused card flashing the old picture.
+            recyclingKey={image}
+          />
         ) : (
           <LinearGradient colors={[colors.surfaceRaised, colors.surface]} style={[StyleSheet.absoluteFill, styles.blank]}>
             {placeholder ? (
@@ -48,20 +64,27 @@ export function VideoCardContent({ image, title, subtitle, duration, live, place
       ) : null}
     </View>
   );
-}
+});
 
 // A live channel: its colour as a gradient, with a pulsing LIVE badge.
 // A live channel: a current frame of its broadcast, tinted with the channel's
 // colour, with a pulsing LIVE badge. Until the frame arrives (or if the channel
 // isn't live) it is the colour as a gradient.
-export function LiveTileContent({ name, color }: { name: string; color: string }) {
+export const LiveTileContent = memo(function LiveTileContent({ name, color }: { name: string; color: string }) {
   const frame = useLiveFrame(LIVE_NEWS.find((c) => c.name === name)?.channelId);
   return (
     <View>
       <LinearGradient colors={[color, shade(color, 0.55)]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.picture}>
         {frame && (
           <>
-            <Image source={{ uri: frame.uri }} style={frame.cropBars ? styles.liveFrameCropped : StyleSheet.absoluteFill} onError={frame.onError} />
+            <Image
+              source={frame.uri}
+              style={frame.cropBars ? styles.liveFrameCropped : StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={200}
+              cachePolicy="memory-disk"
+              onError={frame.onError}
+            />
             <LinearGradient
               colors={[`${color}00`, `${color}66`, `${color}ee`]}
               locations={[0.2, 0.55, 1]}
@@ -82,7 +105,7 @@ export function LiveTileContent({ name, color }: { name: string; color: string }
       <Text style={styles.subtitle}>Live now · News</Text>
     </View>
   );
-}
+});
 
 // Live frames change, so the picture is fetched afresh every few minutes.
 const FRAME_REFRESH_MS = 5 * 60 * 1000;

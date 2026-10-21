@@ -7,6 +7,7 @@ import { CARD_HEIGHT, GUTTER, ROW_PAD, colors, sz } from '../theme';
 import { VideoCardContent } from './Cards';
 import { FocusCard } from './FocusCard';
 import { FocusRow } from './FocusRow';
+import { rowListProps } from './rowList';
 import { SectionHeader, SkeletonRow } from './Section';
 
 type Props = {
@@ -132,6 +133,7 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
       ) : (
         <FocusRow>
           <FlatList
+            {...rowListProps}
             horizontal
             data={videos}
             keyExtractor={(v) => v.id}

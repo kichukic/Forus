@@ -1,4 +1,5 @@
 import type { VideoSource } from '../data/channels';
+import { fetchWithTimeout } from './http';
 
 export type Video = {
   id: string;
@@ -9,6 +10,7 @@ export type Video = {
 };
 
 const CACHE_MS = 15 * 60 * 1000;
+const FEED_TIMEOUT_MS = 6000;
 const cache = new Map<string, { at: number; videos: Video[] }>();
 const pageCache = new Map<string, { at: number; page: VideoPage }>();
 
@@ -45,7 +47,8 @@ function parseFeed(xml: string): Video[] {
 }
 
 async function fetchFeed(query: string): Promise<Video[] | null> {
-  const res = await fetch(`https://www.youtube.com/feeds/videos.xml?${query}`);
+  // Short limit: when the feeds are struggling, the browse fallback is better than waiting.
+  const res = await fetchWithTimeout(`https://www.youtube.com/feeds/videos.xml?${query}`, {}, FEED_TIMEOUT_MS);
   if (!res.ok) return null;
   return parseFeed(await res.text());
 }
@@ -85,7 +88,7 @@ function ageToDate(age?: string): string {
 
 // A channel's latest long-form uploads from the browse endpoint.
 async function browseLatest(channelId: string): Promise<Video[]> {
-  const res = await fetch(BROWSE_URL, {
+  const res = await fetchWithTimeout(BROWSE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ context: { client: SEARCH_CLIENT }, browseId: `VLUULF${channelId.slice(2)}` }),
@@ -174,7 +177,7 @@ export async function loadVideoPage(source: VideoSource, continuation?: string):
   let next = continuation;
   for (let i = 0; i < MAX_PAGES_PER_CALL && videos.length < MIN_PAGE_RESULTS; i++) {
     const body = next ? { continuation: next } : { browseId: `VLUULF${source.channelId.slice(2)}` };
-    const res = await fetch(BROWSE_URL, {
+    const res = await fetchWithTimeout(BROWSE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ context: { client: SEARCH_CLIENT }, ...body }),
@@ -242,7 +245,7 @@ function parseSearch(json: any, trusted: Map<string, string>): SearchPage {
 
 // YouTube's "watch next" list for a video, kept to the trusted official channels.
 export async function relatedVideos(videoId: string, trusted: Map<string, string>): Promise<SearchResult[]> {
-  const res = await fetch('https://www.youtube.com/youtubei/v1/next?prettyPrint=false', {
+  const res = await fetchWithTimeout('https://www.youtube.com/youtubei/v1/next?prettyPrint=false', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ context: { client: SEARCH_CLIENT }, videoId }),
@@ -277,7 +280,7 @@ export async function searchVideos(
   let continuation: string | undefined;
   for (let i = 0; i < maxPages && results.length < ENOUGH_RESULTS; i++) {
     const body = { context: { client: SEARCH_CLIENT }, ...(continuation ? { continuation } : { query }) };
-    const res = await fetch(SEARCH_URL, {
+    const res = await fetchWithTimeout(SEARCH_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

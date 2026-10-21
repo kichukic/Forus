@@ -1,7 +1,7 @@
 // What the splash screen loads before it lets go: the feeds behind the All tab
 // (its featured carousel and New today row) and the first pictures they show,
 // so the home screen opens already filled in.
-import { Image } from 'react-native';
+import { Image } from 'expo-image';
 import { MOVIES, SHOWS } from '../data/channels';
 import { loadVideos, type Video } from './youtube';
 
@@ -44,7 +44,8 @@ export async function preloadHome(onStep: (step: PreloadStep) => void): Promise<
   let fetched = 0;
   await Promise.all(
     pictures.map((uri) =>
-      Image.prefetch(uri)
+      // The same cache the cards read from, so the pictures show instantly.
+      Image.prefetch(uri, 'memory-disk')
         .catch(() => false)
         .then(() => {
           fetched++;

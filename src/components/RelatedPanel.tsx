@@ -4,13 +4,13 @@ import { useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   StyleSheet,
   Text,
   View,
   type GestureResponderHandlers,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { findArtwork } from '../api/artwork';
 import { getRelated, type RelatedCard } from '../api/related';
 import { colors } from '../theme';
@@ -108,7 +108,11 @@ function Thumbnail({ card }: { card: RelatedCard }) {
     );
   }
   const uri = card.thumbnail ?? art;
-  return uri ? <Image source={{ uri }} style={styles.thumb} /> : <View style={[styles.thumb, styles.blank]} />;
+  return uri ? (
+    <Image source={uri} style={styles.thumb} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={uri} />
+  ) : (
+    <View style={[styles.thumb, styles.blank]} />
+  );
 }
 
 const styles = StyleSheet.create({

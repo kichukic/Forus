@@ -2,6 +2,8 @@
 // has to be looked up first. The channel's /live page carries a player
 // response that says what is on air right now.
 
+import { fetchWithTimeout } from './http';
+
 const CACHE_MS = 5 * 60 * 1000;
 const cache = new Map<string, { at: number; videoId: string | null }>();
 
@@ -11,7 +13,7 @@ export async function resolveLiveVideoId(channelId: string): Promise<string | nu
 
   let videoId: string | null = null;
   try {
-    const res = await fetch(`https://www.youtube.com/channel/${channelId}/live`, {
+    const res = await fetchWithTimeout(`https://www.youtube.com/channel/${channelId}/live`, {
       headers: { 'Accept-Language': 'en-US,en;q=0.9' },
     });
     if (res.ok) videoId = extractLiveVideoId(await res.text());
