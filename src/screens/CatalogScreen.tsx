@@ -131,9 +131,10 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
     return () => clearTimeout(timer);
   }, [query]);
 
-  // The grid reflows when the phone rotates.
+  // The grid reflows when the phone rotates. The posters are small enough for
+  // three to fit across a phone, so more of the catalog is seen at once.
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 300 : 230)));
+  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 300 : 165)));
   // The cards fill their column, so the grid never overflows. A width that
   // comes out wrong (a split screen, a fold) must not reach the cards.
   const cardWidth = Math.max(120, Math.floor((width - GUTTER * 2) / columns));

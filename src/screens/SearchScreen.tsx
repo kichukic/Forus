@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,10 +14,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatSize, getApiKey, listVideoFiles, type TorboxFile } from '../api/torbox';
+import { searchSubjects, type MovieboxSubject } from '../api/moviebox';
+import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { searchVideos, type SearchResult } from '../api/youtube';
 import { FileCardContent } from '../components/FileCardContent';
 import { VideoCardContent } from '../components/Cards';
 import { FocusCard } from '../components/FocusCard';
+import { MovieboxPoster, POSTER_WIDTH } from '../components/MovieboxPoster';
+import { ReleaseList } from '../components/ReleaseList';
 import { cleanTitle } from '../components/VideoRow';
 import { FULL_MOVIE, SCOPE_CHANNELS, type SearchScope } from '../data/channels';
 import { CARD_GAP, GUTTER, colors, sz } from '../theme';
@@ -24,14 +31,18 @@ type Props = {
   // The tab search was opened from; it only searches that tab's channels.
   scope: SearchScope;
   onPlay: (item: Playable) => void;
+  // Opens a film from MovieBox, to play it there.
+  onOpenMoviebox: (subject: MovieboxSubject) => void;
+  // Sends a release to the TorBox, to be downloaded and played from there.
+  onSendRelease: (option: TorrentOption) => void;
 };
 
 const SCOPE_TEXT: Record<SearchScope, { heading: string; placeholder: string; note: string; empty: string }> = {
   all: {
     heading: 'Search',
-    placeholder: 'Search shows, movies, news…',
-    note: 'Official channels only, plus files in your TorBox.',
-    empty: 'Nothing found on the official channels or in your TorBox.',
+    placeholder: 'Search a film, a show, a release…',
+    note: 'Everywhere the film can be found: MovieBox, the channels, your TorBox and the release indexes.',
+    empty: 'Nothing found anywhere.',
   },
   movies: {
     heading: 'Search movies',
@@ -59,9 +70,9 @@ const SCOPE_TEXT: Record<SearchScope, { heading: string; placeholder: string; no
   },
   torbox: {
     heading: 'Search TorBox',
-    placeholder: 'Search your TorBox files…',
-    note: 'Files already in your TorBox account.',
-    empty: 'No matching files in your TorBox.',
+    placeholder: 'Search a film, a show, a release…',
+    note: 'MovieBox, the channels, your TorBox and the release indexes.',
+    empty: 'Nothing found anywhere.',
   },
 };
 
@@ -69,15 +80,25 @@ type Result = { type: 'youtube'; video: SearchResult } | { type: 'torbox'; file:
 
 // Typing on a TV remote is slow, so a search runs once typing pauses.
 const DEBOUNCE_MS = 600;
+// Result cards come in one after another, this far apart; past the first few
+// they arrive together so a long list doesn't take ages.
+const CASCADE_STEP_MS = 45;
+const CASCADE_MAX = 8;
 
-export function SearchScreen({ scope, onPlay }: Props) {
+export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: Props) {
   const text = SCOPE_TEXT[scope];
   const searchesTorbox = scope === 'all' || scope === 'torbox';
+  // The main search looks everywhere the film can be found: the films
+  // themselves, the releases to download, the channels and the TorBox.
+  const searchesEverywhere = scope === 'all' || scope === 'torbox';
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Result[] | null>(null);
+  const [results, setResults] = useState<{ query: string; list: Result[] } | null>(null);
+  // The films and the releases the name matched.
+  const [films, setFilms] = useState<{ query: string; list: MovieboxSubject[] } | null>(null);
+  const [releases, setReleases] = useState<{ query: string; list: TorrentOption[] } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ query: string; message: string } | null>(null);
   const torboxFiles = useRef<TorboxFile[] | null>(null);
   const latest = useRef('');
 
@@ -93,14 +114,9 @@ export function SearchScreen({ scope, onPlay }: Props) {
   useEffect(() => {
     const q = query.trim();
     latest.current = q;
-    if (q.length < 2) {
-      setResults(null);
-      setError(null);
-      return;
-    }
+    if (q.length < 2) return;
     const timer = setTimeout(async () => {
       setLoading(true);
-      setError(null);
       try {
         const words = q.toLowerCase().split(/\s+/);
         const files = searchesTorbox
@@ -112,29 +128,71 @@ export function SearchScreen({ scope, onPlay }: Props) {
         if (scope !== 'torbox') {
           // The film tabs only show complete films, not scenes and trailers, so
           // their searches ask YouTube for films and read a few more pages.
-          const films = scope === 'movies' || scope === 'disha';
-          const asked = !films || /movie|film/i.test(q) ? q : `${q} ${scope === 'disha' ? 'hindi ' : ''}full movie`;
-          videos = await searchVideos(asked, SCOPE_CHANNELS[scope], films ? 5 : undefined);
-          if (films) videos = videos.filter((v) => FULL_MOVIE.test(v.title));
+          const filmsOnly = scope === 'movies' || scope === 'disha';
+          const asked = !filmsOnly || /movie|film/i.test(q) ? q : `${q} ${scope === 'disha' ? 'hindi ' : ''}full movie`;
+          videos = await searchVideos(asked, SCOPE_CHANNELS[scope], filmsOnly ? 5 : undefined);
+          if (filmsOnly) videos = videos.filter((v) => FULL_MOVIE.test(v.title));
         }
+        // The films and the releases are asked for together, so a name that
+        // is a film comes back with every way of getting it.
+        const [found, foundReleases] = searchesEverywhere
+          ? await Promise.all([
+              searchSubjects(q, 1).then((r) => r.subjects).catch(() => [] as MovieboxSubject[]),
+              searchTorrents(q).catch(() => [] as TorrentOption[]),
+            ])
+          : [[] as MovieboxSubject[], [] as TorrentOption[]];
         if (latest.current !== q) return;
-        setResults([
-          ...files.map((file) => ({ type: 'torbox' as const, file })),
-          ...videos.map((video) => ({ type: 'youtube' as const, video })),
-        ]);
+        setFilms({ query: q, list: found });
+        setReleases({ query: q, list: foundReleases });
+        setResults({
+          query: q,
+          list: [
+            ...files.map((file) => ({ type: 'torbox' as const, file })),
+            ...videos.map((video) => ({ type: 'youtube' as const, video })),
+          ],
+        });
       } catch {
-        if (latest.current === q) setError("Couldn't search. Check the internet connection.");
+        if (latest.current === q) {
+          setError({ query: q, message: "Couldn't search. Check the internet connection." });
+        }
       } finally {
         if (latest.current === q) setLoading(false);
       }
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query, scope, searchesTorbox]);
+  }, [query, scope, searchesTorbox, searchesEverywhere]);
+
+  // Only what was found for the name in the box is shown.
+  const resultList = results && results.query === query.trim() ? results.list : [];
+  const filmList = films && films.query === query.trim() ? films.list : [];
+  const releaseList = releases && releases.query === query.trim() ? releases.list : [];
 
   const play = (r: Result) =>
     r.type === 'torbox'
       ? onPlay({ kind: 'file', source: r.file.source, itemId: r.file.itemId, fileId: r.file.fileId, title: r.file.name })
       : onPlay({ kind: 'video', videoId: r.video.id, title: r.video.title });
+
+  // Opening: the screen fades in, the bar grows out from the right (where the
+  // search button sits on the home screen) and the heading drops in above it.
+  const enter = useMemo(() => new Animated.Value(0), []);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    Animated.spring(enter, { toValue: 1, useNativeDriver: true, speed: 11, bounciness: 6 }).start();
+  }, []);
+  const screenIn = enter.interpolate({ inputRange: [0, 0.4], outputRange: [0, 1], extrapolate: 'clamp' });
+  const headingIn = {
+    opacity: enter.interpolate({ inputRange: [0.2, 0.8], outputRange: [0, 1], extrapolate: 'clamp' }),
+    transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }],
+  };
+  const barIn = {
+    opacity: enter.interpolate({ inputRange: [0, 0.3], outputRange: [0, 1], extrapolate: 'clamp' }),
+    transformOrigin: 'right center',
+    transform: [{ scaleX: enter.interpolate({ inputRange: [0, 1], outputRange: [0.12, 1] }) }],
+  };
+  const iconIn = {
+    transform: [{ rotate: enter.interpolate({ inputRange: [0, 1], outputRange: ['-90deg', '0deg'] }) }],
+  };
+  const noteIn = enter.interpolate({ inputRange: [0.6, 1], outputRange: [0, 1], extrapolate: 'clamp' });
 
   // The grid reflows when the phone rotates.
   const { width } = useWindowDimensions();
@@ -142,10 +200,12 @@ export function SearchScreen({ scope, onPlay }: Props) {
   const cardWidth = (width - GUTTER * 2 - CARD_GAP * (columns - 1)) / columns;
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + GUTTER }]}>
-      <Text style={styles.heading}>{text.heading}</Text>
-      <View style={styles.inputWrap}>
-        <Ionicons name="search" size={sz(19, 22)} color={colors.muted} />
+    <Animated.View style={[styles.screen, { paddingTop: insets.top + GUTTER, opacity: screenIn }]}>
+      <Animated.Text style={[styles.heading, headingIn]}>{text.heading}</Animated.Text>
+      <Animated.View style={[styles.inputWrap, focused && styles.inputWrapFocused, barIn]}>
+        <Animated.View style={iconIn}>
+          <Ionicons name="search" size={sz(19, 22)} color={focused ? colors.accent : colors.muted} />
+        </Animated.View>
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -156,49 +216,112 @@ export function SearchScreen({ scope, onPlay }: Props) {
           returnKeyType="search"
           style={styles.input}
           hasTVPreferredFocus
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
         />
-      </View>
-      <Text style={styles.note}>{text.note}</Text>
+      </Animated.View>
+      <Animated.Text style={[styles.note, { opacity: noteIn }]}>{text.note}</Animated.Text>
 
       {loading && <ActivityIndicator color={colors.accent} style={styles.spinner} />}
-      {error && <Text style={styles.note}>{error}</Text>}
-      {results && results.length === 0 && !loading && (
+      {error && error.query === query.trim() && <Text style={styles.note}>{error.message}</Text>}
+
+      {filmList.length === 0 && releaseList.length === 0 && resultList.length === 0 && !loading && (
         <Text style={styles.note}>{text.empty}</Text>
       )}
 
-      {results && results.length > 0 && (
+      {(resultList.length > 0 || filmList.length > 0 || releaseList.length > 0) && (
         <FlatList
           key={columns}
-          data={results}
+          data={resultList}
           numColumns={columns}
           keyExtractor={(r) =>
             r.type === 'youtube' ? `yt:${r.video.id}` : `tb:${r.file.source}:${r.file.itemId}:${r.file.fileId}`
           }
           contentContainerStyle={styles.grid}
-          renderItem={({ item, index }) => (
-            <View style={styles.cell}>
-              <FocusCard
-                width={cardWidth}
-                onPress={() => play(item)}
-                style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP }}
-              >
-                {item.type === 'torbox' ? (
-                  <FileCardContent fileName={item.file.name} detail={`TorBox · ${formatSize(item.file.size)}`} />
-                ) : (
-                  <VideoCardContent
-                    image={item.video.thumbnail}
-                    title={cleanTitle(item.video.title)}
-                    subtitle={[item.video.channel, item.video.published].filter(Boolean).join(' · ')}
-                    duration={item.video.duration}
-                    live={item.video.live}
-                  />
+          ListHeaderComponent={
+            searchesEverywhere && (filmList.length > 0 || releaseList.length > 0) ? (
+              <View>
+                {/* The films themselves: they play from here, with no download. */}
+                {filmList.length > 0 && (
+                  <View style={styles.block}>
+                    <Text style={styles.blockTitle}>From MovieBox</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.films}
+                    >
+                      {filmList.map((film) => (
+                        <FocusCard key={film.id} onPress={() => onOpenMoviebox(film)} width={POSTER_WIDTH}>
+                          <MovieboxPoster subject={film} />
+                        </FocusCard>
+                      ))}
+                    </ScrollView>
+                  </View>
                 )}
-              </FocusCard>
-            </View>
+
+                {/* The releases: they are downloaded to the TorBox and played from there. */}
+                {releaseList.length > 0 && (
+                  <View style={styles.block}>
+                    <Text style={styles.blockTitle}>Releases to send to your TorBox</Text>
+                    <ReleaseList releases={releaseList} onSend={onSendRelease} />
+                  </View>
+                )}
+              </View>
+            ) : null
+          }
+          renderItem={({ item, index }) => (
+            <CascadeIn index={index}>
+              <View style={styles.cell}>
+                <FocusCard
+                  width={cardWidth}
+                  onPress={() => play(item)}
+                  style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP }}
+                >
+                  {item.type === 'torbox' ? (
+                    <FileCardContent fileName={item.file.name} detail={`TorBox · ${formatSize(item.file.size)}`} />
+                  ) : (
+                    <VideoCardContent
+                      image={item.video.thumbnail}
+                      title={cleanTitle(item.video.title)}
+                      subtitle={[item.video.channel, item.video.published].filter(Boolean).join(' · ')}
+                      duration={item.video.duration}
+                      live={item.video.live}
+                    />
+                  )}
+                </FocusCard>
+              </View>
+            </CascadeIn>
           )}
         />
       )}
-    </View>
+    </Animated.View>
+  );
+}
+
+// A result card that fades up into place, a moment after the one before it.
+function CascadeIn({ index, children }: { index: number; children: ReactNode }) {
+  const progress = useMemo(() => new Animated.Value(0), []);
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 320,
+      delay: Math.min(index, CASCADE_MAX) * CASCADE_STEP_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, []);
+  return (
+    <Animated.View
+      style={{
+        opacity: progress,
+        transform: [
+          { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) },
+          { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
   );
 }
 
@@ -216,9 +339,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  inputWrapFocused: { borderColor: colors.accent, backgroundColor: colors.surfaceRaised },
   input: { flex: 1, color: colors.text, fontSize: sz(16, 22), paddingVertical: sz(12, 14) },
   note: { color: colors.muted, fontSize: sz(13, 15), marginHorizontal: GUTTER, marginTop: 8 },
   spinner: { marginTop: 24 },
   grid: { paddingHorizontal: GUTTER, paddingTop: 18, paddingBottom: 120 },
   cell: { marginBottom: 18 },
+  block: { marginBottom: 22 },
+  blockTitle: {
+    color: colors.text,
+    fontSize: sz(17, 21),
+    fontWeight: '800',
+    marginBottom: 10,
+  },
+  films: { gap: CARD_GAP, paddingRight: GUTTER },
 });

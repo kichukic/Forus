@@ -156,7 +156,13 @@ export default function App() {
 
         {screen === 'search' && (
           <View style={layer('search')}>
-            <SearchScreen key={searchScope} scope={searchScope} onPlay={play} />
+            <SearchScreen
+              key={searchScope}
+              scope={searchScope}
+              onPlay={play}
+              onOpenMoviebox={setMoviebox}
+              onSendRelease={setSending}
+            />
           </View>
         )}
 
