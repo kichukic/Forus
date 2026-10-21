@@ -95,7 +95,6 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   const [shelves, setShelves] = useState<{ tab: number; rows: MovieboxShelf[] } | null>(null);
   // The genre and language the user is browsing by. Null means "everything".
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
-  const [langFilter, setLangFilter] = useState<string | null>(null);
   // The films a search matched, kept with the name they were found for.
   const [results, setResults] = useState<{ query: string; subjects: MovieboxSubject[] } | null>(null);
   const [query, setQuery] = useState('');
@@ -238,18 +237,10 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   );
 
   const GENRES = ['All', 'Action', 'Comedy', 'Drama', 'Romance', 'Thriller', 'Horror', 'Sci-Fi', 'Animation', 'Crime', 'Adventure', 'Fantasy', 'Mystery', 'Family'];
-  const LANGS = ['All', 'Hindi', 'Malayalam', 'Tamil', 'Telugu', 'Korean', 'English', 'Spanish', 'Japanese', 'Chinese', 'Filipino', 'Thai'];
 
   function matchesFilter(subject: MovieboxSubject): boolean {
     if (genreFilter && genreFilter !== 'All') {
       if (!(subject.genre ?? '').toLowerCase().includes(genreFilter.toLowerCase())) return false;
-    }
-    if (langFilter && langFilter !== 'All') {
-      // The shelves do not carry a language field, so the language is taken
-      // from the title's own tag (most films are filed as "Title [Hindi]"),
-      // with the country as a fallback for the films that have none.
-      const hay = `${subject.title ?? ''} ${subject.country ?? ''}`.toLowerCase();
-      if (!hay.includes(langFilter.toLowerCase())) return false;
     }
     return true;
   }
@@ -264,7 +255,6 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   if (filterTab !== tab) {
     setFilterTab(tab);
     setGenreFilter(null);
-    setLangFilter(null);
   }
 
   const shownTabs = tabs.filter((entry) => !emptyTabs.includes(entry.id));
@@ -395,23 +385,6 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
                   >
                     <Text style={[styles.chipText, (genreFilter === g || (g === 'All' && !genreFilter)) && styles.chipTextActive]}>
                       {g}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-                {LANGS.map((l) => (
-                  <Pressable
-                    key={`l-${l}`}
-                    onPress={() => setLangFilter(l === 'All' ? null : l)}
-                    style={({ focused, pressed }) => [
-                      styles.chip,
-                      (langFilter === l || (l === 'All' && !langFilter)) && styles.chipActive,
-                      (focused || pressed) && styles.chipFocused,
-                    ]}
-                  >
-                    <Text style={[styles.chipText, (langFilter === l || (l === 'All' && !langFilter)) && styles.chipTextActive]}>
-                      {l}
                     </Text>
                   </Pressable>
                 ))}
