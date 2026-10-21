@@ -1,4 +1,5 @@
 import type { VideoSource } from '../data/channels';
+import { stripEmoji } from '../data/text';
 import { fetchWithTimeout } from './http';
 
 export type Video = {
@@ -20,14 +21,8 @@ export function thumbnailUrl(videoId: string): string {
 }
 
 // Channels decorate titles with emoji (😂 🔥 🤣 ❤️); the app shows titles
-// without them. These ranges cover the picture emoji, plus the invisible
-// characters that join or colour them, but not letters of any script.
-const EMOJI =
-  /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}]/gu;
-
-export function stripEmoji(title: string): string {
-  return title.replace(EMOJI, '').replace(/\s{2,}/g, ' ').trim();
-}
+// without them.
+export { stripEmoji };
 
 function decode(text: string): string {
   return text

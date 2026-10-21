@@ -3,6 +3,7 @@
 // with "Signature invalid", so the signing lives here instead of being spread
 // over the app.
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { stripEmoji } from '../data/text';
 import { hexBytes, hmacMd5Base64, md5Hex, utf8Bytes } from './md5';
 
 // The API answers on several hosts, and one of them being down is no reason
@@ -113,7 +114,8 @@ function toSubject(raw: RawSubject): MovieboxSubject | null {
   if (!raw?.subjectId || !raw.title) return null;
   return {
     id: String(raw.subjectId),
-    title: raw.title,
+    // The service puts emoji in its titles too, so they are taken out.
+    title: stripEmoji(raw.title),
     // A film is one subject. Everything else is a series of episodes: the
     // usual one, and the short dramas, which the app counts separately.
     kind: (raw.subjectType ?? 1) === 1 ? 'movie' : 'series',
@@ -369,7 +371,8 @@ export async function browseShelves(tabId: number): Promise<MovieboxShelf[]> {
       .filter((s): s is MovieboxSubject => s !== null);
     // Only the rows that actually hold films are shown.
     if (subjects.length === 0) continue;
-    shelves.push({ title: item.title || 'Films', subjects });
+    // The headings come with emoji of their own ("💗Bollywood Love Stories").
+    shelves.push({ title: stripEmoji(item.title || 'Films'), subjects });
   }
   return shelves;
 }

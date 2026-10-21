@@ -1,6 +1,6 @@
 // The insides of the app's cards: a rounded picture with a duration chip and a
 // small play button, and the title with its details underneath.
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,6 +17,8 @@ type VideoCardProps = {
   live?: boolean;
   // Shown on the picture when there is none yet.
   placeholder?: string;
+  // The picture's height, for a grid of smaller cards.
+  height?: number;
 };
 
 export const VideoCardContent = memo(function VideoCardContent({
@@ -26,10 +28,11 @@ export const VideoCardContent = memo(function VideoCardContent({
   duration,
   live,
   placeholder,
+  height,
 }: VideoCardProps) {
   return (
     <View>
-      <View style={styles.picture}>
+      <View style={[styles.picture, height ? { height } : null]}>
         {image ? (
           <Image
             source={image}
@@ -146,7 +149,8 @@ export function Chip({ text }: { text: string }) {
 }
 
 export function LiveBadge() {
-  const pulse = useRef(new Animated.Value(1)).current;
+  // The value is made once, and not read out of a ref while drawing.
+  const pulse = useMemo(() => new Animated.Value(1), []);
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([

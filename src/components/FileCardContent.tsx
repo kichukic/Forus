@@ -5,10 +5,12 @@ import { VideoCardContent } from './Cards';
 type Props = {
   fileName: string;
   detail?: string; // e.g. the file size
+  // The picture's height, for a grid of smaller cards.
+  height?: number;
 };
 
 // Inside of a TorBox card: the title's artwork once found, with a tidy name on it.
-export function FileCardContent({ fileName, detail }: Props) {
+export function FileCardContent({ fileName, detail, height }: Props) {
   const [art, setArt] = useState<Artwork | null>(null);
 
   useEffect(() => {
@@ -30,6 +32,7 @@ export function FileCardContent({ fileName, detail }: Props) {
       placeholder={parsed.title}
       title={`${art ? art.title : parsed.title}${year ? ` (${year})` : ''}`}
       subtitle={detail}
+      height={height}
     />
   );
 }

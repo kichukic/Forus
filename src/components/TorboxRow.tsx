@@ -36,6 +36,9 @@ type State =
 
 type Card = { type: 'file'; file: TorboxFile } | { type: 'settings' };
 
+// How many cards the grid holds on a phone.
+const GRID_COLUMNS = 3;
+
 
 export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refreshControl }: Props) {
   const [state, setState] = useState<State>({ status: 'loading' });
@@ -47,7 +50,15 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
     setState({ status: 'loading' });
   }
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP)));
+  // A row holds cards of the usual size, so how many fit is worked out from
+  // the screen. The grid on a phone holds smaller ones, so three of them fit
+  // where two did.
+  const rowColumns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP)));
+  const columns = grid ? (isTV ? rowColumns : GRID_COLUMNS) : rowColumns;
+  // The card fills its share of the width, and keeps the shape of a picture.
+  const gridCardWidth = Math.max(90, Math.floor((width - GUTTER * 2) / columns) - CARD_GAP);
+  const cardWidth = grid && !isTV ? gridCardWidth : CARD_WIDTH;
+  const cardHeight = grid && !isTV ? Math.round((gridCardWidth * 9) / 16) : CARD_HEIGHT;
 
   useEffect(() => {
     let alive = true;
@@ -119,6 +130,7 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
       renderItem={({ item }) =>
         item.type === 'file' ? (
           <FocusCard
+            width={cardWidth}
             onPress={() =>
               onPlay({
                 kind: 'file',
@@ -129,12 +141,16 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
               })
             }
           >
-            <FileCardContent fileName={item.file.name} detail={formatSize(item.file.size)} />
+            <FileCardContent
+              fileName={item.file.name}
+              detail={formatSize(item.file.size)}
+              height={grid ? cardHeight : undefined}
+            />
           </FocusCard>
         ) : (
-          <FocusCard onPress={onOpenSettings}>
+          <FocusCard width={cardWidth} onPress={onOpenSettings}>
             <View>
-              <View style={styles.settingsTile}>
+              <View style={[styles.settingsTile, grid ? { height: cardHeight } : null]}>
                 <Ionicons name="settings-outline" size={sz(28, 34)} color={colors.accent} />
               </View>
               <Text style={styles.settingsText}>
