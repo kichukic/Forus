@@ -24,12 +24,17 @@ export function SkeletonLoader({ columns, cardWidth, label, icon = 'search', row
   const [appear] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(sweep, { toValue: 1, duration: SWEEP_MS, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-    );
-    loop.start();
     Animated.timing(appear, { toValue: 1, duration: 260, useNativeDriver: true }).start();
-    return () => loop.stop();
+    let stopped = false;
+    const runSweep = () => {
+      if (stopped) return;
+      sweep.setValue(0);
+      Animated.timing(sweep, { toValue: 1, duration: SWEEP_MS, easing: Easing.inOut(Easing.quad), useNativeDriver: true }).start(({ finished }) => {
+        if (finished && !stopped) runSweep();
+      });
+    };
+    runSweep();
+    return () => { stopped = true; };
   }, []);
 
   const pictureHeight = (cardWidth * 9) / 16;

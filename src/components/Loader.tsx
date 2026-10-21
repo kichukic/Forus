@@ -2,11 +2,10 @@
 // dots, with an optional icon that scans back and forth and a line saying what
 // is loading. The large one, for players, sits on a slowly pulsing glow.
 //
-// The dots only animate while the loader is actually doing work: a hint that
-// "more is coming" (still) is drawn once, and every loader pauses while the
-// app is in the background, so an idle screen never keeps redrawing.
+// The wave is restarted by hand in its onEnd callback, because Animated.loop
+// with useNativeDriver stalls on some RN builds and never moves.
 import { useEffect, useState, type ComponentProps } from 'react';
-import { Animated, Easing, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, AppState, Easing, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, sz } from '../theme';
 
@@ -30,23 +29,51 @@ export function Loader({ label, icon, size = 'small', color = colors.accent, sty
   useEffect(() => {
     Animated.timing(appear, { toValue: 1, duration: 260, useNativeDriver: true }).start();
 
-    const loops = [
-      Animated.loop(Animated.timing(wave, { toValue: 3, duration: WAVE_MS, easing: Easing.linear, useNativeDriver: true })),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(scan, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(scan, { toValue: 0, duration: 650, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ]),
-      ),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ]),
-      ),
-    ];
-    loops.forEach((l) => l.start());
-    return () => loops.forEach((l) => l.stop());
+    let stopped = false;
+    const runWave = () => {
+      if (stopped) return;
+      wave.setValue(0);
+      Animated.timing(wave, { toValue: 3, duration: WAVE_MS, easing: Easing.linear, useNativeDriver: true }).start(({ finished }) => {
+        if (finished && !stopped) runWave();
+      });
+    };
+    const runScan = () => {
+      if (stopped) return;
+      Animated.sequence([
+        Animated.timing(scan, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(scan, { toValue: 0, duration: 650, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]).start(({ finished }) => {
+        if (finished && !stopped) runScan();
+      });
+    };
+    const runPulse = () => {
+      if (stopped) return;
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]).start(({ finished }) => {
+        if (finished && !stopped) runPulse();
+      });
+    };
+    runWave();
+    runScan();
+    runPulse();
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        stopped = false;
+        runWave();
+        runScan();
+        runPulse();
+      } else {
+        stopped = true;
+      }
+    });
+
+    return () => {
+      stopped = true;
+      sub.remove();
+    };
   }, []);
 
   const dot = large ? sz(11, 14) : sz(6, 8);
