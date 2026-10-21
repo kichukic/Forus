@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  findNodeHandle,
   Linking,
   Pressable,
   StyleSheet,
@@ -72,6 +73,15 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const [list, setList] = useState<Source[]>([]);
   const [current, setCurrent] = useState<Source | null>(null);
   const [failed, setFailed] = useState(false);
+  // TV: the focusable surface over the video, and its native tag so remote
+  // Left/Right/Down can be pointed back at it.
+  const surface = useRef<View>(null);
+  const [surfaceTag, setSurfaceTag] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (!isTV) return;
+    const tag = findNodeHandle(surface.current);
+    if (tag) setSurfaceTag(tag);
+  }, [failed]);
   const failedRef = useRef(false);
   // The source that last reported 'ready'; the ready timeout leaves it alone.
   const readyId = useRef<string | null>(null);
@@ -262,7 +272,8 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
       if (lastKey.current?.type === evt.eventType && now - lastKey.current.at < KEY_REPEAT_MS) return;
       lastKey.current = { type: evt.eventType, at: now };
       switch (evt.eventType) {
-        case 'select':
+        // OK is handled by the focused surface over the video (see below), so
+        // only the remote's own play/pause button is caught here.
         case 'playPause':
           send('toggle');
           break;
@@ -386,13 +397,36 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
       )}
 
       {isTV && !failed && (
-        <Pressable
-          hasTVPreferredFocus
-          onPress={() => setPickerOpen(true)}
-          style={({ focused }) => [styles.sourcesButton, focused && styles.sourcesButtonFocused]}
-        >
-          <Text style={styles.sourcesButtonText}>Sources</Text>
-        </Pressable>
+        <>
+          {/* The remote starts on the video itself: OK plays and pauses, and
+              Up reaches the Sources button. */}
+          <Pressable
+            ref={surface}
+            hasTVPreferredFocus
+            // Left and Right skip (see the remote handler), so they mustn't
+            // also move focus off the video; only Up leaves it.
+            nextFocusLeft={surfaceTag}
+            nextFocusRight={surfaceTag}
+            nextFocusDown={surfaceTag}
+            onPress={() => {
+              send(paused ? 'play' : 'pause');
+              setShowHint(true);
+            }}
+            style={StyleSheet.absoluteFill}
+          >
+            {paused && (
+              <View style={styles.pausedBadge}>
+                <Ionicons name="pause" size={46} color="#fff" />
+              </View>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => setPickerOpen(true)}
+            style={({ focused }) => [styles.sourcesButton, focused && styles.sourcesButtonFocused]}
+          >
+            <Text style={styles.sourcesButtonText}>Sources</Text>
+          </Pressable>
+        </>
       )}
 
       {isTV && !failed && (showHint || paused) && (
@@ -465,6 +499,17 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'transparent',
     backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  pausedBadge: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: '42%',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(155,92,255,0.85)',
   },
   sourcesButtonFocused: { borderColor: colors.accent },
   sourcesButtonText: { color: colors.text, fontSize: sz(15, 18), fontWeight: '700' },

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Easing,
   FlatList,
@@ -20,6 +19,7 @@ import { searchVideos, type SearchResult } from '../api/youtube';
 import { FileCardContent } from '../components/FileCardContent';
 import { VideoCardContent } from '../components/Cards';
 import { FocusCard } from '../components/FocusCard';
+import { SearchLoader } from '../components/SearchLoader';
 import { MovieboxPoster, POSTER_WIDTH } from '../components/MovieboxPoster';
 import { ReleaseList } from '../components/ReleaseList';
 import { cleanTitle } from '../components/VideoRow';
@@ -229,7 +229,13 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
       </Animated.View>
       <Animated.Text style={[styles.note, { opacity: noteIn }]}>{text.note}</Animated.Text>
 
-      {loading && <ActivityIndicator color={colors.accent} style={styles.spinner} />}
+      {loading && (
+        <SearchLoader
+          columns={columns}
+          cardWidth={cardWidth}
+          label={scope === 'torbox' ? 'Searching your TorBox' : 'Searching the channels'}
+        />
+      )}
       {error && error.query === query.trim() && <Text style={styles.note}>{error.message}</Text>}
 
       {filmList.length === 0 &&

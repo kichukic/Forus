@@ -62,15 +62,18 @@ async function fetchFeed(query: string): Promise<Video[] | null> {
 // preloading while the home screen asks too) shares the first download.
 const inFlight = new Map<string, Promise<Video[]>>();
 
-// The "UULF" uploads playlist holds a channel's long-form videos only, which
-// keeps Shorts out of the rows; the plain channel feed is the fallback. Both
-// RSS feeds often fail (YouTube answers 404 for minutes at a time), so the last
-// resort is the same uploads list from YouTube's browse endpoint.
+// A channel's latest long-form uploads (the "UULF" playlist, which leaves out
+// Shorts). YouTube's browse endpoint is the main source: it is up to date to
+// the minute. The RSS feeds are the fallback; they lag behind and often fail
+// outright (YouTube answers 404 for hours at a time).
 async function fetchChannel(channelId: string): Promise<Video[]> {
-  let videos =
-    (await fetchFeed(`playlist_id=UULF${channelId.slice(2)}`).catch(() => null)) ??
-    (await fetchFeed(`channel_id=${channelId}`).catch(() => null));
-  if (!videos?.length) videos = await browseLatest(channelId).catch(() => []);
+  let videos = await browseLatest(channelId).catch(() => [] as Video[]);
+  if (!videos.length) {
+    videos =
+      (await fetchFeed(`playlist_id=UULF${channelId.slice(2)}`).catch(() => null)) ??
+      (await fetchFeed(`channel_id=${channelId}`).catch(() => null)) ??
+      [];
+  }
   // Channels sometimes list the same upload twice.
   return videos.filter((v, i, all) => all.findIndex((o) => o.id === v.id) === i);
 }

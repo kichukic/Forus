@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiKey } from '../api/torbox';
 import { LIVE_NEWS, MOVIES, SHOWS } from '../data/channels';
-import { GLOW, GUTTER, RADIUS, colors, sz } from '../theme';
+import { GLOW, GUTTER, RADIUS, colors, isTV, sz } from '../theme';
 
 type Props = {
   // Bumped when the TorBox key changes, so the status here updates.
@@ -35,6 +35,7 @@ export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory }: 
             title="TorBox"
             detail={connected === null ? '…' : connected ? 'Connected' : 'Not connected'}
             onPress={onOpenTorbox}
+            first
           />
         </Group>
 
@@ -86,11 +87,14 @@ function Row({
   title,
   detail,
   onPress,
+  first,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   detail?: string;
   onPress?: () => void;
+  // TV: where the remote starts on this screen.
+  first?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -98,6 +102,7 @@ function Row({
       onPress={onPress}
       disabled={!onPress}
       focusable={!!onPress}
+      hasTVPreferredFocus={isTV && first}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       style={({ pressed }) => [styles.row, (pressed || focused) && styles.rowActive]}

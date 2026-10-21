@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  AppState,
   Easing,
   FlatList,
   Pressable,
@@ -24,6 +25,7 @@ import type { TorrentOption } from '../api/torrents';
 import { LiveTileContent, VideoCardContent } from '../components/Cards';
 import { FileCardContent } from '../components/FileCardContent';
 import { FocusCard } from '../components/FocusCard';
+import { FocusRow } from '../components/FocusRow';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
@@ -40,6 +42,8 @@ import type { Playable } from '../types';
 
 const THEMES_AT_START = 3;
 const THEMES_PER_STEP = 3;
+// Back in the app after this long, the rows reload by themselves.
+const STALE_AFTER_MS = 10 * 60 * 1000;
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -62,6 +66,11 @@ const ALL_CHANNELS = [...SHOWS, ...MOVIES];
 // Where each tab was left. Only the tab in front is mounted, so the place is
 // kept here instead of in the tab itself.
 const scrollPositions = new Map<string, number>();
+// The page of the tab in front, for the TV Back button to scroll to the top.
+const activePage: { current: ScrollView | null } = { current: null };
+// TV: how long a tab must stay highlighted before it opens, so moving across
+// several tabs doesn't load each one on the way.
+const TAB_FOCUS_DELAY_MS = 350;
 // The news channels' recorded uploads, one row each on the News tab.
 const NEWS_SOURCES = LIVE_NEWS.map(({ name, channelId }) => ({ name, channelId }));
 
@@ -78,6 +87,18 @@ type Props = {
   onOpenMoviebox: (subject: MovieboxSubject) => void;
   // Sends a release found by searching to TorBox.
   onSendRelease: (option: TorrentOption) => void;
+  // TV has no bottom bar, so these sit in the header there.
+  onOpenHistory: () => void;
+  onOpenSettings: () => void;
+  ref?: Ref<HomeHandle>;
+};
+
+export type HomeHandle = {
+  /**
+   * The TV Back button: scrolls to the top and puts focus on the tabs, or goes
+   * back to the All tab. False when already there, so Back can leave the app.
+   */
+  goTop: () => boolean;
 };
 
 export function HomeScreen({
@@ -89,6 +110,9 @@ export function HomeScreen({
   onOpenMovie,
   onOpenMoviebox,
   onSendRelease,
+  onOpenHistory,
+  onOpenSettings,
+  ref,
 }: Props) {
   // Keeps the header clear of a phone's status bar and notch. Zero on TVs.
   const insets = useSafeAreaInsets();
@@ -105,6 +129,24 @@ export function HomeScreen({
     direction.current = TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1;
     setTab(t);
   };
+  // Bumped to hand the remote's focus back to the tab bar.
+  const [focusTabs, setFocusTabs] = useState(0);
+
+  useImperativeHandle(ref, () => ({
+    goTop: () => {
+      if ((scrollPositions.get(tab) ?? 0) > 40) {
+        activePage.current?.scrollTo({ y: 0, animated: true });
+        scrollPositions.set(tab, 0);
+      } else if (tab !== 'all') {
+        open('all');
+      } else {
+        return false;
+      }
+      setFocusTabs((n) => n + 1);
+      return true;
+    },
+  }));
+
 
   // The purple pill behind the tabs glides to the selected one, taking its
   // width, instead of jumping.
@@ -151,6 +193,24 @@ export function HomeScreen({
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 600);
   };
+
+  // Coming back to the app after a while reloads the rows by itself, so what's
+  // new shows up without a pull to refresh.
+  useEffect(() => {
+    let leftAt = 0;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') {
+        leftAt = leftAt || Date.now();
+      } else {
+        if (leftAt && Date.now() - leftAt > STALE_AFTER_MS) {
+          clearVideoCache();
+          setRefreshKey((k) => k + 1);
+        }
+        leftAt = 0;
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   const refreshControl = isTV ? undefined : (
     <RefreshControl
@@ -206,19 +266,26 @@ export function HomeScreen({
           </View>
           {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
           <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' ? 'all' : tab)} />
+          {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
+          {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
         </View>
-        <ScrollView ref={tabBar} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-          <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]} />
-          {TABS.map((t) => (
-            <TabButton
-              key={t.id}
-              label={t.label}
-              active={tab === t.id}
-              onPress={() => open(t.id)}
-              onLayout={(x, width) => onTabLayout(t.id, x, width)}
-            />
-          ))}
-        </ScrollView>
+        {/* On TV the row remembers the last tab, so Up from the page lands on it. */}
+        <FocusRow>
+          <ScrollView ref={tabBar} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+            <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]} />
+            {TABS.map((t) => (
+              <TabButton
+                // Remounting the active tab is what hands it the remote's focus.
+                key={tab === t.id ? `${t.id}-${focusTabs}` : t.id}
+                label={t.label}
+                active={tab === t.id}
+                takeFocus={focusTabs > 0 && tab === t.id}
+                onPress={() => open(t.id)}
+                onLayout={(x, width) => onTabLayout(t.id, x, width)}
+              />
+            ))}
+          </ScrollView>
+        </FocusRow>
       </View>
 
       {panel(
@@ -232,7 +299,14 @@ export function HomeScreen({
         >
           {/* The news channels lead the page: they are what's on right now. */}
           {liveRow}
-          <HeroCarousel key={`hero-all-${refreshKey}`} sources={ALL_CHANNELS} label="New today" onPlay={playVideo} />
+          <HeroCarousel
+            key={`hero-all-${refreshKey}`}
+            sources={ALL_CHANNELS}
+            label="New today"
+            onPlay={playVideo}
+            // On TV the remote starts on Watch Now, until Back sends it to the tabs.
+            takeFocus={focusTabs === 0}
+          />
 
           {/* A row of films from MovieBox, so the page holds everything. */}
           <MovieboxRow
@@ -371,6 +445,12 @@ type TabScrollProps = {
 function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay, tabKey }: TabScrollProps) {
   const [themeCount, setThemeCount] = useState(THEMES_AT_START);
   const scroll = useRef<ScrollView>(null);
+  useEffect(() => {
+    activePage.current = scroll.current;
+    return () => {
+      if (activePage.current === scroll.current) activePage.current = null;
+    };
+  }, []);
   // Where this tab was left, put back once the rows have their height.
   const restore = useRef(tabKey ? (scrollPositions.get(tabKey) ?? 0) : 0);
 
@@ -442,20 +522,31 @@ function SlideIn({ direction, children }: { direction: number; children: ReactNo
 function TabButton({
   label,
   active,
+  takeFocus,
   onPress,
   onLayout,
 }: {
   label: string;
   active: boolean;
+  takeFocus: boolean;
   onPress: () => void;
   onLayout: (x: number, width: number) => void;
 }) {
   const [focused, setFocused] = useState(false);
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   return (
     <Pressable
       onPress={onPress}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      // On TV a tab that stays highlighted opens without pressing OK.
+      onFocus={() => {
+        setFocused(true);
+        if (isTV && !active) pending.current = setTimeout(onPress, TAB_FOCUS_DELAY_MS);
+      }}
+      onBlur={() => {
+        setFocused(false);
+        if (pending.current) clearTimeout(pending.current);
+      }}
+      hasTVPreferredFocus={isTV && takeFocus}
       onLayout={(e) => onLayout(e.nativeEvent.layout.x, e.nativeEvent.layout.width)}
       // The selected tab's purple comes from the sliding pill behind it.
       style={[styles.tab, focused && styles.tabFocused]}

@@ -52,6 +52,8 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
           renderItem={({ item, index }) => (
             <FocusCard
               width={cardWidth}
+              // TV: the remote starts on the most recent item.
+              preferredFocus={index === 0}
               onPress={() => onPlay(item)}
               style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP, marginBottom: 18 }}
             >

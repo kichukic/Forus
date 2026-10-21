@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { preloadHome, type PreloadStep } from './src/api/preload';
+import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
 import { AnimatedSplash } from './src/components/AnimatedSplash';
 import { BottomNav, BOTTOM_NAV_HEIGHT, type NavId } from './src/components/BottomNav';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -15,7 +15,7 @@ import type { TorrentOption } from './src/api/torrents';
 import { FatalErrorScreen } from './src/screens/FatalErrorScreen';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
-import { HomeScreen } from './src/screens/HomeScreen';
+import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
 import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
 import { MovieboxPlayerScreen } from './src/screens/MovieboxPlayerScreen';
 import { MovieScreen } from './src/screens/MovieScreen';
@@ -37,9 +37,12 @@ installErrorHandler();
 
 // The longest the splash waits for the home screen's data.
 const PRELOAD_TIMEOUT_MS = 8000;
+// Fresh posters replace the saved ones once there are enough to fill the wall.
+const MIN_FRESH_POSTERS = 16;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
+  const home = useRef<HomeHandle>(null);
   // The opening animation. It stays until the home screen's data has loaded
   // (or loading gave up), so the home screen opens already filled in.
   const [splash, setSplash] = useState(true);
@@ -48,6 +51,8 @@ export default function App() {
     progress: 0,
     done: false,
   });
+  // The splash's poster wall: last launch's posters until enough fresh ones arrive.
+  const [savedPosters, setSavedPosters] = useState<string[]>([]);
   // Where the TorBox screen goes back to.
   const [torboxFrom, setTorboxFrom] = useState<NavId>('home');
   const [playing, setPlaying] = useState<Playable | null>(null);
@@ -79,6 +84,7 @@ export default function App() {
     };
     // A slow or missing connection mustn't keep the splash up for ever.
     const giveUp = setTimeout(finish, PRELOAD_TIMEOUT_MS);
+    loadSavedPosters().then(setSavedPosters);
     preloadHome((step) => !finished && setPreload({ ...step, done: false }))
       .catch(() => {})
       .finally(finish);
@@ -121,6 +127,9 @@ export default function App() {
       } else if (screen === 'torbox') closeTorbox();
       else if (screen !== 'home') setScreen('home');
       else if (playing) closePlayer();
+      // TV: Back first goes to the top of the page and the tabs, then to the
+      // All tab, and only then leaves the app.
+      else if (isTV && home.current?.goTop()) return true;
       else return false;
       return true;
     });
@@ -151,6 +160,9 @@ export default function App() {
             onOpenMovie={setMovie}
             onOpenMoviebox={setMoviebox}
             onSendRelease={setSending}
+            onOpenHistory={() => setScreen('history')}
+            onOpenSettings={() => setScreen('settings')}
+            ref={home}
           />
         </View>
 
@@ -270,6 +282,7 @@ export default function App() {
             ready={preload.done}
             progress={preload.progress}
             status={preload.label}
+            posters={(preload.posters?.length ?? 0) >= MIN_FRESH_POSTERS ? preload.posters! : savedPosters}
             onDone={() => setSplash(false)}
           />
         )}
