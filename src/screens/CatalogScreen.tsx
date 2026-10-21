@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -43,6 +44,8 @@ const LIST_PERF = {
   maxToRenderPerBatch: isTV ? 12 : 8,
   windowSize: 7,
   updateCellsBatchingPeriod: 60,
+  // Android keeps what it draws out of view; letting go of it saves memory.
+  removeClippedSubviews: Platform.OS === 'android',
 };
 
 export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl }: Props) {

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -109,6 +110,8 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
       maxToRenderPerBatch={isTV ? 12 : 8}
       windowSize={7}
       updateCellsBatchingPeriod={60}
+      // Android keeps what it draws out of view; letting go of it saves memory.
+      removeClippedSubviews={Platform.OS === 'android'}
       data={cards}
       keyExtractor={(c) => (c.type === 'file' ? `${c.file.source}:${c.file.itemId}:${c.file.fileId}` : 'settings')}
       showsHorizontalScrollIndicator={false}

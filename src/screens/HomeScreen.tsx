@@ -1,4 +1,4 @@
-import { useState, type ReactElement, type ReactNode } from 'react';
+import { useRef, useState, type ReactElement, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -50,6 +50,9 @@ const MOVIE_THEMES = THEMES.filter((t) => t.kind === 'movie');
 const SHOW_THEMES = THEMES.filter((t) => t.kind === 'show');
 const HINDI_THEMES = THEMES.filter((t) => t.kind === 'hindi');
 const ALL_CHANNELS = [...SHOWS, ...MOVIES];
+// Where each tab was left. Only the tab in front is mounted, so the place is
+// kept here instead of in the tab itself.
+const scrollPositions = new Map<string, number>();
 // The news channels' recorded uploads, one row each on the News tab.
 const NEWS_SOURCES = LIVE_NEWS.map(({ name, channelId }) => ({ name, channelId }));
 
@@ -157,7 +160,7 @@ export function HomeScreen({
 
       {panel(
         'all',
-        <TabScroll refreshControl={refreshControl}>
+        <TabScroll refreshControl={refreshControl} tabKey="all">
           <HeroCarousel key={`hero-all-${refreshKey}`} sources={ALL_CHANNELS} label="New today" onPlay={playVideo} />
 
           {history.length > 0 && (
@@ -185,7 +188,7 @@ export function HomeScreen({
 
       {panel(
         'movies',
-        <TabScroll refreshControl={refreshControl} themes={MOVIE_THEMES} refreshKey={refreshKey} onPlay={playVideo}>
+        <TabScroll refreshControl={refreshControl} themes={MOVIE_THEMES} tabKey="movies" refreshKey={refreshKey} onPlay={playVideo}>
           <HeroCarousel key={`hero-movies-${refreshKey}`} sources={MOVIES} label="Trending movie" onPlay={playVideo} />
           {MOVIES.map((source) => (
             <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
@@ -195,7 +198,7 @@ export function HomeScreen({
 
       {panel(
         'shows',
-        <TabScroll refreshControl={refreshControl} themes={SHOW_THEMES} refreshKey={refreshKey} onPlay={playVideo}>
+        <TabScroll refreshControl={refreshControl} themes={SHOW_THEMES} tabKey="shows" refreshKey={refreshKey} onPlay={playVideo}>
           <HeroCarousel key={`hero-shows-${refreshKey}`} sources={SHOWS} label="New episode" onPlay={playVideo} />
           {SHOWS.map((source) => (
             <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
@@ -205,7 +208,7 @@ export function HomeScreen({
 
       {panel(
         'disha',
-        <TabScroll refreshControl={refreshControl} themes={HINDI_THEMES} refreshKey={refreshKey} onPlay={playVideo}>
+        <TabScroll refreshControl={refreshControl} themes={HINDI_THEMES} tabKey="disha" refreshKey={refreshKey} onPlay={playVideo}>
           <HeroCarousel key={`hero-disha-${refreshKey}`} sources={HINDI_MOVIES} label="Picked for Disha ♥" onPlay={playVideo} />
           {HINDI_MOVIES.map((source) => (
             <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
@@ -222,7 +225,7 @@ export function HomeScreen({
 
       {panel(
         'news',
-        <TabScroll refreshControl={refreshControl}>
+        <TabScroll refreshControl={refreshControl} tabKey="news">
           {liveRow}
           {NEWS_SOURCES.map((source) => (
             <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
@@ -282,7 +285,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
   const restore = useRef(tabKey ? (scrollPositions.get(tabKey) ?? 0) : 0);
 
   const onScroll = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = e.nativeEvent.contentOffset.y;
+    const y = e.contentOffset.y;
     if (tabKey) scrollPositions.set(tabKey, y);
     // The place to come back to is kept until it is actually reached.
     if (restore.current > 0 && y >= restore.current - 4) restore.current = 0;
