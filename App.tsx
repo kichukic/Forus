@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
 import { addToHistory, clearHistory, loadHistory, playableKey } from './src/data/history';
+import { addTransfer, loadTransfers, playableFrom } from './src/data/transfers';
 import type { CatalogMovie } from './src/api/catalog';
 import type { MovieboxSubject } from './src/api/moviebox';
 import type { TorrentOption } from './src/api/torrents';
@@ -21,7 +22,8 @@ import { MovieboxPlayerScreen } from './src/screens/MovieboxPlayerScreen';
 import { MovieScreen } from './src/screens/MovieScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
-import { SendScreen } from './src/screens/SendScreen';
+import { TransferBar } from './src/components/TransferBar';
+import { TransferToast } from './src/components/TransferToast';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TorboxSetupScreen } from './src/screens/TorboxSetupScreen';
 import { colors, isTV } from './src/theme';
@@ -66,13 +68,13 @@ export default function App() {
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
   // The film open from MovieBox, in the same way.
   const [moviebox, setMoviebox] = useState<MovieboxSubject | null>(null);
-  // A release found by searching for its name, on its way to TorBox.
-  const [sending, setSending] = useState<TorrentOption | null>(null);
+  // Transfers now run in the background, so there is no full-screen sender.
   // An error that nothing else caught. The app stays open and shows it.
   const [crash, setCrash] = useState<Error | null>(null);
 
   useEffect(() => {
     loadHistory().then(setHistory);
+    loadTransfers();
   }, []);
 
   useEffect(() => {
@@ -110,16 +112,15 @@ export default function App() {
     setScreen('torbox');
   };
 
-  const closeTorbox = () => {
+  const closeTorbox = useCallback(() => {
     setTorboxVersion((v) => v + 1);
     setScreen(torboxFrom);
-  };
+  }, [torboxFrom]);
 
   // Back works like YouTube's: a full player shrinks first, then screens close.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (sending) setSending(null);
-      else if (moviebox) setMoviebox(null);
+      if (moviebox) setMoviebox(null);
       else if (movie) setMovie(null);
       else if (playing && !mini) {
         if (isTV) closePlayer();
@@ -134,11 +135,11 @@ export default function App() {
       return true;
     });
     return () => sub.remove();
-  }, [playing, mini, screen, torboxFrom, movie, moviebox, sending]);
+  }, [playing, mini, screen, torboxFrom, movie, moviebox, closeTorbox]);
 
   // On TV nothing behind a player may keep remote focus, so it's hidden.
-  const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!sending);
-  const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox && !sending;
+  const hideBackground = isTV && (!!playing || !!movie || !!moviebox);
+  const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox;
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
 
   return (
@@ -159,7 +160,7 @@ export default function App() {
             }}
             onOpenMovie={setMovie}
             onOpenMoviebox={setMoviebox}
-            onSendRelease={setSending}
+            onSendRelease={(option) => addTransfer(option)}
             onOpenHistory={() => setScreen('history')}
             onOpenSettings={() => setScreen('settings')}
             ref={home}
@@ -173,7 +174,7 @@ export default function App() {
               scope={searchScope}
               onPlay={play}
               onOpenMoviebox={setMoviebox}
-              onSendRelease={setSending}
+              onSendRelease={(option) => addTransfer(option)}
             />
           </View>
         )}
@@ -200,6 +201,23 @@ export default function App() {
           </View>
         )}
 
+        <TransferToast
+          onPlay={(transfer) => {
+            const item = playableFrom(transfer);
+            if (item) play(item);
+          }}
+          onOpenTorbox={openTorbox}
+        />
+
+        {showNav && (
+          <TransferBar
+            onOpen={() => {
+              setScreen('home');
+              home.current?.openTab('torbox');
+            }}
+          />
+        )}
+
         {showNav && (
           <BottomNav
             active={screen as NavId}
@@ -209,22 +227,6 @@ export default function App() {
               setScreen(id);
             }}
           />
-        )}
-
-        {sending && (
-          <View style={StyleSheet.absoluteFill}>
-            <SendScreen
-              key={sending.hash}
-              option={sending}
-              onClose={() => setSending(null)}
-              onPlay={play}
-              onOpenTorbox={() => {
-                // The settings screen sits below this one, so this is closed.
-                setSending(null);
-                openTorbox();
-              }}
-            />
-          </View>
         )}
 
         {movie && (
@@ -253,7 +255,7 @@ export default function App() {
               onSendRelease={(option) => {
                 // The film screen is below this one, so it is closed first.
                 setMoviebox(null);
-                setSending(option);
+                addTransfer(option);
               }}
             />
           </View>

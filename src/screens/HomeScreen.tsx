@@ -38,6 +38,7 @@ import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
 import { GLOW, GUTTER, colors, isTV, sz } from '../theme';
 import { Loader } from '../components/Loader';
+import { TransferList } from '../components/TransferList';
 import type { Playable } from '../types';
 
 const THEMES_AT_START = 3;
@@ -103,6 +104,8 @@ export type HomeHandle = {
    * back to the All tab. False when already there, so Back can leave the app.
    */
   goTop: () => boolean;
+  /** Opens one of the tabs by name, used by the transfer bar. */
+  openTab: (id: Tab) => void;
 };
 
 export function HomeScreen({
@@ -153,6 +156,10 @@ export function HomeScreen({
       }
       setFocusTabs((n) => n + 1);
       return true;
+    },
+    openTab: (id) => {
+      setTab(id);
+      activePage.current?.scrollTo({ y: 0, animated: true });
     },
   }));
 
@@ -407,6 +414,7 @@ export function HomeScreen({
           refreshControl={refreshControl}
           header={
             <View style={styles.row}>
+              <TransferList onPlay={onPlay} />
               <SectionHeader title="My TorBox" subtitle="Your own cloud files, played right here" />
               <TorboxRow
                 version={torboxVersion + refreshKey}
