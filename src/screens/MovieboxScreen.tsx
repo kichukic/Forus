@@ -103,8 +103,8 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   const [reveal, setReveal] = useState({ tab: -1, count: SHELVES_AT_START });
   // The footer hint only animates while it is actually on screen.
   const [nearBottom, setNearBottom] = useState(false);
-  const [viewportH, setViewportH] = useState(0);
-  const [contentH, setContentH] = useState(0);
+  const viewportH = useRef(0);
+  const contentH = useRef(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -370,10 +370,13 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}
         {...SHELF_PERF}
-        onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
+        onLayout={(e) => {
+          viewportH.current = e.nativeEvent.layout.height;
+          setNearBottom((prev) => prev || contentH.current <= viewportH.current);
+        }}
         onContentSizeChange={(_, h) => {
-          setContentH(h);
-          setNearBottom((prev) => prev || h <= viewportH);
+          contentH.current = h;
+          setNearBottom((prev) => prev || h <= viewportH.current);
         }}
         onScroll={growRows}
         scrollEventThrottle={200}
