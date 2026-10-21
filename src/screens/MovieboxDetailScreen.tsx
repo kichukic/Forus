@@ -130,6 +130,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
         season: 0,
         episode: 0,
         title: subject.title,
+        poster: subject.poster,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "This film can't be played.");
@@ -145,6 +146,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
       season: episode.season,
       episode: episode.episode,
       title: `${subject.title} · Episode ${episode.episode}`,
+      poster: subject.poster,
     });
   };
 
