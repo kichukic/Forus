@@ -1,5 +1,6 @@
 import type { VideoSource } from '../data/channels';
 import { stripEmoji } from '../data/text';
+import { forgetRows } from '../data/rowMemory';
 import { fetchWithTimeout } from './http';
 
 export type Video = {
@@ -149,6 +150,8 @@ export async function loadVideos(source: VideoSource): Promise<Video[]> {
 export function clearVideoCache() {
   cache.clear();
   pageCache.clear();
+  searchCache.clear();
+  forgetRows();
 }
 
 export type VideoPage = { videos: Video[]; continuation?: string };
@@ -321,11 +324,41 @@ export async function searchVideos(
 
 // The same search a batch at a time, for rows that keep loading as they are
 // scrolled. Pass the previous batch's continuation for the next one.
+// Searches answered lately, so a themed row built again doesn't search again.
+const searchCache = new Map<string, { at: number; page: SearchPage }>();
+// The same words searched within different sets of channels are different
+// searches, so each set gets a number for the key.
+const channelSetIds = new WeakMap<Map<string, string>, number>();
+let channelSets = 0;
+function channelSetId(trusted: Map<string, string>): number {
+  let id = channelSetIds.get(trusted);
+  if (id === undefined) {
+    id = ++channelSets;
+    channelSetIds.set(trusted, id);
+  }
+  return id;
+}
+
 export async function searchVideoPage(
   query: string,
   trusted: Map<string, string>,
   after?: string,
   maxPages = MAX_PAGES,
+): Promise<SearchPage> {
+  const key = `${channelSetId(trusted)}\n${query}\n${after ?? ''}\n${maxPages}`;
+  const hit = searchCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.page;
+  const page = await searchPages(query, trusted, after, maxPages);
+  // An empty answer may be a passing failure, so it isn't kept.
+  if (page.results.length) searchCache.set(key, { at: Date.now(), page });
+  return page;
+}
+
+async function searchPages(
+  query: string,
+  trusted: Map<string, string>,
+  after: string | undefined,
+  maxPages: number,
 ): Promise<SearchPage> {
   const results: SearchResult[] = [];
   let continuation = after;

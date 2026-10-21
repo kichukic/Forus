@@ -2,13 +2,14 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { loadVideoPage, loadVideos, searchVideoPage, stripEmoji, type Video } from '../api/youtube';
 import { FULL_MOVIE, MOVIES, SHOWS, TRUSTED_CHANNELS, type VideoSource } from '../data/channels';
+import { recallRow, rememberRow } from '../data/rowMemory';
 import type { Theme } from '../data/themes';
-import { CARD_GAP, CARD_WIDTH, GUTTER, ROW_PAD, colors, sz } from '../theme';
+import { CARD_GAP, CARD_WIDTH, GUTTER, ROW_PAD, colors, isTV, sz } from '../theme';
 import { VideoCardContent } from './Cards';
 import { FocusCard } from './FocusCard';
 import { FocusRow } from './FocusRow';
 import { rowListProps } from './rowList';
-import { SectionHeader, SkeletonRow } from './Section';
+import { SectionHeader } from './Section';
 import { SkeletonLoader } from './SkeletonLoader';
 
 type Props = {
@@ -19,20 +20,28 @@ type Props = {
 // A channel's row. It starts with the newest uploads and keeps loading older
 // ones as it is scrolled sideways, for as long as the channel has any.
 export const VideoRow = memo(function VideoRow({ source, onPlay }: Props) {
-  const [videos, setVideos] = useState<Video[] | null>(null);
+  const memoryKey = `channel:${source.channelId}`;
+  // A row built again picks up where it was: same cards, same place to go on.
+  const [recalled] = useState(() => recallRow<Video>(memoryKey));
+  const [videos, setVideos] = useState<Video[] | null>(recalled?.videos ?? null);
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const continuation = useRef<string | undefined>(undefined);
+  const continuation = useRef<string | undefined>(recalled?.continuation);
   const busy = useRef(false);
 
   useEffect(() => {
+    if (videos) rememberRow(memoryKey, { videos, continuation: continuation.current });
+  }, [videos, memoryKey]);
+
+  useEffect(() => {
+    if (recalled) return;
     loadVideoPage(source)
       .then((page) => {
         continuation.current = page.continuation;
         setVideos(page.videos);
       })
       .catch(() => setFailed(true));
-  }, [source]);
+  }, [source, recalled]);
 
   const loadMore = () => {
     if (busy.current || !continuation.current) return;
@@ -70,21 +79,28 @@ const NEW_ROW_SIZE = 24;
 const NEW_ROW_SOURCES = [...SHOWS, ...MOVIES];
 
 type ChannelVideo = Video & { channel: string };
+type NewRowMemory = { pool: ChannelVideo[]; older: (string | undefined | null)[] };
 
 // The newest uploads across every show and movie channel, newest first. It
 // shows a batch at a time as it is scrolled, and once the newest are all out
 // it goes on to older uploads, taking turns between the channels.
 export const NewRow = memo(function NewRow({ onPlay }: { onPlay: (video: Video) => void }) {
-  const [videos, setVideos] = useState<ChannelVideo[] | null>(null);
+  const [recalled] = useState(() => recallRow<ChannelVideo, NewRowMemory>('new'));
+  const [videos, setVideos] = useState<ChannelVideo[] | null>(recalled?.videos ?? null);
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   // Everything found so far; the row shows the front of it.
-  const pool = useRef<ChannelVideo[]>([]);
+  const pool = useRef<ChannelVideo[]>(recalled?.extra?.pool ?? []);
   // Where each channel's older uploads carry on; null once a channel has no more.
-  const older = useRef<(string | undefined | null)[]>(NEW_ROW_SOURCES.map(() => undefined));
+  const older = useRef<(string | undefined | null)[]>(recalled?.extra?.older ?? NEW_ROW_SOURCES.map(() => undefined));
   const busy = useRef(false);
 
   useEffect(() => {
+    if (videos) rememberRow<ChannelVideo, NewRowMemory>('new', { videos, extra: { pool: pool.current, older: older.current } });
+  }, [videos]);
+
+  useEffect(() => {
+    if (recalled) return;
     Promise.all(NEW_ROW_SOURCES.map((s) => loadVideos(s).catch(() => [] as Video[])))
       .then((lists) => {
         const all = lists.flatMap((list, i) => list.map((v) => ({ ...v, channel: NEW_ROW_SOURCES[i].name })));
@@ -94,7 +110,7 @@ export const NewRow = memo(function NewRow({ onPlay }: { onPlay: (video: Video) 
         setVideos(all.slice(0, NEW_ROW_SIZE));
       })
       .catch(() => setFailed(true));
-  }, []);
+  }, [recalled]);
 
   const loadMore = () => {
     const shown = videos?.length ?? 0;
@@ -159,16 +175,23 @@ const MIN_THEME_RESULTS = 3;
 // reading further into the search as it is scrolled. It disappears if the
 // search finds too little.
 export const ThemeRow = memo(function ThemeRow({ theme, onPlay }: { theme: Theme; onPlay: (video: Video) => void }) {
-  const [videos, setVideos] = useState<Video[] | null>(null);
+  const memoryKey = `theme:${theme.query}`;
+  const [recalled] = useState(() => recallRow<Video>(memoryKey));
+  const [videos, setVideos] = useState<Video[] | null>(recalled?.videos ?? null);
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const continuation = useRef<string | undefined>(undefined);
+  const continuation = useRef<string | undefined>(recalled?.continuation);
   const busy = useRef(false);
   // Film themes would otherwise pick up the channels' scenes and trailers.
   const moviesOnly = FULL_MOVIE.test(theme.query);
   const keep = (r: Video & { live: boolean }) => !r.live && (!moviesOnly || FULL_MOVIE.test(r.title));
 
   useEffect(() => {
+    if (videos) rememberRow(memoryKey, { videos, continuation: continuation.current });
+  }, [videos, memoryKey]);
+
+  useEffect(() => {
+    if (recalled) return;
     searchVideoPage(theme.query, TRUSTED_CHANNELS)
       .then((page) => {
         continuation.current = page.continuation;
@@ -176,7 +199,7 @@ export const ThemeRow = memo(function ThemeRow({ theme, onPlay }: { theme: Theme
       })
       .catch(() => setFailed(true));
     // keep only depends on the theme.
-  }, [theme]);
+  }, [theme, recalled]);
 
   const loadMore = () => {
     if (busy.current || !continuation.current) return;
@@ -229,7 +252,7 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
       {failed ? (
         <Text style={styles.note}>{"Couldn't load. Check the internet connection."}</Text>
       ) : !videos ? (
-        <SkeletonRow />
+        <SkeletonLoader columns={isTV ? 6 : 3} cardWidth={CARD_WIDTH} rows={1} style={styles.loading} />
       ) : videos.length === 0 ? (
         <Text style={styles.note}>Nothing new right now.</Text>
       ) : (
@@ -278,5 +301,7 @@ const styles = StyleSheet.create({
   row: { marginBottom: sz(24, 30) },
   list: { paddingHorizontal: GUTTER, paddingVertical: ROW_PAD },
   note: { color: colors.muted, fontSize: sz(14, 16), marginLeft: GUTTER },
+  // The cards run off the right edge, as a real row's do.
+  loading: { paddingLeft: GUTTER, paddingVertical: ROW_PAD, overflow: 'hidden' },
   more: { alignSelf: 'flex-start', marginLeft: CARD_GAP },
 });

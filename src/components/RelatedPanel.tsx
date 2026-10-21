@@ -13,7 +13,9 @@ import { Image } from 'expo-image';
 import { findArtwork } from '../api/artwork';
 import { getRelated, type RelatedCard } from '../api/related';
 import { colors } from '../theme';
+import { pictureFade, pictureShown, pictureWasShown } from './Cards';
 import { Loader } from './Loader';
+import { Shimmer } from './Shimmer';
 import type { Playable } from '../types';
 
 type Props = {
@@ -89,14 +91,16 @@ function RelatedRow({ card, onPress }: { card: RelatedCard; onPress: () => void 
 }
 
 function Thumbnail({ card }: { card: RelatedCard }) {
-  const [art, setArt] = useState<string | null>(null);
+  // Undefined while a file's artwork is still being looked up.
+  const [art, setArt] = useState<string | null | undefined>(undefined);
+  const [settled, setSettled] = useState<string | null>(null);
 
   useEffect(() => {
     if (!card.fileName) return;
     let cancelled = false;
     findArtwork(card.fileName)
       .then((a) => !cancelled && setArt(a?.image ?? null))
-      .catch(() => {});
+      .catch(() => !cancelled && setArt(null));
     return () => {
       cancelled = true;
     };
@@ -109,11 +113,28 @@ function Thumbnail({ card }: { card: RelatedCard }) {
       </View>
     );
   }
-  const uri = card.thumbnail ?? art;
-  return uri ? (
-    <Image source={uri} style={styles.thumb} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={uri} />
-  ) : (
-    <View style={[styles.thumb, styles.blank]} />
+  const uri = card.thumbnail ?? art ?? undefined;
+  // Shimmers while the artwork is looked up and while the picture comes in.
+  const waiting = uri ? uri !== settled && !pictureWasShown(uri) : !!card.fileName && art === undefined;
+  return (
+    <View style={[styles.thumb, !uri && styles.blank, styles.clip]}>
+      {waiting ? <Shimmer width={THUMB_WIDTH} /> : null}
+      {uri ? (
+        <Image
+          source={uri}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={pictureFade(uri, 150)}
+          onLoad={() => {
+            pictureShown(uri);
+            setSettled(uri);
+          }}
+          onError={() => setSettled(uri)}
+          cachePolicy="memory-disk"
+          recyclingKey={uri}
+        />
+      ) : null}
+    </View>
   );
 }
 
@@ -145,6 +166,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 6 },
   pressed: { opacity: 0.6 },
   thumb: { width: THUMB_WIDTH, height: THUMB_HEIGHT, borderRadius: 8, backgroundColor: colors.surface },
+  clip: { overflow: 'hidden' },
   liveThumb: { padding: 8, justifyContent: 'flex-end' },
   liveBadge: { color: '#fff', fontSize: 12, fontWeight: '800' },
   blank: { backgroundColor: '#1f2533' },
