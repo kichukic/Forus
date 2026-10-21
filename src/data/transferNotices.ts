@@ -33,12 +33,19 @@ export async function setupTransferNotices() {
 export async function ensureTransferPermission() {
   if (isTV) return false;
   try {
+    // Channels must exist before the permission prompt can appear (Android 13).
+    await setupTransferNotices();
     const current = await Notifications.getPermissionsAsync();
     if (current.granted) return true;
-    if (!current.canAskAgain) return false;
+    if (!current.canAskAgain) {
+      console.log('notification permission denied permanently');
+      return false;
+    }
     const asked = await Notifications.requestPermissionsAsync();
+    console.log('notification permission result:', asked.granted);
     return asked.granted;
-  } catch {
+  } catch (e) {
+    console.log('ensureTransferPermission failed:', String(e));
     return false;
   }
 }
@@ -46,7 +53,12 @@ export async function ensureTransferPermission() {
 export async function notifyTransferAdded(transfer: Transfer) {
   if (isTV) return;
   try {
-    await Notifications.scheduleNotificationAsync({
+    await Notifications.setNotificationChannelAsync(PROGRESS_CHANNEL, {
+      name: 'TorBox transfers',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      lightColor: colors.accent,
+    });
+    const id = await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Added to TorBox',
         body: `${transfer.title} — checking TorBox, you'll be notified when it's ready.`,
@@ -55,8 +67,9 @@ export async function notifyTransferAdded(transfer: Transfer) {
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1, channelId: PROGRESS_CHANNEL },
     });
-  } catch {
-    // Notifications are a courtesy; never break the transfer.
+    console.log('notifyTransferAdded scheduled:', id);
+  } catch (e) {
+    console.log('notifyTransferAdded failed:', String(e));
   }
 }
 
@@ -81,7 +94,12 @@ export async function notifyTransferProgress(transfer: Transfer) {
 export async function notifyTransferReady(transfer: Transfer, playable: { kind: 'file'; source: 'torrents'; itemId: number; fileId: number; title: string }) {
   if (isTV) return;
   try {
-    await Notifications.scheduleNotificationAsync({
+    await Notifications.setNotificationChannelAsync(READY_CHANNEL, {
+      name: 'TorBox ready',
+      importance: Notifications.AndroidImportance.HIGH,
+      lightColor: colors.accent,
+    });
+    const id = await Notifications.scheduleNotificationAsync({
       identifier: `${READY_ID_PREFIX}${transfer.id}`,
       content: {
         title: 'Ready in TorBox',
@@ -91,7 +109,8 @@ export async function notifyTransferReady(transfer: Transfer, playable: { kind: 
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1, channelId: READY_CHANNEL },
     });
-  } catch {
-    // ignore
+    console.log('notifyTransferReady scheduled:', id);
+  } catch (e) {
+    console.log('notifyTransferReady failed:', String(e));
   }
 }
