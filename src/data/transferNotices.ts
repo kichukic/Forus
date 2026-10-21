@@ -17,12 +17,12 @@ export async function setupTransferNotices() {
   try {
     await Notifications.setNotificationChannelAsync(PROGRESS_CHANNEL, {
       name: 'TorBox transfers',
-      importance: Notifications.AndroidImportance.LOW,
+      importance: Notifications.AndroidImportance.DEFAULT,
       lightColor: colors.accent,
     });
     await Notifications.setNotificationChannelAsync(READY_CHANNEL, {
       name: 'TorBox ready',
-      importance: Notifications.AndroidImportance.DEFAULT,
+      importance: Notifications.AndroidImportance.HIGH,
       lightColor: colors.accent,
     });
   } catch {

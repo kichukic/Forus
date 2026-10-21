@@ -98,7 +98,11 @@ async function finish(id: string, torrent: TorboxTorrent) {
   transfers.set(id, ready);
   notify();
   emitNotice({ kind: 'ready', transfer: ready });
-  notifyTransferReady(ready, { kind: 'file', source: 'torrents', itemId: torrent.id, fileId: file.id, title: ready.title }).catch(() => {});
+  ensureTransferPermission()
+    .then((granted) => {
+      if (granted) notifyTransferReady(ready, { kind: 'file', source: 'torrents', itemId: torrent.id, fileId: file.id, title: ready.title }).catch(() => {});
+    })
+    .catch(() => {});
 }
 
 async function runSend(id: string, option: TorrentOption) {
@@ -183,8 +187,11 @@ export async function addTransfer(option: TorrentOption) {
   transfers.set(option.hash, transfer);
   notify();
   emitNotice({ kind: 'added', transfer });
-  ensureTransferPermission().catch(() => {});
-  notifyTransferAdded(transfer).catch(() => {});
+  ensureTransferPermission()
+    .then((granted) => {
+      if (granted) notifyTransferAdded(transfer).catch(() => {});
+    })
+    .catch(() => {});
   runSend(option.hash, option).catch(() => {});
   return transfer;
 }
