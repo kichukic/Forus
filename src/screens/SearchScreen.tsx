@@ -80,6 +80,9 @@ type Result = { type: 'youtube'; video: SearchResult } | { type: 'torbox'; file:
 
 // Typing on a TV remote is slow, so a search runs once typing pauses.
 const DEBOUNCE_MS = 600;
+// How many releases a search shows. They are the best seeded first, and too
+// many of them would push the other sources out of sight.
+const MAX_RELEASES = 12;
 // Result cards come in one after another, this far apart; past the first few
 // they arrive together so a long list doesn't take ages.
 const CASCADE_STEP_MS = 45;
@@ -262,8 +265,11 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                 {/* The releases: they are downloaded to the TorBox and played from there. */}
                 {releaseList.length > 0 && (
                   <View style={styles.block}>
-                    <Text style={styles.blockTitle}>Releases to send to your TorBox</Text>
-                    <ReleaseList releases={releaseList} onSend={onSendRelease} />
+                    <Text style={styles.blockTitle}>
+                      Releases to send to your TorBox
+                      {releaseList.length > MAX_RELEASES ? ` (best ${MAX_RELEASES} of ${releaseList.length})` : ''}
+                    </Text>
+                    <ReleaseList releases={releaseList.slice(0, MAX_RELEASES)} onSend={onSendRelease} />
                   </View>
                 )}
               </View>
