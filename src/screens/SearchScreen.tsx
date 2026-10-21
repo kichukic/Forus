@@ -76,13 +76,13 @@ const SCOPE_TEXT: Record<SearchScope, { heading: string; placeholder: string; no
   },
 };
 
-type Result = { type: 'youtube'; video: SearchResult } | { type: 'torbox'; file: TorboxFile };
-
 // Typing on a TV remote is slow, so a search runs once typing pauses.
 const DEBOUNCE_MS = 600;
 // How many releases a search shows. They are the best seeded first, and too
 // many of them would push the other sources out of sight.
 const MAX_RELEASES = 12;
+// The width of a TorBox file card in a row.
+const FILE_WIDTH = sz(200, 300);
 // Result cards come in one after another, this far apart; past the first few
 // they arrive together so a long list doesn't take ages.
 const CASCADE_STEP_MS = 45;
@@ -96,7 +96,8 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
   const searchesEverywhere = scope === 'all' || scope === 'torbox';
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<{ query: string; list: Result[] } | null>(null);
+  const [files, setFiles] = useState<{ query: string; list: TorboxFile[] } | null>(null);
+  const [videos, setVideos] = useState<{ query: string; list: SearchResult[] } | null>(null);
   // The films and the releases the name matched.
   const [films, setFilms] = useState<{ query: string; list: MovieboxSubject[] } | null>(null);
   const [releases, setReleases] = useState<{ query: string; list: TorrentOption[] } | null>(null);
@@ -127,33 +128,35 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
               words.every((w) => f.name.toLowerCase().replace(/[._]/g, ' ').includes(w)),
             )
           : [];
-        let videos: SearchResult[] = [];
-        if (scope !== 'torbox') {
-          // The film tabs only show complete films, not scenes and trailers, so
-          // their searches ask YouTube for films and read a few more pages.
-          const filmsOnly = scope === 'movies' || scope === 'disha';
-          const asked = !filmsOnly || /movie|film/i.test(q) ? q : `${q} ${scope === 'disha' ? 'hindi ' : ''}full movie`;
-          videos = await searchVideos(asked, SCOPE_CHANNELS[scope], filmsOnly ? 5 : undefined);
-          if (filmsOnly) videos = videos.filter((v) => FULL_MOVIE.test(v.title));
-        }
-        // The films and the releases are asked for together, so a name that
-        // is a film comes back with every way of getting it.
-        const [found, foundReleases] = searchesEverywhere
-          ? await Promise.all([
+        // Everything is asked for at once, so a name that is a film comes
+        // back with every way of getting it, without waiting for each.
+        const videosPromise =
+          scope !== 'torbox'
+            ? (async () => {
+                // The film tabs only show complete films, not scenes and
+                // trailers, so their searches ask YouTube for films and read a
+                // few more pages.
+                const filmsOnly = scope === 'movies' || scope === 'disha';
+                const asked =
+                  !filmsOnly || /movie|film/i.test(q)
+                    ? q
+                    : `${q} ${scope === 'disha' ? 'hindi ' : ''}full movie`;
+                const found = await searchVideos(asked, SCOPE_CHANNELS[scope], filmsOnly ? 5 : undefined);
+                return filmsOnly ? found.filter((v) => FULL_MOVIE.test(v.title)) : found;
+              })()
+            : Promise.resolve([] as SearchResult[]);
+        const sourcesPromise: Promise<[MovieboxSubject[], TorrentOption[]]> = searchesEverywhere
+          ? Promise.all([
               searchSubjects(q, 1).then((r) => r.subjects).catch(() => [] as MovieboxSubject[]),
               searchTorrents(q).catch(() => [] as TorrentOption[]),
             ])
-          : [[] as MovieboxSubject[], [] as TorrentOption[]];
+          : Promise.resolve([[], []]);
+        const [videos, [found, foundReleases]] = await Promise.all([videosPromise, sourcesPromise]);
         if (latest.current !== q) return;
         setFilms({ query: q, list: found });
         setReleases({ query: q, list: foundReleases });
-        setResults({
-          query: q,
-          list: [
-            ...files.map((file) => ({ type: 'torbox' as const, file })),
-            ...videos.map((video) => ({ type: 'youtube' as const, video })),
-          ],
-        });
+        setFiles({ query: q, list: files });
+        setVideos({ query: q, list: videos });
       } catch {
         if (latest.current === q) {
           setError({ query: q, message: "Couldn't search. Check the internet connection." });
@@ -166,14 +169,15 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
   }, [query, scope, searchesTorbox, searchesEverywhere]);
 
   // Only what was found for the name in the box is shown.
-  const resultList = results && results.query === query.trim() ? results.list : [];
+  const fileList = files && files.query === query.trim() ? files.list : [];
+  const videoList = videos && videos.query === query.trim() ? videos.list : [];
   const filmList = films && films.query === query.trim() ? films.list : [];
   const releaseList = releases && releases.query === query.trim() ? releases.list : [];
 
-  const play = (r: Result) =>
-    r.type === 'torbox'
-      ? onPlay({ kind: 'file', source: r.file.source, itemId: r.file.itemId, fileId: r.file.fileId, title: r.file.name })
-      : onPlay({ kind: 'video', videoId: r.video.id, title: r.video.title });
+  const playVideo = (video: SearchResult) => onPlay({ kind: 'video', videoId: video.id, title: video.title });
+
+  const playFile = (file: TorboxFile) =>
+    onPlay({ kind: 'file', source: file.source, itemId: file.itemId, fileId: file.fileId, title: file.name });
 
   // Opening: the screen fades in, the bar grows out from the right (where the
   // search button sits on the home screen) and the heading drops in above it.
@@ -228,21 +232,24 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
       {loading && <ActivityIndicator color={colors.accent} style={styles.spinner} />}
       {error && error.query === query.trim() && <Text style={styles.note}>{error.message}</Text>}
 
-      {filmList.length === 0 && releaseList.length === 0 && resultList.length === 0 && !loading && (
-        <Text style={styles.note}>{text.empty}</Text>
-      )}
+      {filmList.length === 0 &&
+        releaseList.length === 0 &&
+        fileList.length === 0 &&
+        videoList.length === 0 &&
+        !loading && <Text style={styles.note}>{text.empty}</Text>}
 
-      {(resultList.length > 0 || filmList.length > 0 || releaseList.length > 0) && (
+      {(videoList.length > 0 ||
+        filmList.length > 0 ||
+        releaseList.length > 0 ||
+        fileList.length > 0) && (
         <FlatList
           key={columns}
-          data={resultList}
+          data={videoList}
           numColumns={columns}
-          keyExtractor={(r) =>
-            r.type === 'youtube' ? `yt:${r.video.id}` : `tb:${r.file.source}:${r.file.itemId}:${r.file.fileId}`
-          }
+          keyExtractor={(video) => `yt:${video.id}`}
           contentContainerStyle={styles.grid}
           ListHeaderComponent={
-            searchesEverywhere && (filmList.length > 0 || releaseList.length > 0) ? (
+            searchesEverywhere ? (
               <View>
                 {/* The films themselves: they play from here, with no download. */}
                 {filmList.length > 0 && (
@@ -272,6 +279,41 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                     <ReleaseList releases={releaseList.slice(0, MAX_RELEASES)} onSend={onSendRelease} />
                   </View>
                 )}
+
+                {/* The files that are already in the TorBox. */}
+                {fileList.length > 0 && (
+                  <View style={styles.block}>
+                    <Text style={styles.blockTitle}>In your TorBox</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.films}
+                    >
+                      {fileList.map((file) => (
+                        <FocusCard
+                          key={`${file.source}:${file.itemId}:${file.fileId}`}
+                          onPress={() => playFile(file)}
+                          width={FILE_WIDTH}
+                        >
+                          <FileCardContent
+                            fileName={file.name}
+                            detail={`TorBox · ${formatSize(file.size)}`}
+                          />
+                        </FocusCard>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* The channels come last: they have the fewest films. */}
+                <View style={styles.block}>
+                  <Text style={styles.blockTitle}>From the channels</Text>
+                  {videoList.length === 0 ? (
+                    <Text style={styles.note}>
+                      The official channels have nothing by that name.
+                    </Text>
+                  ) : null}
+                </View>
               </View>
             ) : null
           }
@@ -280,20 +322,16 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
               <View style={styles.cell}>
                 <FocusCard
                   width={cardWidth}
-                  onPress={() => play(item)}
+                  onPress={() => playVideo(item)}
                   style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP }}
                 >
-                  {item.type === 'torbox' ? (
-                    <FileCardContent fileName={item.file.name} detail={`TorBox · ${formatSize(item.file.size)}`} />
-                  ) : (
-                    <VideoCardContent
-                      image={item.video.thumbnail}
-                      title={cleanTitle(item.video.title)}
-                      subtitle={[item.video.channel, item.video.published].filter(Boolean).join(' · ')}
-                      duration={item.video.duration}
-                      live={item.video.live}
-                    />
-                  )}
+                  <VideoCardContent
+                    image={item.thumbnail}
+                    title={cleanTitle(item.title)}
+                    subtitle={[item.channel, item.published].filter(Boolean).join(' · ')}
+                    duration={item.duration}
+                    live={item.live}
+                  />
                 </FocusCard>
               </View>
             </CascadeIn>
