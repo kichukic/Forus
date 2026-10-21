@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   playableRows,
+  searchSubjects,
   seasonEpisodes,
   seasonList,
   subjectDetails,
@@ -181,6 +182,34 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
   // The language versions of this film, as the service lists them.
   const dubs = details?.dubs ?? [];
 
+  // A film opened as its own entry carries no list of versions, but the same
+  // film is on the service as "[Hindi]" too. It is looked up when asked for.
+  const [hindiLookup, setHindiLookup] = useState<'idle' | 'busy' | 'none'>('idle');
+  // Nothing to look up when the film is already the Hindi one.
+  const alreadyHindi = /\[hindi\]/i.test(details?.title ?? subject.title);
+
+  const findHindi = async () => {
+    const base = plainTitle(details?.title ?? subject.title);
+    if (base.length < 2) return;
+    setHindiLookup('busy');
+    try {
+      const found = await searchSubjects(`${base} [Hindi]`, 1);
+      const match = found.subjects.find(
+        (entry) =>
+          /\[hindi\]/i.test(entry.title) &&
+          plainTitle(entry.title).toLowerCase() === base.toLowerCase(),
+      );
+      if (!match) {
+        setHindiLookup('none');
+        return;
+      }
+      setHindiLookup('idle');
+      switchDub(match.id);
+    } catch {
+      setHindiLookup('none');
+    }
+  };
+
   const switchDub = (id: string) => {
     if (id === currentId) return;
     setSwitching(true);
@@ -229,7 +258,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
           </View>
         </View>
 
-        {dubs.length > 1 && (
+        {(dubs.length > 1 || !alreadyHindi) && (
           <View style={styles.dubs}>
             <View style={styles.dubsHead}>
               <Text style={styles.dubsLabel}>Audio</Text>
@@ -258,7 +287,26 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
                   </Pressable>
                 );
               })}
+              {dubs.length <= 1 && hindiLookup !== 'none' && (
+                <Pressable
+                  onPress={findHindi}
+                  disabled={hindiLookup === 'busy'}
+                  style={({ focused, pressed }) => [
+                    styles.dub,
+                    (focused || pressed) && styles.dubFocused,
+                  ]}
+                >
+                  {hindiLookup === 'busy' ? (
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  ) : (
+                    <Text style={styles.dubText}>Hindi</Text>
+                  )}
+                </Pressable>
+              )}
             </ScrollView>
+            {hindiLookup === 'none' ? (
+              <Text style={styles.note}>No Hindi audio for this film.</Text>
+            ) : null}
           </View>
         )}
 
