@@ -1,7 +1,9 @@
-// The opening screen. It takes over from the native splash (the same mark on
-// the same background, so the switch can't be seen), plays its intro, then keeps
-// going (glows drifting, rings pulsing, a progress bar filling) until the home
-// screen's data has loaded underneath, and finally zooms away.
+// The opening screen, styled like a film intro. It takes over from the native
+// splash (the same mark on the same background, so the switch can't be seen):
+// film strips roll past under a flickering projector beam, the mark lands with
+// a lens flare, the name slides together and catches a glint of light, and a
+// film-timeline bar fills while the home screen's data loads underneath.
+// Finally a flash and a zoom carry it into the app.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,9 +17,23 @@ const MARK = require('../../assets/images/splash-icon.png');
 // Matches imageWidth for expo-splash-screen in app.json.
 const NATIVE_MARK_SIZE = 180;
 // The intro always plays to the end, however fast the data arrives.
-const INTRO_MS = 1900;
+const INTRO_MS = 2100;
 const WORD = ['F', 'o', 'r', 'U', 's'];
-const SPARKLES = 16;
+
+// The lit frames on the film strips, like posters flickering past.
+const FRAME_COLOURS: [string, string][] = [
+  ['#9b5cff', '#3b1a7a'],
+  ['#ff6bb5', '#5a1240'],
+  ['#4f7cff', '#13245e'],
+  ['#ffb347', '#5e3410'],
+  ['#38d6c4', '#0f4a44'],
+  ['#c084fc', '#3a1660'],
+];
+const FRAME_W = sz(116, 150);
+const FRAME_H = Math.round(FRAME_W * 0.62);
+const FRAME_GAP = 10;
+const HOLE_BAND = 16;
+const STRIP_CYCLE = (FRAME_W + FRAME_GAP) * FRAME_COLOURS.length;
 
 type Props = {
   // True once the home screen's data is in (or loading gave up).
@@ -28,92 +44,75 @@ type Props = {
   onDone: () => void;
 };
 
-const loop = (value: Animated.Value, to: number, duration: number, delay = 0) =>
-  Animated.loop(
-    Animated.sequence([
-      Animated.delay(delay),
-      Animated.timing(value, { toValue: to, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(value, { toValue: 0, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ]),
-  );
-
 export function AnimatedSplash({ ready, progress, status, onDone }: Props) {
   const { width, height } = useWindowDimensions();
   const [introDone, setIntroDone] = useState(false);
 
-  const mark = useRef(new Animated.Value(0)).current; // the mark springs up into place
-  const float = useRef(new Animated.Value(0)).current; // then bobs gently while waiting
-  const glow = useRef(new Animated.Value(0)).current;
-  const letters = useRef(WORD.map(() => new Animated.Value(0))).current;
-  const credit = useRef(new Animated.Value(0)).current;
+  const stripA = useRef(new Animated.Value(0)).current;
+  const stripB = useRef(new Animated.Value(0)).current;
+  const beam = useRef(new Animated.Value(0)).current;
+  const reveal = useRef(new Animated.Value(0)).current; // the scene fades up from black
+  const mark = useRef(new Animated.Value(0)).current; // the mark punches in
+  const flare = useRef(new Animated.Value(0)).current; // the lens-flare streak
+  const letters = useRef(new Animated.Value(0)).current; // the name slides together
+  const shine = useRef(new Animated.Value(0)).current; // a glint sweeping the name
   const footer = useRef(new Animated.Value(0)).current;
-  const rings = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
-  const orbs = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
-  const twinkles = useRef(Array.from({ length: SPARKLES }, () => new Animated.Value(0))).current;
-  const shimmer = useRef(new Animated.Value(0)).current;
   const bar = useRef(new Animated.Value(0)).current;
   const exit = useRef(new Animated.Value(0)).current;
 
-  // Where the sparkles sit: spread over the screen, the same on every render.
-  const sparkles = useMemo(
-    () =>
-      Array.from({ length: SPARKLES }, (_, i) => ({
-        x: ((i * 37 + 11) % 97) / 97,
-        y: ((i * 53 + 29) % 89) / 89,
-        size: 2 + (i % 3),
-        delay: (i * 230) % 1800,
-      })),
-    [],
+  // Enough frames to cover the tilted strip across the whole screen, plus one
+  // extra cycle so the roll can loop without a seam.
+  const frameCount = useMemo(
+    () => (Math.ceil((Math.hypot(width, height) * 1.3) / STRIP_CYCLE) + 1) * FRAME_COLOURS.length,
+    [width, height],
   );
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
 
-    // Background life that runs until the splash leaves.
-    const ambient = [
-      ...orbs.map((o, i) => loop(o, 1, 4200 + i * 900, i * 500)),
-      ...twinkles.map((t, i) => loop(t, 1, 900 + (i % 4) * 250, sparkles[i].delay)),
-      ...rings.map((r, i) =>
-        Animated.loop(
-          Animated.sequence([
-            Animated.delay(i * 800),
-            Animated.timing(r, { toValue: 1, duration: 2400, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-            Animated.timing(r, { toValue: 0, duration: 0, useNativeDriver: true }),
-          ]),
+    const roll = (v: Animated.Value, ms: number) =>
+      Animated.loop(Animated.timing(v, { toValue: 1, duration: ms, easing: Easing.linear, useNativeDriver: true }));
+    // An uneven flicker, like an old projector lamp.
+    const flicker = Animated.loop(
+      Animated.sequence(
+        [0.75, 1, 0.85, 1, 0.65, 0.95, 1].map((to, i) =>
+          Animated.timing(beam, { toValue: to, duration: 120 + ((i * 97) % 260), useNativeDriver: true }),
         ),
       ),
-      loop(glow, 1, 1100),
-      loop(float, 1, 1600),
-      Animated.loop(
-        Animated.timing(shimmer, { toValue: 1, duration: 1300, easing: Easing.linear, useNativeDriver: true }),
-      ),
-    ];
+    );
+    const glint = Animated.loop(
+      Animated.sequence([
+        Animated.delay(900),
+        Animated.timing(shine, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(shine, { toValue: 0, duration: 0, useNativeDriver: true }),
+        Animated.delay(1400),
+      ]),
+    );
+    const ambient = [roll(stripA, 9000), roll(stripB, 11000), flicker];
     ambient.forEach((a) => a.start());
 
-    // The intro: the mark springs up, the name types itself in, then the
-    // credit and the loading bar appear.
     Animated.sequence([
-      Animated.spring(mark, { toValue: 1, useNativeDriver: true, speed: 8, bounciness: 10 }),
-      Animated.stagger(
-        70,
-        letters.map((l) =>
-          Animated.timing(l, { toValue: 1, duration: 320, easing: Easing.out(Easing.back(2)), useNativeDriver: true }),
-        ),
-      ),
+      Animated.timing(reveal, { toValue: 1, duration: 450, easing: Easing.out(Easing.quad), useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(credit, { toValue: 1, duration: 380, useNativeDriver: true }),
-        Animated.timing(footer, { toValue: 1, duration: 380, useNativeDriver: true }),
+        Animated.spring(mark, { toValue: 1, useNativeDriver: true, speed: 9, bounciness: 11 }),
+        Animated.sequence([
+          Animated.delay(140),
+          Animated.timing(flare, { toValue: 1, duration: 650, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        ]),
       ]),
-    ]).start();
+      Animated.timing(letters, { toValue: 1, duration: 520, easing: Easing.out(Easing.back(1.4)), useNativeDriver: true }),
+      Animated.timing(footer, { toValue: 1, duration: 350, useNativeDriver: true }),
+    ]).start(() => glint.start());
     const timer = setTimeout(() => setIntroDone(true), INTRO_MS);
 
     return () => {
       clearTimeout(timer);
       ambient.forEach((a) => a.stop());
+      glint.stop();
     };
   }, []);
 
-  // The bar follows the loading progress.
+  // The timeline bar follows the loading progress.
   useEffect(() => {
     Animated.timing(bar, {
       toValue: progress,
@@ -123,233 +122,254 @@ export function AnimatedSplash({ ready, progress, status, onDone }: Props) {
     }).start();
   }, [progress]);
 
-  // Leaves once the intro has played and the data is in: the mark zooms
-  // forward as everything fades into the home screen.
+  // Leaves once the intro has played and the data is in: a flash of light, the
+  // mark zooms forward and everything fades into the app.
   useEffect(() => {
     if (!introDone || !ready) return;
     Animated.timing(bar, { toValue: 1, duration: 200, useNativeDriver: false }).start();
     Animated.timing(exit, {
       toValue: 1,
-      duration: 520,
-      delay: 180,
+      duration: 560,
+      delay: 160,
       easing: Easing.in(Easing.cubic),
       useNativeDriver: true,
     }).start(() => onDone());
   }, [introDone, ready]);
 
-  const markIn = mark.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
-  const markLift = mark.interpolate({ inputRange: [0, 1], outputRange: [0, sz(-70, -56)] });
-  const bob = float.interpolate({ inputRange: [0, 1], outputRange: [0, -7] });
-  const zoom = exit.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] });
-  const fadeOut = exit.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 0.6, 0] });
-  const contentOut = exit.interpolate({ inputRange: [0, 0.5], outputRange: [1, 0], extrapolate: 'clamp' });
-  const barWidth = bar.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
-  const barLength = sz(180, 240);
-  const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-60, barLength + 60] });
+  const sceneIn = reveal.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const fadeOut = exit.interpolate({ inputRange: [0, 0.75, 1], outputRange: [1, 0.55, 0] });
+  const contentOut = exit.interpolate({ inputRange: [0, 0.45], outputRange: [1, 0], extrapolate: 'clamp' });
+  const flash = exit.interpolate({ inputRange: [0, 0.25, 0.6], outputRange: [0, 0.28, 0], extrapolate: 'clamp' });
 
-  const drift = (o: Animated.Value, dx: number, dy: number) => ({
-    transform: [
-      { translateX: o.interpolate({ inputRange: [0, 1], outputRange: [0, dx] }) },
-      { translateY: o.interpolate({ inputRange: [0, 1], outputRange: [0, dy] }) },
-      { scale: o.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] }) },
-    ],
-  });
-  const orb = Math.max(width, height) * 0.75;
+  const markScale = Animated.multiply(
+    mark.interpolate({ inputRange: [0, 1], outputRange: [1, 0.78] }),
+    exit.interpolate({ inputRange: [0, 1], outputRange: [1, 1.9] }),
+  );
+  const markLift = mark.interpolate({ inputRange: [0, 1], outputRange: [0, sz(-64, -52)] });
+  const flareWidth = flare.interpolate({ inputRange: [0, 1], outputRange: [0.05, 1] });
+  const flareOpacity = flare.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 1, 0.35] });
+
+  const barWidth = bar.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+  const barLength = sz(200, 280);
+  const playhead = bar.interpolate({ inputRange: [0, 1], outputRange: [0, barLength] });
+
+  const wordWidth = sz(190, 250);
+  const shineX = shine.interpolate({ inputRange: [0, 1], outputRange: [-80, wordWidth + 80] });
+
+  const strip = (roll: Animated.Value, top: number, reverse: boolean) => (
+    <Animated.View
+      style={[
+        styles.strip,
+        {
+          top,
+          left: -width * 0.4,
+          opacity: Animated.multiply(sceneIn, 0.5),
+          transform: [
+            { rotate: '-11deg' },
+            {
+              translateX: roll.interpolate({
+                inputRange: [0, 1],
+                outputRange: reverse ? [-STRIP_CYCLE, 0] : [0, -STRIP_CYCLE],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      <Holes count={frameCount} />
+      <View style={styles.frames}>
+        {Array.from({ length: frameCount }, (_, i) => {
+          const [from, to] = FRAME_COLOURS[i % FRAME_COLOURS.length];
+          return (
+            <LinearGradient
+              key={i}
+              colors={[from, to]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.frame}
+            />
+          );
+        })}
+      </View>
+      <Holes count={frameCount} />
+    </Animated.View>
+  );
 
   return (
     <Animated.View style={[StyleSheet.absoluteFill, styles.screen, { opacity: fadeOut }]} pointerEvents="none">
-      {/* Soft coloured glows drifting behind everything. */}
-      <Animated.View
-        style={[
-          styles.orb,
-          { width: orb, height: orb, borderRadius: orb / 2, top: -orb * 0.35, left: -orb * 0.3 },
-          drift(orbs[0], 40, 60),
-        ]}
-      >
+      {strip(stripA, height * 0.16, false)}
+      {strip(stripB, height * 0.64, true)}
+
+      {/* The projector beam from the top, flickering. */}
+      <Animated.View style={[styles.beamWrap, { opacity: Animated.multiply(Animated.multiply(beam, sceneIn), contentOut) }]}>
         <LinearGradient
-          colors={['rgba(155,92,255,0.55)', 'rgba(155,92,255,0)']}
-          start={{ x: 0.3, y: 0.3 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
+          colors={['rgba(214,190,255,0.30)', 'rgba(155,92,255,0.10)', 'transparent']}
+          style={[styles.beam, { width: width * 0.9, height: height * 0.75, transform: [{ rotate: '8deg' }] }]}
+        />
+        <LinearGradient
+          colors={['rgba(214,190,255,0.30)', 'rgba(155,92,255,0.10)', 'transparent']}
+          style={[styles.beam, { width: width * 0.9, height: height * 0.75, transform: [{ rotate: '-8deg' }] }]}
         />
       </Animated.View>
-      <Animated.View
-        style={[
-          styles.orb,
-          { width: orb, height: orb, borderRadius: orb / 2, bottom: -orb * 0.4, right: -orb * 0.35 },
-          drift(orbs[1], -50, -40),
-        ]}
-      >
-        <LinearGradient
-          colors={['rgba(255,107,181,0.38)', 'rgba(255,107,181,0)']}
-          start={{ x: 0.7, y: 0.7 }}
-          end={{ x: 0, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
-      <Animated.View
-        style={[
-          styles.orb,
-          { width: orb * 0.7, height: orb * 0.7, borderRadius: orb, top: height * 0.35, left: -orb * 0.45 },
-          drift(orbs[2], 60, -30),
-        ]}
-      >
-        <LinearGradient
-          colors={['rgba(79,124,255,0.32)', 'rgba(79,124,255,0)']}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
+
+      {/* Darkens the edges, the way a cinema screen falls off into black. */}
       <LinearGradient
-        colors={['rgba(12,10,18,0.55)', 'transparent', 'transparent', 'rgba(12,10,18,0.85)']}
-        locations={[0, 0.25, 0.65, 1]}
+        colors={['rgba(12,10,18,0.85)', 'rgba(12,10,18,0.2)', 'rgba(12,10,18,0.2)', 'rgba(12,10,18,0.92)']}
+        locations={[0, 0.3, 0.62, 1]}
         style={StyleSheet.absoluteFill}
       />
 
-      {sparkles.map((s, i) => (
-        <Animated.View
-          key={i}
-          style={[
-            styles.sparkle,
-            {
-              left: s.x * width,
-              top: s.y * height,
-              width: s.size,
-              height: s.size,
-              borderRadius: s.size,
-              opacity: twinkles[i].interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.9] }),
-              transform: [{ scale: twinkles[i].interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.4] }) }],
-            },
-          ]}
-        />
-      ))}
-
       <View style={styles.center}>
         <Animated.View style={[styles.markWrap, { transform: [{ translateY: markLift }] }]}>
-          {/* Rings pulsing out from the heart. */}
-          {rings.map((r, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                styles.ring,
-                {
-                  opacity: Animated.multiply(
-                    r.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 0.55, 0] }),
-                    contentOut,
-                  ),
-                  transform: [{ scale: r.interpolate({ inputRange: [0, 1], outputRange: [0.7, 2.3] }) }],
-                },
-              ]}
-            />
-          ))}
           <Animated.View
             style={[
-              styles.halo,
-              {
-                opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0.95] }),
-                transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.25] }) }],
-              },
-            ]}
-          />
-          <Animated.Image
-            source={MARK}
-            style={[styles.mark, { transform: [{ translateY: bob }, { scale: Animated.multiply(markIn, zoom) }] }]}
-          />
-        </Animated.View>
-
-        <Animated.View style={[styles.words, { opacity: contentOut }]}>
-          <View style={styles.wordRow}>
-            {WORD.map((letter, i) => (
-              <Animated.Text
-                key={i}
-                style={[
-                  styles.brand,
-                  i >= 3 && styles.brandAccent,
-                  {
-                    opacity: letters[i],
-                    transform: [
-                      { translateY: letters[i].interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) },
-                      { scale: letters[i].interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
-                    ],
-                  },
-                ]}
-              >
-                {letter}
-              </Animated.Text>
-            ))}
-          </View>
-          <Animated.Text
-            style={[
-              styles.credit,
-              {
-                opacity: credit,
-                transform: [{ translateY: credit.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
-              },
+              styles.flare,
+              { width: width * 1.2, opacity: Animated.multiply(flareOpacity, contentOut), transform: [{ scaleX: flareWidth }] },
             ]}
           >
-            Made with <Text style={styles.heart}>♥</Text> by Kishor
-          </Animated.Text>
-        </Animated.View>
-      </View>
-
-      {/* What is loading, and how far along it is. */}
-      <Animated.View style={[styles.footer, { opacity: Animated.multiply(footer, contentOut) }]}>
-        <View style={[styles.track, { width: barLength }]}>
-          <Animated.View style={[styles.fill, { width: barWidth }]}>
             <LinearGradient
-              colors={[colors.accentDeep, colors.accent, '#ff6bb5']}
+              colors={['transparent', 'rgba(255,255,255,0.95)', 'transparent']}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
               style={StyleSheet.absoluteFill}
             />
-            <Animated.View style={[styles.shimmer, { transform: [{ translateX: shimmerX }] }]}>
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.glow,
+              { opacity: Animated.multiply(flareOpacity, contentOut), transform: [{ scale: flareWidth }] },
+            ]}
+          />
+          <Animated.Image source={MARK} style={[styles.mark, { transform: [{ scale: markScale }] }]} />
+        </Animated.View>
+
+        <Animated.View style={[styles.words, { opacity: contentOut }]}>
+          <View style={[styles.wordBox, { width: wordWidth }]}>
+            <View style={styles.wordRow}>
+              {WORD.map((letter, i) => (
+                <Animated.Text
+                  key={i}
+                  style={[
+                    styles.brand,
+                    i >= 3 && styles.brandAccent,
+                    {
+                      opacity: letters,
+                      transform: [
+                        {
+                          translateX: letters.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [(i - 2) * sz(34, 44), 0],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  {letter}
+                </Animated.Text>
+              ))}
+            </View>
+            {/* A glint of light that sweeps across the name now and then. */}
+            <Animated.View style={[styles.shine, { transform: [{ translateX: shineX }, { rotate: '18deg' }] }]}>
               <LinearGradient
-                colors={['transparent', 'rgba(255,255,255,0.65)', 'transparent']}
+                colors={['transparent', 'rgba(255,255,255,0.55)', 'transparent']}
                 start={{ x: 0, y: 0.5 }}
                 end={{ x: 1, y: 0.5 }}
                 style={StyleSheet.absoluteFill}
               />
             </Animated.View>
-          </Animated.View>
+          </View>
+          <Animated.Text style={[styles.credit, { opacity: letters }]}>
+            Made with <Text style={styles.heart}>♥</Text> by Kishor
+          </Animated.Text>
+        </Animated.View>
+      </View>
+
+      {/* Loading, as a film timeline with a playhead. */}
+      <Animated.View style={[styles.footer, { opacity: Animated.multiply(footer, contentOut) }]}>
+        <View style={{ width: barLength }}>
+          <View style={styles.ticks}>
+            {Array.from({ length: 11 }, (_, i) => (
+              <View key={i} style={[styles.tick, i % 5 === 0 && styles.tickMajor]} />
+            ))}
+          </View>
+          <View style={styles.track}>
+            <Animated.View style={[styles.fill, { width: barWidth }]}>
+              <LinearGradient
+                colors={[colors.accentDeep, colors.accent, '#ff6bb5']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={StyleSheet.absoluteFill}
+              />
+            </Animated.View>
+          </View>
+          <Animated.View style={[styles.playhead, { left: playhead }]} />
         </View>
         <Text style={styles.status}>{status}</Text>
       </Animated.View>
+
+      <Animated.View style={[StyleSheet.absoluteFill, styles.flash, { opacity: flash }]} />
     </Animated.View>
+  );
+}
+
+// A row of sprocket holes along a film strip's edge.
+function Holes({ count }: { count: number }) {
+  const holes = Math.ceil(((FRAME_W + FRAME_GAP) * count) / 22);
+  return (
+    <View style={styles.holes}>
+      {Array.from({ length: holes }, (_, i) => (
+        <View key={i} style={styles.hole} />
+      ))}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { backgroundColor: colors.background, zIndex: 100, elevation: 100, overflow: 'hidden' },
-  orb: { position: 'absolute', overflow: 'hidden' },
-  sparkle: { position: 'absolute', backgroundColor: '#e9dcff' },
+  strip: { position: 'absolute', backgroundColor: '#0f0d16', paddingHorizontal: 4 },
+  holes: { flexDirection: 'row', height: HOLE_BAND, alignItems: 'center' },
+  hole: { width: 10, height: 7, borderRadius: 2, backgroundColor: colors.background, marginRight: 12 },
+  frames: { flexDirection: 'row' },
+  frame: { width: FRAME_W, height: FRAME_H, marginRight: FRAME_GAP, borderRadius: 4 },
+  beamWrap: { position: 'absolute', top: -40, left: 0, right: 0, alignItems: 'center' },
+  beam: { position: 'absolute', top: 0, borderBottomLeftRadius: 400, borderBottomRightRadius: 400 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   markWrap: { alignItems: 'center', justifyContent: 'center' },
-  ring: {
+  flare: { position: 'absolute', height: 3, borderRadius: 2, overflow: 'hidden' },
+  glow: {
     position: 'absolute',
-    width: NATIVE_MARK_SIZE,
-    height: NATIVE_MARK_SIZE,
-    borderRadius: NATIVE_MARK_SIZE / 2,
+    width: NATIVE_MARK_SIZE * 1.3,
+    height: NATIVE_MARK_SIZE * 1.3,
+    borderRadius: NATIVE_MARK_SIZE,
+    backgroundColor: 'rgba(155,92,255,0.3)',
+  },
+  mark: { width: NATIVE_MARK_SIZE, height: NATIVE_MARK_SIZE },
+  words: { position: 'absolute', top: '50%', marginTop: sz(40, 52), alignItems: 'center' },
+  wordBox: { alignItems: 'center', overflow: 'hidden' },
+  wordRow: { flexDirection: 'row' },
+  brand: { color: colors.text, fontSize: sz(50, 64), fontWeight: '900', letterSpacing: -1 },
+  brandAccent: { color: colors.accent },
+  shine: { position: 'absolute', top: -20, bottom: -20, left: 0, width: 46 },
+  credit: { color: colors.muted, fontSize: sz(14, 18), fontWeight: '600', marginTop: 6, letterSpacing: 0.3 },
+  heart: { color: '#ff6bb5' },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: sz(70, 60), alignItems: 'center' },
+  ticks: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  tick: { width: 1, height: 5, backgroundColor: 'rgba(255,255,255,0.22)' },
+  tickMajor: { height: 8, backgroundColor: 'rgba(255,255,255,0.4)' },
+  track: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: 2, overflow: 'hidden' },
+  playhead: {
+    position: 'absolute',
+    bottom: -4,
+    width: 12,
+    height: 12,
+    marginLeft: -6,
+    borderRadius: 6,
+    backgroundColor: '#fff',
     borderWidth: 2,
     borderColor: colors.accent,
   },
-  halo: {
-    position: 'absolute',
-    width: NATIVE_MARK_SIZE * 1.5,
-    height: NATIVE_MARK_SIZE * 1.5,
-    borderRadius: NATIVE_MARK_SIZE,
-    backgroundColor: 'rgba(155,92,255,0.25)',
-  },
-  mark: { width: NATIVE_MARK_SIZE, height: NATIVE_MARK_SIZE },
-  words: { position: 'absolute', top: '50%', marginTop: sz(50, 60), alignItems: 'center' },
-  wordRow: { flexDirection: 'row' },
-  brand: { color: colors.text, fontSize: sz(48, 60), fontWeight: '900', letterSpacing: -1 },
-  brandAccent: { color: colors.accent },
-  heart: { color: '#ff6bb5' },
-  credit: { color: colors.muted, fontSize: sz(14, 18), fontWeight: '600', marginTop: 8, letterSpacing: 0.3 },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: sz(70, 60), alignItems: 'center' },
-  track: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 2, overflow: 'hidden' },
-  shimmer: { position: 'absolute', top: 0, bottom: 0, width: 60 },
-  status: { color: colors.muted, fontSize: sz(12.5, 15), fontWeight: '600', marginTop: 12, letterSpacing: 0.4 },
+  status: { color: colors.muted, fontSize: sz(12.5, 15), fontWeight: '600', marginTop: 14, letterSpacing: 0.4 },
+  flash: { backgroundColor: '#fff' },
 });

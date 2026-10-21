@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
-import { loadVideoPage, loadVideos, searchVideos, type Video } from '../api/youtube';
+import { loadVideoPage, loadVideos, searchVideos, stripEmoji, type Video } from '../api/youtube';
 import { FULL_MOVIE, MOVIES, SHOWS, TRUSTED_CHANNELS, type VideoSource } from '../data/channels';
 import type { Theme } from '../data/themes';
 import { CARD_HEIGHT, GUTTER, ROW_PAD, colors, sz } from '../theme';
@@ -165,8 +165,10 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
 // YouTube titles pile up "| Actor | Actor | Channel"; the part before the
 // first bar is the actual name.
 export function cleanTitle(title: string): string {
-  const head = title.split('|')[0].trim();
-  return head.length >= 4 ? head : title;
+  // Titles saved before emoji were stripped (history) still carry them.
+  const plain = stripEmoji(title);
+  const head = plain.split('|')[0].trim();
+  return head.length >= 4 ? head : plain;
 }
 
 const styles = StyleSheet.create({

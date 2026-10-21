@@ -1,6 +1,8 @@
-import { useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   FlatList,
   Pressable,
   RefreshControl,
@@ -95,7 +97,51 @@ export function HomeScreen({
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const open = (t: Tab) => setTab(t);
+  // Which way the content slides in: from the right when moving to a tab
+  // further along, from the left when moving back.
+  const direction = useRef(1);
+  const open = (t: Tab) => {
+    if (t === tab) return;
+    direction.current = TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1;
+    setTab(t);
+  };
+
+  // The purple pill behind the tabs glides to the selected one, taking its
+  // width, instead of jumping.
+  const tabBar = useRef<ScrollView>(null);
+  const tabLayouts = useRef<Partial<Record<Tab, { x: number; width: number }>>>({});
+  const pillX = useRef(new Animated.Value(0)).current;
+  const pillWidth = useRef(new Animated.Value(0)).current;
+  const pillPlaced = useRef(false);
+
+  const movePill = (animated: boolean) => {
+    const layout = tabLayouts.current[tab];
+    if (!layout) return;
+    if (!animated) {
+      pillX.setValue(layout.x);
+      pillWidth.setValue(layout.width);
+    } else {
+      const spring = { useNativeDriver: false, speed: 18, bounciness: 7 };
+      Animated.parallel([
+        Animated.spring(pillX, { toValue: layout.x, ...spring }),
+        Animated.spring(pillWidth, { toValue: layout.width, ...spring }),
+      ]).start();
+    }
+    // Keep the selected tab in view on narrow screens.
+    tabBar.current?.scrollTo({ x: Math.max(0, layout.x - GUTTER * 2), animated });
+  };
+
+  useEffect(() => {
+    movePill(pillPlaced.current);
+  }, [tab]);
+
+  const onTabLayout = (t: Tab, x: number, width: number) => {
+    tabLayouts.current[t] = { x, width };
+    if (t === tab && !pillPlaced.current) {
+      pillPlaced.current = true;
+      movePill(false);
+    }
+  };
 
   const refresh = () => {
     clearVideoCache();
@@ -123,9 +169,9 @@ export function HomeScreen({
   // a heavy tab is opened on top of them.
   const panel = (t: Tab, content: ReactNode) =>
     t === tab ? (
-      <View style={styles.panel}>
+      <SlideIn key={t} direction={direction.current}>
         <ErrorBoundary label={TABS.find((entry) => entry.id === t)?.label}>{content}</ErrorBoundary>
-      </View>
+      </SlideIn>
     ) : null;
 
   const liveRow = (
@@ -161,9 +207,16 @@ export function HomeScreen({
           {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
           <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' ? 'all' : tab)} />
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+        <ScrollView ref={tabBar} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+          <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]} />
           {TABS.map((t) => (
-            <TabButton key={t.id} label={t.label} active={tab === t.id} onPress={() => open(t.id)} />
+            <TabButton
+              key={t.id}
+              label={t.label}
+              active={tab === t.id}
+              onPress={() => open(t.id)}
+              onLayout={(x, width) => onTabLayout(t.id, x, width)}
+            />
           ))}
         </ScrollView>
       </View>
@@ -370,14 +423,42 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
   );
 }
 
-function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+// A tab's new content fades in and slides a little from the side being moved
+// towards.
+function SlideIn({ direction, children }: { direction: number; children: ReactNode }) {
+  const progress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, []);
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [direction * 36, 0] });
+  return <Animated.View style={[styles.panel, { opacity: progress, transform: [{ translateX }] }]}>{children}</Animated.View>;
+}
+
+function TabButton({
+  label,
+  active,
+  onPress,
+  onLayout,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  onLayout: (x: number, width: number) => void;
+}) {
   const [focused, setFocused] = useState(false);
   return (
     <Pressable
       onPress={onPress}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
-      style={[styles.tab, active && styles.tabActive, focused && styles.tabFocused]}
+      onLayout={(e) => onLayout(e.nativeEvent.layout.x, e.nativeEvent.layout.width)}
+      // The selected tab's purple comes from the sliding pill behind it.
+      style={[styles.tab, focused && styles.tabFocused]}
     >
       <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
     </Pressable>
@@ -443,7 +524,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  tabActive: { backgroundColor: colors.accent },
+  pill: { position: 'absolute', top: 0, bottom: 0, borderRadius: 22, backgroundColor: colors.accent },
   tabFocused: { borderColor: colors.text },
   tabText: { color: colors.muted, fontSize: sz(13.5, 17), fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
   tabTextActive: { color: '#fff' },
