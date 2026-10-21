@@ -128,3 +128,13 @@ render("tv-banner", svg(1280, 720, banner), 400, 240)
 render("tv-banner-large", svg(1280, 720, banner), 1280, 720)
 
 print("rendered:", sorted(p.name for p in OUT.glob("*.png") if p.stem in {"icon", "adaptive-icon", "adaptive-background", "splash-icon", "tv-banner", "tv-banner-large"}))
+
+# Android's notification bar icon: a white silhouette on transparent, here the
+# heart with the play symbol cut out of it.
+notification = f"""
+<mask id="cut"><rect width="1024" height="1024" fill="#fff"/>
+  <path d="{PLAY}" fill="#000" stroke="#000" stroke-width="34" stroke-linejoin="round"/></mask>
+<g transform="translate(512 512) scale(1.12) translate(-512 -512)">
+  <path d="{HEART}" fill="#ffffff" mask="url(#cut)"/>
+</g>"""
+render("notification-icon", svg(1024, 1024, notification), 96, 96)

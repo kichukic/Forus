@@ -16,6 +16,8 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { captions, directStream, playableRows, type MovieboxCaption } from '../api/moviebox';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
+import { VideoOverlay } from '../components/VideoOverlay';
+import { useRemoteSeek } from '../hooks/useRemoteSeek';
 import type { ShellControls } from '../components/PlayerShell';
 import { colors, isTV, sz } from '../theme';
 import type { MovieboxPlayable, Playable } from '../types';
@@ -57,6 +59,17 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   // The words of the subtitle being shown, kept with the language they are
   // for, so the right ones are shown while a new one is on its way.
   const [loaded, setLoaded] = useState<{ id: string; list: SubtitleCue[] } | null>(null);
+
+  // On a TV the remote's seek and play/pause keys drive the player, and the
+  // native controls are switched off (they eat the D-pad). The overlay below
+  // gives the same buttons for anyone who prefers the remote to focus them.
+  const [showOverlay, setShowOverlay] = useState(true);
+  useRemoteSeek(player, () => setShowOverlay(true));
+  useEffect(() => {
+    if (!showOverlay) return;
+    const timer = setTimeout(() => setShowOverlay(false), 4000);
+    return () => clearTimeout(timer);
+  }, [showOverlay, currentTime]);
 
   // A fresh link, fetched from the file's own name.
   const resolve = useCallback(async () => {
@@ -131,10 +144,22 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         player={player}
         style={portraitPhone ? styles.videoPortrait : styles.video}
         // In the corner window a tap opens the player instead.
-        nativeControls={!mini}
+        nativeControls={!mini && !isTV}
         contentFit="contain"
         fullscreenOptions={{ enable: !isTV }}
       />
+
+      {isTV && !mini && (
+        <VideoOverlay
+          player={player}
+          paused={!player.playing}
+          time={{ t: currentTime ?? 0, d: player.duration ?? 0 }}
+          buffering={loading || status !== 'readyToPlay'}
+          show={showOverlay}
+          onToggle={() => (player.playing ? player.pause() : player.play())}
+          onSeekBy={(seconds) => player.seekBy(seconds)}
+        />
+      )}
 
       {/* The words being said, over the video. */}
       {spoken ? (

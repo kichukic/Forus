@@ -9,7 +9,9 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
 import { addToHistory, clearHistory, loadHistory, playableKey } from './src/data/history';
+import { askToRemind, startReminders } from './src/data/reminders';
 import { addTransfer, loadTransfers, playableFrom } from './src/data/transfers';
+import { setupTransferNotices } from './src/data/transferNotices';
 import type { CatalogMovie } from './src/api/catalog';
 import type { MovieboxSubject } from './src/api/moviebox';
 import type { TorrentOption } from './src/api/torrents';
@@ -75,6 +77,7 @@ export default function App() {
   useEffect(() => {
     loadHistory().then(setHistory);
     loadTransfers();
+    setupTransferNotices();
   }, []);
 
   useEffect(() => {
@@ -100,7 +103,23 @@ export default function App() {
     setHistory((h) => addToHistory(h, item));
     setPlaying(item);
     setMini(false);
+    // Phones only: the first play asks to allow "Continue watching" reminders.
+    if (!isTV) askToRemind();
   };
+
+  // Phones: a reminder of the last thing watched, a few hours after leaving.
+  const latest = useRef<{ history: Playable[]; playing: Playable | null; play: typeof play }>({ history, playing, play });
+  useEffect(() => {
+    latest.current = { history, playing, play };
+  });
+  useEffect(() => {
+    if (isTV) return;
+    return startReminders(
+      () => latest.current.history[0],
+      () => latest.current.playing !== null,
+      (item) => latest.current.play(item),
+    );
+  }, []);
 
   const closePlayer = () => {
     setPlaying(null);

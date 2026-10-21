@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createTorrent, findTorrentByHash, getApiKey, getTorrent, mainVideoFile, type TorboxTorrent } from '../api/torbox';
 import type { TorrentOption } from '../api/torrents';
 import type { Playable } from '../types';
+import { ensureTransferPermission, notifyTransferAdded, notifyTransferProgress, notifyTransferReady } from './transferNotices';
 
 export type TransferState = 'sending' | 'downloading' | 'ready' | 'error';
 
@@ -34,6 +35,9 @@ type Listener = (list: Transfer[]) => void;
 type Notice = { kind: 'added' | 'ready' | 'error' | 'needsKey'; transfer: Transfer };
 
 const transfers = new Map<string, Transfer>();
+// Which progress milestones have already been announced, so a transfer is not
+// announced twice.
+const announced = new Set<string>();
 const listeners = new Set<Listener>();
 const noticeListeners = new Set<(n: Notice) => void>();
 
@@ -94,6 +98,7 @@ async function finish(id: string, torrent: TorboxTorrent) {
   transfers.set(id, ready);
   notify();
   emitNotice({ kind: 'ready', transfer: ready });
+  notifyTransferReady(ready, { kind: 'file', source: 'torrents', itemId: torrent.id, fileId: file.id, title: ready.title }).catch(() => {});
 }
 
 async function runSend(id: string, option: TorrentOption) {
@@ -109,6 +114,10 @@ async function runSend(id: string, option: TorrentOption) {
     if (existing) {
       torrent = existing;
       setTransfer(id, { state: 'downloading', torrentId: existing.id, progress: existing.progress, speed: existing.downloadSpeed, eta: existing.eta });
+      if (existing.downloadFinished) {
+        await finish(id, existing);
+        return;
+      }
     } else {
       const created = await createTorrent(key, option.magnet, option.name);
       setTransfer(id, { state: 'downloading', torrentId: created.torrentId, progress: 0 });
@@ -143,6 +152,8 @@ export async function addTransfer(option: TorrentOption) {
   transfers.set(option.hash, transfer);
   notify();
   emitNotice({ kind: 'added', transfer });
+  ensureTransferPermission().catch(() => {});
+  notifyTransferAdded(transfer).catch(() => {});
   runSend(option.hash, option).catch(() => {});
   return transfer;
 }
