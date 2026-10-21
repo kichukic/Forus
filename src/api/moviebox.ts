@@ -353,8 +353,14 @@ export async function browseTabs(): Promise<{ id: number; name: string }[]> {
   return tabs;
 }
 
+// The sections are kept for a few minutes, so a tab opens straight away.
+const shelfCache = new Map<number, { at: number; shelves: MovieboxShelf[] }>();
+const SHELF_CACHE_MS = 3 * 60 * 1000;
+
 /** The rows of films on one of those sections. */
 export async function browseShelves(tabId: number): Promise<MovieboxShelf[]> {
+  const held = shelfCache.get(tabId);
+  if (held && Date.now() - held.at < SHELF_CACHE_MS) return held.shelves;
   const data = await request<{ items?: { title?: string; subjects?: RawSubject[] }[] }>(
     'GET',
     '/wefeed-mobile-bff/tab-operating',
@@ -374,7 +380,13 @@ export async function browseShelves(tabId: number): Promise<MovieboxShelf[]> {
     // The headings come with emoji of their own ("💗Bollywood Love Stories").
     shelves.push({ title: stripEmoji(item.title || 'Films'), subjects });
   }
+  if (shelves.length > 0) shelfCache.set(tabId, { at: Date.now(), shelves });
   return shelves;
+}
+
+/** Forgets the sections, so the next visit fetches them again. */
+export function clearMovieboxCache(): void {
+  shelfCache.clear();
 }
 
 export type MovieboxSearch = {
@@ -604,6 +616,69 @@ export async function directStream(
     // The preview is a small file; anything bigger is the whole thing.
     whole: size > episode.size * 4,
   };
+}
+
+export type MovieboxCaption = {
+  id: string;
+  /** The language, as the service writes it: en, ml, hi. */
+  language: string;
+  /** The name of the language, for the person watching. */
+  label: string;
+  url: string;
+};
+
+/**
+ * The subtitles for one film or episode.
+ *
+ * They belong to the file, so the id of the file is needed as well.
+ */
+export async function captions(
+  subjectId: string,
+  resourceId: string,
+): Promise<MovieboxCaption[]> {
+  if (!resourceId) return [];
+  const data = await request<{
+    extCaptions?: { id?: string; lan?: string; lanName?: string; url?: string }[];
+  }>('GET', `${BFF}/subject-api/get-ext-captions`, [
+    ['subjectId', subjectId],
+    ['resourceId', resourceId],
+  ]);
+  return (data?.extCaptions ?? [])
+    .filter((caption) => !!caption.url)
+    .map((caption) => ({
+      id: caption.id ?? caption.lan ?? 'caption',
+      language: caption.lan ?? 'und',
+      label: caption.lanName ?? caption.lan ?? 'Subtitles',
+      url: caption.url as string,
+    }));
+}
+
+/**
+ * Films to watch next.
+ *
+ * The service has no "more like this" of its own, so the films are taken
+ * from the sections it shows, with the ones of the same sort first.
+ */
+export async function recommendations(subject: {
+  id: string;
+  genre?: string;
+}): Promise<MovieboxSubject[]> {
+  const shelves = await browseShelves(1).catch(() => [] as MovieboxShelf[]);
+  const all: MovieboxSubject[] = [];
+  const seen = new Set<string>();
+  for (const shelf of shelves) {
+    for (const candidate of shelf.subjects) {
+      if (candidate.id === subject.id || seen.has(candidate.id)) continue;
+      seen.add(candidate.id);
+      all.push(candidate);
+    }
+  }
+  // The same sort of film comes first, then the rest.
+  const genre = subject.genre?.split(',')[0]?.trim().toLowerCase();
+  if (!genre) return all.slice(0, 12);
+  const same = all.filter((candidate) => candidate.genre?.toLowerCase().includes(genre));
+  const rest = all.filter((candidate) => !same.includes(candidate));
+  return [...same, ...rest].slice(0, 12);
 }
 
 /** Drops the saved visitor token, so the next call signs in again. */

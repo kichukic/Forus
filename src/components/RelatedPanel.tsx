@@ -55,7 +55,9 @@ export function RelatedPanel({ item, onPlay, dragHandlers, children }: Props) {
         keyExtractor={(c) => c.key}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <Text style={styles.heading}>{item.kind === 'live' ? 'More live channels' : 'Up next'}</Text>
+          <Text style={styles.heading}>
+            {item.kind === 'live' ? 'More live channels' : item.kind === 'moviebox' ? 'More like this' : 'Up next'}
+          </Text>
         }
         ListEmptyComponent={
           cards === null ? (
