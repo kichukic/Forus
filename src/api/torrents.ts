@@ -163,6 +163,8 @@ export async function searchApibay(query: string): Promise<TorrentOption[]> {
   for (const item of body) {
     const name = String(item?.name ?? '');
     const hash = String(item?.info_hash ?? '');
+    // A release for an adult film is not offered.
+    if (isAdultTitle(name)) continue;
     // The index answers with a placeholder row when nothing matches.
     if (!name || !hash || name.toLowerCase() === 'no results returned') continue;
     const seeders = Number(item?.seeders ?? 0);
@@ -227,13 +229,55 @@ export async function searchNyaa(query: string): Promise<TorrentOption[]> {
  * without repeats. Both indexes are optional: one being down only means
  * fewer results.
  */
+// The words that say nothing about which film a release is.
+const RELEASE_FILLER = new Set([
+  'the', 'and', 'for', 'with', 'from', 'part', 'chapter', 'season', 'series',
+  'episode', 'movie', 'film', 'full', 'hindi', 'dubbed', 'dual', 'audio',
+  '1080p', '720p', '480p', '2160p', 'webrip', 'webdl', 'bluray', 'hdrip',
+]);
+
+// "K.G.F" is one word written with dots.
+function joinAcronyms(text: string): string {
+  return text.replace(/\b[a-z0-9](?:\.[a-z0-9])+\b/gi, (name) => name.replace(/\./g, ''));
+}
+
+// The name as the indexes like it: "K.G.F: Chapter 1" -> "KGF Chapter 1".
+// The punctuation of a title makes some of them answer with anything at all.
+function indexQuery(query: string): string {
+  const cleaned = joinAcronyms(query)
+    .replace(/[^A-Za-z0-9\s'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned.length >= 2 ? cleaned : query.trim();
+}
+
+// The words a release must name to be the film that was asked for. The index
+// matches loosely — "K.G.F Chapter 1" brings back John Wick — so a release
+// that does not carry the film's name at all is dropped. Dots, spaces and
+// dashes are ignored on both sides, because "K.G.F" and "KGF" are one word.
+function filmWords(query: string): string[] {
+  const joined = joinAcronyms(query);
+  return joined
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 3 && !/^\d+$/.test(word) && !RELEASE_FILLER.has(word));
+}
+
+function namesFilm(name: string, words: string[]): boolean {
+  if (words.length === 0) return true;
+  const flat = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return words.some((word) => flat.includes(word));
+}
+
 export async function searchTorrents(query: string): Promise<TorrentOption[]> {
-  let options = await runIndexes(query);
+  const words = filmWords(query);
+  const name = indexQuery(query);
+  let options = await runIndexes(name);
   if (options.length < 3) {
     // Names like "the office s1" match nothing, because the indexes look for
     // the whole phrase. The name without the season and quality words does.
-    const shorter = simplifyQuery(query);
-    if (shorter && shorter !== query.trim()) {
+    const shorter = simplifyQuery(name);
+    if (shorter && shorter !== name) {
       const extra = await runIndexes(shorter);
       const seen = new Set(options.map((o) => o.hash.toLowerCase()));
       for (const option of extra) {
@@ -245,6 +289,14 @@ export async function searchTorrents(query: string): Promise<TorrentOption[]> {
       options.sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0));
     }
   }
+  // A long name finds nothing where its first words find plenty, so those are
+  // tried before the film is called unavailable.
+  if (options.length === 0 && words.length > 0) {
+    const short = words.slice(0, 2).join(' ');
+    if (short.toLowerCase() !== name.toLowerCase()) options = await runIndexes(short);
+  }
+  // A release that does not name the film is not the film.
+  if (words.length > 0) options = options.filter((option) => namesFilm(option.name, words));
   return options;
 }
 
