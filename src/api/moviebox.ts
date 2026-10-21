@@ -100,7 +100,9 @@ function toSubject(raw: RawSubject): MovieboxSubject | null {
   return {
     id: String(raw.subjectId),
     title: raw.title,
-    kind: raw.subjectType === 2 ? 'series' : 'movie',
+    // A film is one subject. Everything else is a series of episodes: the
+    // usual one, and the short dramas, which the app counts separately.
+    kind: (raw.subjectType ?? 1) === 1 ? 'movie' : 'series',
     poster: raw.cover?.url,
     backdrop: raw.stills?.url ?? raw.cover?.url,
     year: raw.releaseDate ? String(raw.releaseDate).slice(0, 4) : undefined,
@@ -494,6 +496,19 @@ export async function seasonEpisodes(
 
 /** The files of one film, or of one episode of a series. */
 export async function playableRows(
+  id: string,
+  season: number,
+  episode: number,
+): Promise<MovieboxEpisode[]> {
+  const rows = await fetchRows(id, season, episode);
+  if (rows.length > 0) return rows;
+  // A film is sometimes filed as the first episode of a first season, so the
+  // other way round is tried before giving up.
+  if (season === 0 && episode === 0) return fetchRows(id, 1, 1);
+  return [];
+}
+
+async function fetchRows(
   id: string,
   season: number,
   episode: number,

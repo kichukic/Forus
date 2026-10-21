@@ -51,14 +51,19 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
   const insets = useSafeAreaInsets();
   const [details, setDetails] = useState<MovieboxSubject | null>(null);
   const [cast, setCast] = useState<{ name: string; character: string }[]>([]);
-  const [seasons, setSeasons] = useState<MovieboxSeason[]>([]);
+  const [seasons, setSeasons] = useState<MovieboxSeason[] | null>(null);
   const [season, setSeason] = useState(1);
   const [episodes, setEpisodes] = useState<{ season: number; list: MovieboxEpisode[] } | null>(null);
   const [releases, setReleases] = useState<TorrentOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
 
-  const isSeries = subject.kind === 'series';
+  // Whether it has episodes is asked of the service, not guessed from the
+  // type: a short drama and a long series are counted apart there. Until the
+  // answer comes, nothing is offered, so a series is never mistaken for a
+  // film.
+  const isSeries = (seasons?.length ?? 0) > 0;
+  const hasSeasons = seasons !== null;
 
   useEffect(() => {
     let alive = true;
@@ -71,20 +76,31 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
       } catch {
         if (alive) setError("Couldn't load the details. Check the internet connection.");
       }
-      if (!isSeries) return;
-      try {
-        const list = await seasonList(subject.id);
-        if (!alive) return;
-        setSeasons(list);
-        if (list.length > 0) setSeason(list[0].season);
-      } catch {
-        if (alive) setError("Couldn't load the seasons.");
-      }
     })();
     return () => {
       alive = false;
     };
-  }, [subject.id, isSeries]);
+  }, [subject.id]);
+
+  // The seasons it has. A film has none, and is played as a whole.
+  useEffect(() => {
+    let alive = true;
+    seasonList(subject.id)
+      .then((list) => {
+        if (!alive) return;
+        setSeasons(list);
+        if (list.length > 0) setSeason(list[0].season);
+      })
+      .catch(() => {
+        if (!alive) return;
+        // A film that answers with nothing is still a film.
+        setSeasons([]);
+        setError("Couldn't load the seasons.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [subject.id]);
 
   // The episodes of the season in front. They are kept with the season they
   // came from, so the episodes of the season before are not on screen while
@@ -92,7 +108,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
   useEffect(() => {
     if (!isSeries) return;
     let alive = true;
-    const current = seasons.find((s) => s.season === season);
+    const current = seasons?.find((s) => s.season === season);
     if (!current) return;
     seasonEpisodes(subject.id, season, current.episodes)
       .then((list) => alive && setEpisodes({ season, list }))
@@ -194,7 +210,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {!isSeries && (
+        {hasSeasons && !isSeries && (
           <Pressable
             onPress={playFilm}
             disabled={preparing}
@@ -223,13 +239,13 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
         {isSeries && (
           <View style={styles.block}>
             <Text style={styles.sectionTitle}>Episodes</Text>
-            {seasons.length > 1 && (
+            {(seasons?.length ?? 0) > 1 && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.seasons}
               >
-                {seasons.map((entry) => (
+                {(seasons ?? []).map((entry) => (
                   <Pressable
                     key={entry.season}
                     onPress={() => setSeason(entry.season)}
