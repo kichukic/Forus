@@ -42,7 +42,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundImage": "./assets/images/adaptive-background.png"
       },
-      "versionCode": 9
+      "versionCode": 10
     }
   }
 }

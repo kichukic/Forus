@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -26,8 +25,15 @@ import {
   type MovieboxSubject,
 } from '../api/moviebox';
 import { FocusCard } from '../components/FocusCard';
+import { FocusRow } from '../components/FocusRow';
+import {
+  MovieboxPoster,
+  POSTER_ROW_HEIGHT,
+  POSTER_ROW_PROPS,
+  POSTER_WIDTH,
+} from '../components/MovieboxPoster';
 import { SectionHeader } from '../components/Section';
-import { GUTTER, RADIUS, colors, isTV, sz } from '../theme';
+import { GUTTER, colors, isTV, sz } from '../theme';
 
 type Props = {
   onOpen: (subject: MovieboxSubject) => void;
@@ -49,8 +55,16 @@ const LIST_PERF = {
   // Android keeps what it draws out of view; letting go of it saves memory.
   removeClippedSubviews: Platform.OS === 'android',
 };
-// The width of a poster in a row, which is taller than it is wide.
-const POSTER_WIDTH = isTV ? 190 : 132;
+// The rows of films are one list, so only the ones near the screen are
+// built. Every row that is built holds its own posters, so this is what
+// keeps the page light.
+const SHELF_PERF = {
+  initialNumToRender: 2,
+  maxToRenderPerBatch: 2,
+  windowSize: 4,
+  updateCellsBatchingPeriod: 60,
+  removeClippedSubviews: Platform.OS === 'android' && !isTV,
+};
 
 export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   const insets = useSafeAreaInsets();
@@ -242,7 +256,7 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
           renderItem={({ item }) => (
             <View style={[styles.cell, { width: cardWidth }]}>
               <FocusCard onPress={() => onOpen(item)} width={cardWidth - 8} style={styles.card}>
-                <Poster subject={item} />
+                <MovieboxPoster subject={item} />
               </FocusCard>
             </View>
           )}
@@ -265,78 +279,46 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
 
   return (
     <View style={styles.screen}>
-      <ScrollView
+      <FlatList
+        data={shelfRows ?? []}
+        keyExtractor={(shelf) => shelf.title}
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}
-        showsVerticalScrollIndicator={false}
-      >
-        {heading}
-        {searchBox}
-        {tabsRow}
-        {error ? <Text style={styles.note}>{error}</Text> : null}
-
-        {waiting ? <ActivityIndicator color={colors.accent} style={styles.spinner} /> : null}
-
-        {(shelfRows ?? []).map((shelf) => (
-          <View key={shelf.title} style={styles.row}>
-            <SectionHeader title={shelf.title} />
-            <FlatList
-              horizontal
-              data={shelf.subjects}
-              keyExtractor={(subject) => subject.id}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.list}
-              renderItem={({ item }) => (
-                <FocusCard onPress={() => onOpen(item)} width={POSTER_WIDTH}>
-                  <Poster subject={item} />
-                </FocusCard>
-              )}
-            />
+        {...SHELF_PERF}
+        ListHeaderComponent={
+          <View>
+            {heading}
+            {searchBox}
+            {tabsRow}
+            {error ? <Text style={styles.note}>{error}</Text> : null}
+            {waiting ? <ActivityIndicator color={colors.accent} style={styles.spinner} /> : null}
           </View>
-        ))}
-
-        {!waiting && (shelfRows ?? []).length === 0 ? (
-          <Text style={styles.note}>Nothing to show in this section right now.</Text>
-        ) : null}
-      </ScrollView>
-    </View>
-  );
-}
-
-// A film in the grid: its poster with the name and year underneath.
-function Poster({ subject }: { subject: MovieboxSubject }) {
-  return (
-    <View>
-      <View style={styles.poster}>
-        {subject.poster ? (
-          <Image source={{ uri: subject.poster }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, styles.posterBlank]}>
-            <Text style={styles.posterBlankText} numberOfLines={3}>
-              {subject.title}
-            </Text>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.row}>
+            <SectionHeader title={item.title} />
+            <FocusRow>
+              <FlatList
+                horizontal
+                data={item.subjects}
+                keyExtractor={(subject) => subject.id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.list}
+                style={{ height: POSTER_ROW_HEIGHT }}
+                {...POSTER_ROW_PROPS}
+                renderItem={({ item: subject }) => (
+                  <FocusCard onPress={() => onOpen(subject)} width={POSTER_WIDTH}>
+                    <MovieboxPoster subject={subject} />
+                  </FocusCard>
+                )}
+              />
+            </FocusRow>
           </View>
         )}
-        {subject.rating ? (
-          <View style={styles.rating}>
-            <Ionicons name="star" size={isTV ? 13 : 11} color="#ffd166" />
-            <Text style={styles.ratingText}>{subject.rating}</Text>
-          </View>
-        ) : null}
-        {subject.kind === 'series' ? (
-          <View style={styles.series}>
-            <Text style={styles.seriesText}>
-              {subject.seasons ? `${subject.seasons} seasons` : 'Series'}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      <Text style={styles.title} numberOfLines={2}>
-        {subject.title}
-      </Text>
-      <Text style={styles.subtitle} numberOfLines={1}>
-        {[subject.year, subject.genre?.split(',')[0]].filter(Boolean).join(' · ')}
-      </Text>
+        ListEmptyComponent={
+          !waiting ? <Text style={styles.note}>Nothing to show in this section right now.</Text> : null
+        }
+      />
     </View>
   );
 }
@@ -383,44 +365,4 @@ const styles = StyleSheet.create({
   gridRow: { marginBottom: 4 },
   cell: { padding: 4, marginBottom: 8 },
   card: { marginRight: 0 },
-  poster: {
-    width: '100%',
-    aspectRatio: 2 / 3,
-    borderRadius: RADIUS,
-    overflow: 'hidden',
-    backgroundColor: colors.surface,
-  },
-  posterBlank: { justifyContent: 'center', padding: 12 },
-  posterBlankText: { color: colors.text, fontSize: isTV ? 17 : 14, fontWeight: '700' },
-  rating: {
-    position: 'absolute',
-    left: 6,
-    top: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: 'rgba(12,10,18,0.78)',
-  },
-  ratingText: { color: '#fff', fontSize: isTV ? 12 : 10.5, fontWeight: '800' },
-  series: {
-    position: 'absolute',
-    right: 6,
-    bottom: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: 'rgba(12,10,18,0.78)',
-  },
-  seriesText: { color: colors.text, fontSize: isTV ? 12 : 10.5, fontWeight: '700' },
-  title: {
-    color: colors.text,
-    fontSize: isTV ? 15 : 13,
-    fontWeight: '700',
-    marginTop: 6,
-    paddingHorizontal: 2,
-  },
-  subtitle: { color: colors.muted, fontSize: isTV ? 12.5 : 11.5, marginTop: 2, paddingHorizontal: 2 },
 });

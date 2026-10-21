@@ -72,6 +72,20 @@ export type MovieboxCast = { name: string; character: string }[];
 
 type Param = [string, string];
 
+// The posters come in sizes up to 3000 by 4000, and decoding one of those
+// takes long enough to make the page stutter as it is scrolled. The picture
+// service can make a smaller copy on the fly, which is what the app asks for.
+export function smallerImage(
+  url: string | undefined,
+  width: number,
+  height: number,
+): string | undefined {
+  if (!url) return undefined;
+  if (!url.includes('pbcdn')) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}x-oss-process=image/resize,m_lfit,w_${width},h_${height}`;
+}
+
 type RawCover = { url?: string; width?: number; height?: number; averageHueLight?: string };
 
 type RawSubject = {
@@ -103,8 +117,8 @@ function toSubject(raw: RawSubject): MovieboxSubject | null {
     // A film is one subject. Everything else is a series of episodes: the
     // usual one, and the short dramas, which the app counts separately.
     kind: (raw.subjectType ?? 1) === 1 ? 'movie' : 'series',
-    poster: raw.cover?.url,
-    backdrop: raw.stills?.url ?? raw.cover?.url,
+    poster: smallerImage(raw.cover?.url, 360, 540),
+    backdrop: smallerImage(raw.stills?.url ?? raw.cover?.url, 720, 1080),
     year: raw.releaseDate ? String(raw.releaseDate).slice(0, 4) : undefined,
     genre: raw.genre,
     rating: raw.imdbRatingValue,

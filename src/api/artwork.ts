@@ -5,6 +5,7 @@ import { fetchWithTimeout } from './http';
 
 const CINEMETA = 'https://v3-cinemeta.strem.io/catalog';
 const CACHE_KEY = 'artwork-cache';
+const MAX_CACHED = 300;
 
 export type Artwork = {
   title: string;
@@ -97,6 +98,9 @@ export async function findArtwork(fileName: string): Promise<Artwork | null> {
   }
 
   known[key] = art;
+  // Keep only the most recent lookups, so the saved cache can't grow for ever.
+  const keys = Object.keys(known);
+  for (const old of keys.slice(0, Math.max(0, keys.length - MAX_CACHED))) delete known[old];
   AsyncStorage.setItem(CACHE_KEY, JSON.stringify(known)).catch(() => {});
   return art;
 }

@@ -24,6 +24,7 @@ import { FileCardContent } from '../components/FileCardContent';
 import { FocusCard } from '../components/FocusCard';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
+import { MovieboxRow } from '../components/MovieboxRow';
 import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
 import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
@@ -52,6 +53,9 @@ type Tab = (typeof TABS)[number]['id'];
 const MOVIE_THEMES = THEMES.filter((t) => t.kind === 'movie');
 const SHOW_THEMES = THEMES.filter((t) => t.kind === 'show');
 const HINDI_THEMES = THEMES.filter((t) => t.kind === 'hindi');
+// The All tab is a mix of everything, so it carries the themed rows of the
+// other tabs as well.
+const ALL_THEMES = [...MOVIE_THEMES, ...SHOW_THEMES, ...HINDI_THEMES];
 const ALL_CHANNELS = [...SHOWS, ...MOVIES];
 // Where each tab was left. Only the tab in front is mounted, so the place is
 // kept here instead of in the tab itself.
@@ -166,10 +170,23 @@ export function HomeScreen({
 
       {panel(
         'all',
-        <TabScroll refreshControl={refreshControl} tabKey="all">
+        <TabScroll
+          refreshControl={refreshControl}
+          themes={ALL_THEMES}
+          tabKey="all"
+          refreshKey={refreshKey}
+          onPlay={playVideo}
+        >
           {/* The news channels lead the page: they are what's on right now. */}
           {liveRow}
           <HeroCarousel key={`hero-all-${refreshKey}`} sources={ALL_CHANNELS} label="New today" onPlay={playVideo} />
+
+          {/* A row of films from MovieBox, so the page holds everything. */}
+          <MovieboxRow
+            key={`moviebox-row-${refreshKey}`}
+            version={refreshKey}
+            onOpen={onOpenMoviebox}
+          />
 
           {history.length > 0 && (
             <View style={styles.row}>

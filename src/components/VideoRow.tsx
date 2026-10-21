@@ -125,7 +125,7 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
     <View style={styles.row}>
       <SectionHeader title={title} subtitle={subtitle} />
       {failed ? (
-        <Text style={styles.note}>Couldn't load. Check the internet connection.</Text>
+        <Text style={styles.note}>{"Couldn't load. Check the internet connection."}</Text>
       ) : !videos ? (
         <SkeletonRow />
       ) : videos.length === 0 ? (

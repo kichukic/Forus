@@ -114,24 +114,24 @@ const FRAME_REFRESH_MS = 5 * 60 * 1000;
 // but has black bars above and below the 16:9 image, which are cropped off;
 // the small 16:9 one is the fallback.
 function useLiveFrame(channelId?: string) {
-  const [videoId, setVideoId] = useState<string | null>(null);
+  // The live video, and which few-minute window its picture was fetched in.
+  const [live, setLive] = useState<{ videoId: string; bucket: number } | null>(null);
   const [small, setSmall] = useState(false);
 
   useEffect(() => {
     if (!channelId) return;
     let cancelled = false;
     resolveLiveVideoId(channelId)
-      .then((id) => !cancelled && setVideoId(id))
+      .then((id) => !cancelled && id && setLive({ videoId: id, bucket: Math.floor(Date.now() / FRAME_REFRESH_MS) }))
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [channelId]);
 
-  if (!videoId) return null;
-  const bucket = Math.floor(Date.now() / FRAME_REFRESH_MS);
+  if (!live) return null;
   return {
-    uri: `https://i.ytimg.com/vi/${videoId}/${small ? 'mqdefault_live' : 'sddefault_live'}.jpg?t=${bucket}`,
+    uri: `https://i.ytimg.com/vi/${live.videoId}/${small ? 'mqdefault_live' : 'sddefault_live'}.jpg?t=${live.bucket}`,
     cropBars: !small,
     onError: () => setSmall(true),
   };
