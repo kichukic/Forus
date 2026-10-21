@@ -535,7 +535,6 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
             label="More rows coming"
             icon="sparkles-outline"
             style={styles.moreRows}
-            still={!moreInView}
           />,
         ]
       : []),
