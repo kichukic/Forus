@@ -47,7 +47,7 @@ const STALE_AFTER_MS = 10 * 60 * 1000;
 
 const TABS = [
   { id: 'all', label: 'All' },
-  { id: 'moviebox', label: 'MovieBox' },
+  { id: 'moviebox', label: 'MovieBox by Kishor' },
   { id: 'movies', label: 'Malayalam Movies' },
   { id: 'shows', label: 'Shows' },
   { id: 'disha', label: 'For Disha Chotu' },
@@ -123,10 +123,10 @@ export function HomeScreen({
 
   // Which way the content slides in: from the right when moving to a tab
   // further along, from the left when moving back.
-  const direction = useRef(1);
+  const [direction, setDirection] = useState(1);
   const open = (t: Tab) => {
     if (t === tab) return;
-    direction.current = TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1;
+    setDirection(TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1);
     setTab(t);
   };
   // Bumped to hand the remote's focus back to the tab bar.
@@ -152,8 +152,8 @@ export function HomeScreen({
   // width, instead of jumping.
   const tabBar = useRef<ScrollView>(null);
   const tabLayouts = useRef<Partial<Record<Tab, { x: number; width: number }>>>({});
-  const pillX = useRef(new Animated.Value(0)).current;
-  const pillWidth = useRef(new Animated.Value(0)).current;
+  const [pillX] = useState(() => new Animated.Value(0));
+  const [pillWidth] = useState(() => new Animated.Value(0));
   const pillPlaced = useRef(false);
 
   const movePill = (animated: boolean) => {
@@ -229,7 +229,7 @@ export function HomeScreen({
   // a heavy tab is opened on top of them.
   const panel = (t: Tab, content: ReactNode) =>
     t === tab ? (
-      <SlideIn key={t} direction={direction.current}>
+      <SlideIn key={t} direction={direction}>
         <ErrorBoundary label={TABS.find((entry) => entry.id === t)?.label}>{content}</ErrorBoundary>
       </SlideIn>
     ) : null;
@@ -506,7 +506,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
 // A tab's new content fades in and slides a little from the side being moved
 // towards.
 function SlideIn({ direction, children }: { direction: number; children: ReactNode }) {
-  const progress = useRef(new Animated.Value(0)).current;
+  const [progress] = useState(() => new Animated.Value(0));
   useEffect(() => {
     Animated.timing(progress, {
       toValue: 1,
