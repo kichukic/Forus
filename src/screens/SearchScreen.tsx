@@ -77,7 +77,10 @@ const SCOPE_TEXT: Record<SearchScope, { heading: string; placeholder: string; no
 };
 
 // Typing on a TV remote is slow, so a search runs once typing pauses.
-const DEBOUNCE_MS = 600;
+const DEBOUNCE_MS = 700;
+// Two letters are half a word, and a search on half a word finds nothing but
+// noise, so the search waits for a word that could be meant.
+const MIN_SEARCH = 3;
 // How many releases a search shows. They are the best seeded first, and too
 // many of them would push the other sources out of sight.
 const MAX_RELEASES = 12;
@@ -118,7 +121,7 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
   useEffect(() => {
     const q = query.trim();
     latest.current = q;
-    if (q.length < 2) return;
+    if (q.length < MIN_SEARCH) return;
     const timer = setTimeout(async () => {
       setLoading(true);
       try {

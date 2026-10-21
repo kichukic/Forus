@@ -44,7 +44,10 @@ type Props = {
 };
 
 // Typing on a TV remote is slow, so a search runs once typing pauses.
-const DEBOUNCE_MS = 600;
+const DEBOUNCE_MS = 700;
+// Two letters are half a word, and a search on half a word finds nothing but
+// noise, so the search waits for a word that could be meant.
+const MIN_SEARCH = 3;
 // Only a few cards are built at a time. A phone with little memory cannot
 // hold fifty posters at once.
 const LIST_PERF = {
@@ -83,10 +86,10 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   const [error, setError] = useState<string | null>(null);
   const latest = useRef('');
 
-  // A search of less than two letters is not a search, so the browsed rows
+  // A search of less than a few letters is not a search, so the browsed rows
   // stay on screen until there is something to replace them with.
   const name = query.trim();
-  const searching = name.length >= 2;
+  const searching = name.length >= MIN_SEARCH;
   // The rows of the section in front, and the films the search matched.
   const shelfRows = shelves && shelves.tab === tab ? shelves.rows : null;
   const searchRows = results && results.query === name ? results.subjects : null;
@@ -128,7 +131,7 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   useEffect(() => {
     const q = name;
     latest.current = q;
-    if (q.length < 2) return;
+    if (q.length < MIN_SEARCH) return;
     const timer = setTimeout(async () => {
       try {
         const found = await searchSubjects(q, 1);
@@ -291,7 +294,15 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
             {searchBox}
             {tabsRow}
             {error ? <Text style={styles.note}>{error}</Text> : null}
-            {waiting ? <ActivityIndicator color={colors.accent} style={styles.spinner} /> : null}
+            {searching && waiting ? (
+              <View style={styles.searching}>
+                <ActivityIndicator color={colors.accent} size="small" />
+                <Text style={styles.searchingText}>Searching…</Text>
+              </View>
+            ) : null}
+            {!searching && waiting ? (
+              <ActivityIndicator color={colors.accent} style={styles.spinner} />
+            ) : null}
           </View>
         }
         renderItem={({ item }) => (
@@ -360,6 +371,14 @@ const styles = StyleSheet.create({
   row: { marginBottom: sz(22, 28) },
   list: { paddingHorizontal: GUTTER, paddingVertical: sz(2, 8) },
   note: { color: colors.muted, fontSize: isTV ? 15 : 13, marginHorizontal: GUTTER, marginTop: 10 },
+  searching: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: GUTTER,
+    marginTop: 10,
+  },
+  searchingText: { color: colors.muted, fontSize: isTV ? 15 : 13 },
   spinner: { marginTop: 24, marginBottom: 24 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: GUTTER - 4, paddingTop: 4 },
   gridRow: { marginBottom: 4 },

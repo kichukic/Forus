@@ -33,7 +33,10 @@ type Props = {
 };
 
 // Typing on a TV remote is slow, so a search runs once typing pauses.
-const DEBOUNCE_MS = 600;
+const DEBOUNCE_MS = 700;
+// Two letters are half a word, and a search on half a word finds nothing but
+// noise, so the search waits for a word that could be meant.
+const MIN_SEARCH = 3;
 // How many releases a search shows before the films take over.
 const MAX_RELEASES = 60;
 // Only a few cards are built at a time. A phone with little memory cannot
@@ -65,9 +68,9 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   // How many films have been passed over, so the next page starts where the
   // last one ended.
   const skip = useRef(0);
-  // A search of less than two letters is not a search, so the browsed list
+  // A search of less than a few letters is not a search, so the browsed list
   // stays on screen until there is something to replace it with.
-  const searching = query.trim().length >= 2;
+  const searching = query.trim().length >= MIN_SEARCH;
 
   useEffect(() => {
     let alive = true;
@@ -113,7 +116,7 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   useEffect(() => {
     const q = query.trim();
     latest.current = q;
-    if (q.length < 2) return;
+    if (q.length < MIN_SEARCH) return;
     const timer = setTimeout(async () => {
       setLoading(true);
       setError(null);
