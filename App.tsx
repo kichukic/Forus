@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
@@ -252,34 +252,45 @@ export default function App() {
 
         <ToastHost />
 
-        {updatePrompt && (
-          <View style={StyleSheet.absoluteFill}>
-            <View style={styles.updatePrompt}>
+        <Modal
+          visible={!!updatePrompt}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setUpdatePrompt(null)}
+        >
+          <View style={styles.updatePromptBackdrop}>
+            <View style={styles.updatePromptCard}>
+              <View style={styles.updatePromptIcon}>
+                <Text style={styles.updatePromptIconText}>↑</Text>
+              </View>
               <Text style={styles.updatePromptTitle}>Update available</Text>
               <Text style={styles.updatePromptBody}>
-                ForUs {updatePrompt.version} is ready. Update now?
+                ForUs {updatePrompt?.version} is ready. Update now?
               </Text>
+              {updatePrompt?.notes ? (
+                <Text style={styles.updatePromptNotes}>{updatePrompt.notes}</Text>
+              ) : null}
               <View style={styles.updatePromptButtons}>
                 <Pressable
                   onPress={() => setUpdatePrompt(null)}
                   style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptCancel, (focused || pressed) && styles.updatePromptBtnFocused]}
                 >
-                  <Text style={styles.updatePromptBtnText}>Cancel</Text>
+                  <Text style={styles.updatePromptBtnText}>Later</Text>
                 </Pressable>
                 <Pressable
                   hasTVPreferredFocus
                   onPress={() => {
-                    setUpdate(updatePrompt);
+                    if (updatePrompt) setUpdate(updatePrompt);
                     setUpdatePrompt(null);
                   }}
                   style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptUpdate, (focused || pressed) && styles.updatePromptBtnFocused]}
                 >
-                  <Text style={[styles.updatePromptBtnText, { color: '#fff' }]}>Update</Text>
+                  <Text style={[styles.updatePromptBtnText, { color: '#fff' }]}>Update now</Text>
                 </Pressable>
               </View>
             </View>
           </View>
-        )}
+        </Modal>
 
         {update && (
           <View style={StyleSheet.absoluteFill}>
@@ -381,15 +392,36 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   hidden: { display: 'none' },
-  updatePrompt: {
+  updatePromptBackdrop: {
     flex: 1,
+    backgroundColor: 'rgba(12,10,18,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(12,10,18,0.85)',
     padding: 24,
   },
+  updatePromptCard: {
+    width: '100%',
+    maxWidth: isTV ? 520 : 360,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: 22,
+    padding: 28,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  updatePromptIcon: {
+    width: isTV ? 72 : 56,
+    height: isTV ? 72 : 56,
+    borderRadius: 999,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  updatePromptIconText: { color: '#fff', fontSize: isTV ? 36 : 28, fontWeight: '900' },
   updatePromptTitle: { color: colors.text, fontSize: isTV ? 26 : 22, fontWeight: '900', textAlign: 'center' },
   updatePromptBody: { color: colors.muted, fontSize: isTV ? 16 : 14, marginTop: 10, textAlign: 'center' },
+  updatePromptNotes: { color: colors.muted, fontSize: isTV ? 14 : 12.5, marginTop: 12, textAlign: 'center', lineHeight: isTV ? 22 : 18 },
   updatePromptButtons: { flexDirection: 'row', gap: 12, marginTop: 24 },
   updatePromptBtn: {
     paddingHorizontal: 26,
