@@ -1,6 +1,7 @@
 // Torrents for a film come from Torrentio, a public Stremio addon. It needs no
 // key and answers with an info hash per release, which is enough to build a
 // magnet link and hand the download to TorBox.
+import { isAdultTitle } from '../data/safe';
 import { isCoolingDown, markFailed, markWorked } from './sourceHealth';
 
 const TORRENTIO = 'https://torrentio.strem.fun';
@@ -206,6 +207,8 @@ export async function searchNyaa(query: string): Promise<TorrentOption[]> {
     const size = item.match(/<nyaa:size>([^<]+)<\/nyaa:size>/)?.[1]?.trim();
     const category = item.match(/<nyaa:category>([^<]+)<\/nyaa:category>/)?.[1];
     const name = decodeEntities(title).trim();
+    // A release for an adult film is not offered.
+    if (isAdultTitle(name)) continue;
     options.push({
       hash,
       name,

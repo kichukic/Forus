@@ -3,6 +3,7 @@
 // with "Signature invalid", so the signing lives here instead of being spread
 // over the app.
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isAdultGenre, isAdultTitle } from '../data/safe';
 import { stripEmoji } from '../data/text';
 import { hexBytes, hmacMd5Base64, md5Hex, utf8Bytes } from './md5';
 
@@ -104,14 +105,26 @@ type RawSubject = {
   imdbRatingValue?: string;
   seNum?: number;
   hasResource?: boolean;
+  // The service marks the films that are not for children.
+  restrictKid?: number;
   cover?: RawCover;
   stills?: RawCover;
   vipInfo?: { requireMemberType?: number; previewSeconds?: number };
   staffList?: { name?: string; character?: string }[];
 };
 
+// Whether the service has marked this film as one for adults.
+function isAdult(raw: RawSubject): boolean {
+  // The service also flags ordinary films that are rated for adults only.
+  if (raw.restrictKid === 1) return true;
+  if (isAdultGenre(raw.genre)) return true;
+  return isAdultTitle(raw.title ?? '');
+}
+
 function toSubject(raw: RawSubject): MovieboxSubject | null {
   if (!raw?.subjectId || !raw.title) return null;
+  // Films for adults are left out, so they turn up nowhere in the app.
+  if (isAdult(raw)) return null;
   return {
     id: String(raw.subjectId),
     // The service puts emoji in its titles too, so they are taken out.
