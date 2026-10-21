@@ -40,12 +40,12 @@ const THEMES_PER_STEP = 3;
 
 const TABS = [
   { id: 'all', label: 'All' },
+  { id: 'moviebox', label: 'MovieBox' },
   { id: 'movies', label: 'Movies' },
   { id: 'shows', label: 'Shows' },
   { id: 'disha', label: 'For Disha Chotu' },
   { id: 'news', label: 'News' },
   { id: 'torbox', label: 'TorBox' },
-  { id: 'moviebox', label: 'MovieBox' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
 
