@@ -80,6 +80,8 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   // The same lists, for the code that runs outside a render.
   const tabsRef = useRef<{ id: number; name: string }[]>([]);
   const emptyRef = useRef<number[]>([]);
+  // The section that last had films in it, to come back to.
+  const goodTabRef = useRef<number | null>(null);
   // The rows are kept with the section they came from, so the rows of the
   // section before are not on screen while the new ones are on their way.
   const [shelves, setShelves] = useState<{ tab: number; rows: MovieboxShelf[] } | null>(null);
@@ -129,11 +131,16 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
             : [...emptyRef.current, tab];
           emptyRef.current = empties;
           setEmptyTabs(empties);
-          // The section in front would be a blank one, so the next is opened.
-          const next = tabsRef.current.find((entry) => !empties.includes(entry.id));
-          if (next && next.id !== tab) setTab(next.id);
+          // A blank section is no use, so the one that had films is kept.
+          const good = goodTabRef.current;
+          const next =
+            good !== null && good !== tab
+              ? good
+              : tabsRef.current.find((entry) => !empties.includes(entry.id))?.id;
+          if (next !== undefined && next !== tab) setTab(next);
           return;
         }
+        goodTabRef.current = tab;
         setShelves({ tab, rows });
         setError(null);
       })
