@@ -1,9 +1,11 @@
 // The insides of the app's cards: a rounded picture with a duration chip and a
 // small play button, and the title with its details underneath.
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { resolveLiveVideoId } from '../api/youtubeLive';
+import { LIVE_NEWS } from '../data/channels';
 import { CARD_HEIGHT, RADIUS, colors, sz } from '../theme';
 
 type VideoCardProps = {
@@ -49,10 +51,24 @@ export function VideoCardContent({ image, title, subtitle, duration, live, place
 }
 
 // A live channel: its colour as a gradient, with a pulsing LIVE badge.
+// A live channel: a current frame of its broadcast, tinted with the channel's
+// colour, with a pulsing LIVE badge. Until the frame arrives (or if the channel
+// isn't live) it is the colour as a gradient.
 export function LiveTileContent({ name, color }: { name: string; color: string }) {
+  const frame = useLiveFrame(LIVE_NEWS.find((c) => c.name === name)?.channelId);
   return (
     <View>
       <LinearGradient colors={[color, shade(color, 0.55)]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.picture}>
+        {frame && (
+          <>
+            <Image source={{ uri: frame.uri }} style={frame.cropBars ? styles.liveFrameCropped : StyleSheet.absoluteFill} onError={frame.onError} />
+            <LinearGradient
+              colors={[`${color}00`, `${color}66`, `${color}ee`]}
+              locations={[0.2, 0.55, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          </>
+        )}
         <View style={styles.liveInner}>
           <LiveBadge />
           <Text style={styles.liveName} numberOfLines={2}>
@@ -66,6 +82,36 @@ export function LiveTileContent({ name, color }: { name: string; color: string }
       <Text style={styles.subtitle}>Live now · News</Text>
     </View>
   );
+}
+
+// Live frames change, so the picture is fetched afresh every few minutes.
+const FRAME_REFRESH_MS = 5 * 60 * 1000;
+
+// A current frame of the channel's live stream. The 640x480 picture is sharp
+// but has black bars above and below the 16:9 image, which are cropped off;
+// the small 16:9 one is the fallback.
+function useLiveFrame(channelId?: string) {
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [small, setSmall] = useState(false);
+
+  useEffect(() => {
+    if (!channelId) return;
+    let cancelled = false;
+    resolveLiveVideoId(channelId)
+      .then((id) => !cancelled && setVideoId(id))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [channelId]);
+
+  if (!videoId) return null;
+  const bucket = Math.floor(Date.now() / FRAME_REFRESH_MS);
+  return {
+    uri: `https://i.ytimg.com/vi/${videoId}/${small ? 'mqdefault_live' : 'sddefault_live'}.jpg?t=${bucket}`,
+    cropBars: !small,
+    onError: () => setSmall(true),
+  };
 }
 
 export function Chip({ text }: { text: string }) {
@@ -146,5 +192,14 @@ const styles = StyleSheet.create({
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#fff', marginRight: 5 },
   liveText: { color: '#fff', fontSize: sz(11, 13), fontWeight: '800', letterSpacing: 1 },
   liveInner: { flex: 1, padding: sz(12, 16), justifyContent: 'space-between' },
+  // The 4:3 frame's 16:9 picture sits in its middle three quarters; enlarging
+  // it by 4/3 and shifting it up by 1/6 shows just that band.
+  liveFrameCropped: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -CARD_HEIGHT / 6,
+    height: (CARD_HEIGHT * 4) / 3,
+  },
   liveName: { color: '#fff', fontSize: sz(20, 24), fontWeight: '800', lineHeight: sz(24, 28) },
 });

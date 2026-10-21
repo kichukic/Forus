@@ -2,7 +2,7 @@
   "expo": {
     "name": "ForUs",
     "slug": "MytvstreamApp",
-    "version": "1.0.3",
+    "version": "1.0.8",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
@@ -41,7 +41,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundImage": "./assets/images/adaptive-background.png"
       },
-      "versionCode": 4
+      "versionCode": 9
     }
   }
 }

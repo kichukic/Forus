@@ -50,20 +50,69 @@ async function fetchFeed(query: string): Promise<Video[] | null> {
   return parseFeed(await res.text());
 }
 
+// Feeds being fetched right now, so a second request for one (the splash
+// preloading while the home screen asks too) shares the first download.
+const inFlight = new Map<string, Promise<Video[]>>();
+
 // The "UULF" uploads playlist holds a channel's long-form videos only, which
-// keeps Shorts out of the rows. Fall back to the plain channel feed.
+// keeps Shorts out of the rows; the plain channel feed is the fallback. Both
+// RSS feeds often fail (YouTube answers 404 for minutes at a time), so the last
+// resort is the same uploads list from YouTube's browse endpoint.
+async function fetchChannel(channelId: string): Promise<Video[]> {
+  let videos =
+    (await fetchFeed(`playlist_id=UULF${channelId.slice(2)}`).catch(() => null)) ??
+    (await fetchFeed(`channel_id=${channelId}`).catch(() => null));
+  if (!videos?.length) videos = await browseLatest(channelId).catch(() => []);
+  // Channels sometimes list the same upload twice.
+  return videos.filter((v, i, all) => all.findIndex((o) => o.id === v.id) === i);
+}
+
+const AGE_UNITS: Record<string, number> = {
+  second: 1e3,
+  minute: 6e4,
+  hour: 36e5,
+  day: 864e5,
+  week: 6048e5,
+  month: 2592e6,
+  year: 31536e6,
+};
+
+// "12 hours ago" as a date, close enough to sort uploads by.
+function ageToDate(age?: string): string {
+  const m = age?.match(/(\d+)\s+(second|minute|hour|day|week|month|year)/);
+  return m ? new Date(Date.now() - Number(m[1]) * AGE_UNITS[m[2]]).toISOString() : '';
+}
+
+// A channel's latest long-form uploads from the browse endpoint.
+async function browseLatest(channelId: string): Promise<Video[]> {
+  const res = await fetch(BROWSE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context: { client: SEARCH_CLIENT }, browseId: `VLUULF${channelId.slice(2)}` }),
+  });
+  if (!res.ok) return [];
+  return collectLockups(await res.json()).lockups.map((l) => ({
+    id: l.id,
+    title: l.title,
+    published: ageToDate(l.age),
+    thumbnail: thumbnailUrl(l.id),
+    duration: l.duration,
+  }));
+}
+
 export async function loadVideos(source: VideoSource): Promise<Video[]> {
   const hit = cache.get(source.channelId);
   let videos = hit && Date.now() - hit.at < CACHE_MS ? hit.videos : null;
 
   if (!videos) {
-    videos =
-      (await fetchFeed(`playlist_id=UULF${source.channelId.slice(2)}`)) ??
-      (await fetchFeed(`channel_id=${source.channelId}`)) ??
-      [];
-    // Channels sometimes list the same upload twice.
-    videos = videos.filter((v, i, all) => all.findIndex((o) => o.id === v.id) === i);
-    cache.set(source.channelId, { at: Date.now(), videos });
+    let request = inFlight.get(source.channelId);
+    if (!request) {
+      request = fetchChannel(source.channelId).finally(() => inFlight.delete(source.channelId));
+      inFlight.set(source.channelId, request);
+    }
+    videos = await request;
+    // A failed load isn't remembered, so the next request tries again.
+    if (videos.length) cache.set(source.channelId, { at: Date.now(), videos });
   }
 
   const filter = source.titleFilter;
@@ -78,7 +127,7 @@ export function clearVideoCache() {
 
 export type VideoPage = { videos: Video[]; continuation?: string };
 
-type Lockup = { id: string; title: string; duration?: string; channelId?: string };
+type Lockup = { id: string; title: string; duration?: string; channelId?: string; age?: string };
 
 // YouTube's newer list items ("lockups"), as used by playlists and "watch next",
 // plus the token for the following page when there is one.
@@ -97,6 +146,7 @@ function collectLockups(json: any): { lockups: Lockup[]; continuation?: string }
         // Both sit deep in nested view models; searching the text is simplest.
         duration: JSON.stringify(lockup.contentImage ?? {}).match(/"thumbnailBadgeViewModel":\{"text":"([^"]+)"/)?.[1],
         channelId: JSON.stringify(meta ?? {}).match(/"browseId":"(UC[\w-]{22})"/)?.[1],
+        age: JSON.stringify(meta ?? {}).match(/"content":"(\d+ \w+ ago)"/)?.[1],
       });
       return;
     }

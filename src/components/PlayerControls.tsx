@@ -127,17 +127,23 @@ export function PlayerControls({ paused, buffering, time, live, onToggle, onSeek
   );
 }
 
-// The thin progress line for TV, where the remote does the seeking.
-export function ProgressLine({ time, live }: { time: PlaybackTime; live: boolean }) {
+// The thin progress line for TV, where the remote does the seeking. While skip
+// presses are being gathered, it previews where the player is about to jump.
+export function ProgressLine({ time, live, target }: { time: PlaybackTime; live: boolean; target?: number | null }) {
   if (live) return null;
   const fraction = time.d > 0 ? Math.min(1, time.t / time.d) : 0;
+  const preview = target != null && time.d > 0 ? Math.min(1, target / time.d) : null;
   return (
     <View style={styles.tvProgress}>
       <Text style={styles.time}>{formatTime(time.t)}</Text>
       <View style={styles.tvTrack}>
+        {preview !== null && <View style={[styles.preview, { width: `${preview * 100}%` }]} />}
         <View style={[styles.fill, { width: `${fraction * 100}%` }]} />
       </View>
-      <Text style={styles.timeTotal}>{formatTime(time.d)}</Text>
+      <Text style={styles.timeTotal}>
+        {preview !== null ? <Text style={styles.jump}>→ {formatTime(target!)}   </Text> : null}
+        {formatTime(time.d)}
+      </Text>
     </View>
   );
 }
@@ -278,5 +284,7 @@ const styles = StyleSheet.create({
   flashRight: { right: '12%' },
   flashText: { color: '#fff', fontSize: 13, fontWeight: '800', marginTop: 2 },
   tvProgress: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14 },
+  preview: { position: 'absolute', top: 0, bottom: 0, left: 0, backgroundColor: 'rgba(155,92,255,0.45)' },
+  jump: { color: colors.accent, fontWeight: '800' },
   tvTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden' },
 });

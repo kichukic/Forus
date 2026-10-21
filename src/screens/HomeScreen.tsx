@@ -161,6 +161,8 @@ export function HomeScreen({
       {panel(
         'all',
         <TabScroll refreshControl={refreshControl} tabKey="all">
+          {/* The news channels lead the page: they are what's on right now. */}
+          {liveRow}
           <HeroCarousel key={`hero-all-${refreshKey}`} sources={ALL_CHANNELS} label="New today" onPlay={playVideo} />
 
           {history.length > 0 && (
@@ -182,7 +184,6 @@ export function HomeScreen({
           )}
 
           <NewRow key={`new-${refreshKey}`} onPlay={playVideo} />
-          {liveRow}
         </TabScroll>,
       )}
 

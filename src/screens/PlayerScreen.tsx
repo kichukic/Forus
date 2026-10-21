@@ -29,6 +29,16 @@ import type { Playable, YouTubePlayable } from '../types';
 // 101/150: the owner disabled embedding. 152/153: embed configuration rejected.
 const EMBED_BLOCKED = [101, 150, 152, 153];
 
+const SKIP_SECONDS = 10;
+// How long after the last skip press the player actually jumps.
+const SEEK_SETTLE_MS = 550;
+// A repeat of the same remote key sooner than this is the same press.
+const KEY_REPEAT_MS = 120;
+// Still loading this long after a jump counts as stuck…
+const STALL_MS = 8000;
+// …as long as the jump was recent.
+const STALL_WINDOW_MS = 20000;
+
 // A source that never reports back is treated as broken.
 const READY_TIMEOUT_MS = 14000;
 
@@ -67,6 +77,15 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const [paused, setPaused] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const [time, setTime] = useState<PlaybackTime>({ t: 0, d: 0 });
+  const timeRef = useRef(time);
+  timeRef.current = time;
+  // Skips are gathered: each press moves the target, and the player jumps once
+  // the presses stop. A burst of separate jumps (or a held key) can leave the
+  // TV's player stuck loading.
+  const pendingSeek = useRef<{ target: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const lastSeek = useRef<{ at: number; target: number } | null>(null);
+  const [seekTarget, setSeekTarget] = useState<number | null>(null);
+  const lastKey = useRef<{ type: string; at: number } | null>(null);
   const [external, setExternal] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -79,6 +98,39 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
     webview.current?.injectJavaScript(
       `if (window.cmd) { window.cmd(${JSON.stringify(name)}, ${arg}); } true;`,
     );
+
+  const seekBy = (seconds: number) => {
+    const { t, d } = timeRef.current;
+    const from = pendingSeek.current?.target ?? t;
+    // Recorded videos can't go past their end; live streams keep growing.
+    const target = Math.max(0, item.kind === 'live' || d <= 0 ? from + seconds : Math.min(d - 1, from + seconds));
+    if (pendingSeek.current) clearTimeout(pendingSeek.current.timer);
+    const timer = setTimeout(() => {
+      send('seekTo', target);
+      pendingSeek.current = null;
+      lastSeek.current = { at: Date.now(), target };
+      setSeekTarget(null);
+    }, SEEK_SETTLE_MS);
+    pendingSeek.current = { target, timer };
+    setSeekTarget(target);
+  };
+
+  // If the player is still loading a while after a jump, nudge it: jump to the
+  // same spot again and press play.
+  useEffect(() => {
+    const seek = lastSeek.current;
+    if (!buffering || !seek || Date.now() - seek.at > STALL_WINDOW_MS) return;
+    const timer = setTimeout(() => {
+      send('seekTo', seek.target);
+      send('play');
+      lastSeek.current = null;
+    }, STALL_MS);
+    return () => clearTimeout(timer);
+  }, [buffering]);
+
+  useEffect(() => () => {
+    if (pendingSeek.current) clearTimeout(pendingSeek.current.timer);
+  }, []);
 
   // A new source starts its own clock.
   useEffect(() => {
@@ -201,8 +253,13 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
   const onRemote = useCallback(
     (evt: HWEvent) => {
-      // Android reports key-down (0) and key-up (1); act once per press.
+      // Android reports key-down (0) and key-up (1); act once per press. Some
+      // TVs send a press twice with no up/down at all, so a repeat of the same
+      // key within a moment is dropped too.
       if (String(evt.eventKeyAction) === '0' || pickerOpen) return;
+      const now = Date.now();
+      if (lastKey.current?.type === evt.eventType && now - lastKey.current.at < KEY_REPEAT_MS) return;
+      lastKey.current = { type: evt.eventType, at: now };
       switch (evt.eventType) {
         case 'select':
         case 'playPause':
@@ -210,11 +267,11 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
           break;
         case 'left':
         case 'rewind':
-          send('seek', -10);
+          seekBy(-SKIP_SECONDS);
           break;
         case 'right':
         case 'fastForward':
-          send('seek', 10);
+          seekBy(SKIP_SECONDS);
           break;
         default:
           return;
@@ -265,7 +322,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
               time={time}
               live={item.kind === 'live'}
               onToggle={() => send(paused ? 'play' : 'pause')}
-              onSeekBy={(sec) => send('seek', sec)}
+              onSeekBy={seekBy}
               onSeekTo={(sec) => send('seekTo', sec)}
             />
           )}
@@ -352,7 +409,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
                   ? 'OK: pause / play    Back: home'
                   : 'OK: pause / play    ◀ ▶: 10 seconds    Back: home'}
           </Text>
-          {!external && <ProgressLine time={time} live={item.kind === 'live'} />}
+          {!external && <ProgressLine time={time} live={item.kind === 'live'} target={seekTarget} />}
         </View>
       )}
 

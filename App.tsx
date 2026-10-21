@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { preloadHome, type PreloadStep } from './src/api/preload';
 import { AnimatedSplash } from './src/components/AnimatedSplash';
 import { BottomNav, BOTTOM_NAV_HEIGHT, type NavId } from './src/components/BottomNav';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -31,10 +32,19 @@ type Screen = NavId | 'torbox';
 // reaches the top shows itself instead of closing the app.
 installErrorHandler();
 
+// The longest the splash waits for the home screen's data.
+const PRELOAD_TIMEOUT_MS = 8000;
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
-  // The opening animation; the home screen loads underneath it meanwhile.
+  // The opening animation. It stays until the home screen's data has loaded
+  // (or loading gave up), so the home screen opens already filled in.
   const [splash, setSplash] = useState(true);
+  const [preload, setPreload] = useState<PreloadStep & { done: boolean }>({
+    label: 'Starting up…',
+    progress: 0,
+    done: false,
+  });
   // Where the TorBox screen goes back to.
   const [torboxFrom, setTorboxFrom] = useState<NavId>('home');
   const [playing, setPlaying] = useState<Playable | null>(null);
@@ -53,6 +63,21 @@ export default function App() {
 
   useEffect(() => {
     loadHistory().then(setHistory);
+  }, []);
+
+  useEffect(() => {
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      setPreload((p) => ({ ...p, done: true }));
+    };
+    // A slow or missing connection mustn't keep the splash up for ever.
+    const giveUp = setTimeout(finish, PRELOAD_TIMEOUT_MS);
+    preloadHome((step) => !finished && setPreload({ ...step, done: false }))
+      .catch(() => {})
+      .finally(finish);
+    return () => clearTimeout(giveUp);
   }, []);
 
   // Anything fatal is shown on screen rather than ending the app.
@@ -209,7 +234,14 @@ export default function App() {
             }
           </PlayerShell>
         )}
-        {splash && <AnimatedSplash onDone={() => setSplash(false)} />}
+        {splash && (
+          <AnimatedSplash
+            ready={preload.done}
+            progress={preload.progress}
+            status={preload.label}
+            onDone={() => setSplash(false)}
+          />
+        )}
 
         {crash && (
           <View style={StyleSheet.absoluteFill}>
