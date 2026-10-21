@@ -473,6 +473,16 @@ type TabScrollProps = {
 // tab costs nothing until it is scrolled to, and rows far behind are let go.
 function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay, tabKey }: TabScrollProps) {
   const [themeCount, setThemeCount] = useState(THEMES_AT_START);
+  // The "more rows" placeholder is built a few screens ahead of being seen; it
+  // only animates while the end of the page, where it sits, is on screen. That
+  // is worked out from the scroll position and the page's height, both of which
+  // are reported as they change.
+  const [moreInView, setMoreInView] = useState(false);
+  const metrics = useRef({ y: 0, height: 0, content: 0 });
+  const checkEnd = () => {
+    const { y, height, content } = metrics.current;
+    if (height > 0) setMoreInView(content - (y + height) < height * END_IN_VIEW);
+  };
   const scroll = useRef<FlatList<ReactNode>>(null);
   useEffect(() => {
     activePage.current = scroll.current;
@@ -493,6 +503,8 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
   const onScroll = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.contentOffset.y;
     if (tabKey) scrollPositions.set(tabKey, y);
+    metrics.current = { y, height: e.layoutMeasurement.height, content: e.contentSize.height };
+    checkEnd();
     // The place to come back to is kept until it is actually reached.
     if (restore.current > 0 && y >= restore.current - 4) restore.current = 0;
   };
@@ -523,7 +535,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
             label="More rows coming"
             icon="sparkles-outline"
             style={styles.moreRows}
-            still
+            still={!moreInView}
           />,
         ]
       : []),
@@ -551,9 +563,17 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
       // More themed rows once the end is a screen or so away.
       onEndReached={() => setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length))}
       onEndReachedThreshold={1.2}
-      onScroll={tabKey ? onScroll : undefined}
+      onScroll={onScroll}
       scrollEventThrottle={250}
-      onContentSizeChange={restorePlace}
+      onContentSizeChange={(_, content) => {
+        restorePlace();
+        metrics.current.content = content;
+        checkEnd();
+      }}
+      onLayout={(e) => {
+        metrics.current.height = e.nativeEvent.layout.height;
+        checkEnd();
+      }}
       onTouchStart={() => {
         // A touch means the user is here now, not on their way back.
         restore.current = 0;
@@ -565,6 +585,8 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
   );
 }
 
+// The end of the page counts as in view within this share of a screen.
+const END_IN_VIEW = 0.9;
 const rowKey = (row: ReactNode, index: number) =>
   isValidElement(row) && row.key != null ? String(row.key) : String(index);
 const renderRow = ({ item }: { item: ReactNode }) => <>{item}</>;

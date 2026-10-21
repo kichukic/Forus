@@ -70,6 +70,9 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [exhausted, setExhausted] = useState(false);
+  const [nearBottom, setNearBottom] = useState(false);
+  const [viewportH, setViewportH] = useState(0);
+  const [contentH, setContentH] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const latest = useRef('');
 
@@ -164,6 +167,7 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   const growFilms = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!movies) return;
     const left = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
+    setNearBottom(left < e.layoutMeasurement.height || contentH <= viewportH);
     if (left < e.layoutMeasurement.height) {
       setReveal((current) =>
         current.count >= movies.length
@@ -298,6 +302,11 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
         contentContainerStyle={styles.grid}
         refreshControl={refreshControl}
         {...LIST_PERF}
+        onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
+        onContentSizeChange={(_, h) => {
+          setContentH(h);
+          setNearBottom((prev) => prev || h <= viewportH);
+        }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.6}
         onScroll={growFilms}
@@ -328,7 +337,7 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
           loadingMore ? (
             <ActivityIndicator color={colors.accent} style={styles.spinner} />
           ) : moreFilms ? (
-            <Loader still label="More films coming" icon="film-outline" style={styles.moreFilms} />
+            <Loader still={!nearBottom} label="More films coming" icon="film-outline" style={styles.moreFilms} />
           ) : null
         }
       />

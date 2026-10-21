@@ -101,6 +101,10 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   const [page, setPage] = useState(1);
   // How many rows of the section in front have been let in.
   const [reveal, setReveal] = useState({ tab: -1, count: SHELVES_AT_START });
+  // The footer hint only animates while it is actually on screen.
+  const [nearBottom, setNearBottom] = useState(false);
+  const [viewportH, setViewportH] = useState(0);
+  const [contentH, setContentH] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -266,6 +270,8 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   // The same measure the All tab uses: within a screen of the bottom.
   const growRows = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     const left = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
+    const nb = left < e.layoutMeasurement.height;
+    setNearBottom(nb || contentH <= viewportH);
     if (left < e.layoutMeasurement.height) {
       setReveal((current) =>
         current.count >= filteredRows.length
@@ -364,6 +370,11 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}
         {...SHELF_PERF}
+        onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
+        onContentSizeChange={(_, h) => {
+          setContentH(h);
+          setNearBottom((prev) => prev || h <= viewportH);
+        }}
         onScroll={growRows}
         scrollEventThrottle={200}
         ListHeaderComponent={
@@ -424,7 +435,7 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
           </View>
         )}
         ListFooterComponent={
-          moreRows ? <Loader still label="More rows coming" icon="albums-outline" style={styles.moreRows} /> : null
+          moreRows ? <Loader still={!nearBottom} label="More rows coming" icon="albums-outline" style={styles.moreRows} /> : null
         }
         ListEmptyComponent={
           !waiting ? <Text style={styles.note}>Nothing to show in this section right now.</Text> : null

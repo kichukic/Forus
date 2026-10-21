@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
@@ -33,7 +30,7 @@ import { SearchScreen } from './src/screens/SearchScreen';
 import { TransferBar } from './src/components/TransferBar';
 import { ToastHost } from './src/components/ToastHost';
 import { TransferToast } from './src/components/TransferToast';
-import { UpdateScreen } from './src/screens/UpdateScreen';
+import { UpdatePrompt } from './src/components/UpdatePrompt';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TorboxSetupScreen } from './src/screens/TorboxSetupScreen';
 import { colors, isTV } from './src/theme';
@@ -78,7 +75,6 @@ export default function App() {
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
   // The film open from MovieBox, in the same way.
   const [moviebox, setMoviebox] = useState<MovieboxSubject | null>(null);
-  const [update, setUpdate] = useState<Update | null>(null);
   // The prompt shown on launch (and from Settings) when an update is found.
   const [updatePrompt, setUpdatePrompt] = useState<Update | null>(null);
   // Transfers now run in the background, so there is no full-screen sender.
@@ -231,7 +227,7 @@ export default function App() {
               onClearHistory={() => setHistory(clearHistory())}
               onCheckForUpdates={() => {
                 checkForUpdate(true).then((u) => {
-                  if (u) setUpdate(u);
+                  if (u) setUpdatePrompt(u);
                   else showToast({ text: 'You are on the latest version.' });
                 });
               }}
@@ -255,56 +251,7 @@ export default function App() {
 
         <ToastHost />
 
-        <Modal
-          visible={!!updatePrompt}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setUpdatePrompt(null)}
-        >
-          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill}>
-            <View style={styles.updatePromptBackdrop}>
-              <BlurView intensity={40} tint="dark" style={styles.updatePromptCard}>
-                <LinearGradient
-                  colors={['rgba(155,92,255,0.35)', 'rgba(155,92,255,0.05)']}
-                  style={styles.updatePromptIcon}
-                >
-                  <Ionicons name="cloud-download-outline" size={isTV ? 36 : 28} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.updatePromptTitle}>Update available</Text>
-                <Text style={styles.updatePromptBody}>
-                  ForUs {updatePrompt?.version} is ready. Update now?
-                </Text>
-                {updatePrompt?.notes ? (
-                  <Text style={styles.updatePromptNotes}>{updatePrompt.notes}</Text>
-                ) : null}
-                <View style={styles.updatePromptButtons}>
-                  <Pressable
-                    onPress={() => setUpdatePrompt(null)}
-                    style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptCancel, (focused || pressed) && styles.updatePromptBtnFocused]}
-                  >
-                    <Text style={styles.updatePromptBtnText}>Later</Text>
-                  </Pressable>
-                  <Pressable
-                    hasTVPreferredFocus
-                    onPress={() => {
-                      if (updatePrompt) setUpdate(updatePrompt);
-                      setUpdatePrompt(null);
-                    }}
-                    style={({ focused, pressed }) => [styles.updatePromptBtn, styles.updatePromptUpdate, (focused || pressed) && styles.updatePromptBtnFocused]}
-                  >
-                    <Text style={[styles.updatePromptBtnText, { color: '#fff' }]}>Update now</Text>
-                  </Pressable>
-                </View>
-              </BlurView>
-            </View>
-          </BlurView>
-        </Modal>
-
-        {update && (
-          <View style={StyleSheet.absoluteFill}>
-            <UpdateScreen update={update} onClose={() => setUpdate(null)} />
-          </View>
-        )}
+        <UpdatePrompt update={updatePrompt} onClose={() => setUpdatePrompt(null)} />
 
         {showNav && (
           <TransferBar
@@ -400,57 +347,4 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   hidden: { display: 'none' },
-  updatePromptBackdrop: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  updatePromptCard: {
-    width: '100%',
-    maxWidth: isTV ? 560 : 380,
-    borderRadius: 28,
-    padding: 32,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    overflow: 'hidden',
-    // Glass: semi-transparent surface + subtle shadow
-    backgroundColor: 'rgba(20,18,30,0.55)',
-    shadowColor: '#9b5cff',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  updatePromptIcon: {
-    width: isTV ? 76 : 60,
-    height: isTV ? 76 : 60,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    shadowColor: '#9b5cff',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.6,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  updatePromptTitle: { color: '#fff', fontSize: isTV ? 28 : 22, fontWeight: '900', textAlign: 'center', letterSpacing: -0.3 },
-  updatePromptBody: { color: 'rgba(255,255,255,0.7)', fontSize: isTV ? 16 : 14, marginTop: 10, textAlign: 'center' },
-  updatePromptNotes: { color: 'rgba(255,255,255,0.5)', fontSize: isTV ? 14 : 12.5, marginTop: 12, textAlign: 'center', lineHeight: isTV ? 22 : 18 },
-  updatePromptButtons: { flexDirection: 'row', gap: 12, marginTop: 24 },
-  updatePromptBtn: {
-    paddingHorizontal: 26,
-    paddingVertical: 12,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  updatePromptCancel: { backgroundColor: 'rgba(255,255,255,0.08)' },
-  updatePromptUpdate: { backgroundColor: colors.accent, borderColor: colors.accent },
-  updatePromptBtnFocused: { borderColor: '#fff', borderWidth: 2 },
-  updatePromptBtnText: { color: 'rgba(255,255,255,0.85)', fontSize: isTV ? 16 : 14, fontWeight: '800' },
 });
