@@ -3,9 +3,10 @@ import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-nativ
 import { loadVideoPage, loadVideos, searchVideos, type Video } from '../api/youtube';
 import { FULL_MOVIE, MOVIES, SHOWS, TRUSTED_CHANNELS, type VideoSource } from '../data/channels';
 import type { Theme } from '../data/themes';
-import { CARD_HEIGHT, GUTTER, colors, isTV } from '../theme';
+import { CARD_HEIGHT, GUTTER, ROW_PAD, colors, sz } from '../theme';
 import { VideoCardContent } from './Cards';
 import { FocusCard } from './FocusCard';
+import { FocusRow } from './FocusRow';
 import { SectionHeader, SkeletonRow } from './Section';
 
 type Props = {
@@ -129,29 +130,31 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
       ) : videos.length === 0 ? (
         <Text style={styles.note}>Nothing new right now.</Text>
       ) : (
-        <FlatList
-          horizontal
-          data={videos}
-          keyExtractor={(v) => v.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.list}
-          // Start fetching while a couple of screens of cards are still ahead.
-          onEndReached={onEndReached}
-          onEndReachedThreshold={2}
-          ListFooterComponent={
-            loadingMore ? <ActivityIndicator color={colors.accent} style={styles.more} /> : null
-          }
-          renderItem={({ item }) => (
-            <FocusCard onPress={() => onPlay(item)}>
-              <VideoCardContent
-                image={item.thumbnail}
-                title={cleanTitle(item.title)}
-                subtitle={item.channel}
-                duration={item.duration}
-              />
-            </FocusCard>
-          )}
-        />
+        <FocusRow>
+          <FlatList
+            horizontal
+            data={videos}
+            keyExtractor={(v) => v.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.list}
+            // Start fetching while a couple of screens of cards are still ahead.
+            onEndReached={onEndReached}
+            onEndReachedThreshold={2}
+            ListFooterComponent={
+              loadingMore ? <ActivityIndicator color={colors.accent} style={styles.more} /> : null
+            }
+            renderItem={({ item }) => (
+              <FocusCard onPress={() => onPlay(item)}>
+                <VideoCardContent
+                  image={item.thumbnail}
+                  title={cleanTitle(item.title)}
+                  subtitle={item.channel}
+                  duration={item.duration}
+                />
+              </FocusCard>
+            )}
+          />
+        </FocusRow>
       )}
     </View>
   );
@@ -165,8 +168,8 @@ export function cleanTitle(title: string): string {
 }
 
 const styles = StyleSheet.create({
-  row: { marginBottom: isTV ? 30 : 24 },
-  list: { paddingHorizontal: GUTTER, paddingVertical: isTV ? 8 : 2 },
-  note: { color: colors.muted, fontSize: isTV ? 16 : 14, marginLeft: GUTTER },
+  row: { marginBottom: sz(24, 30) },
+  list: { paddingHorizontal: GUTTER, paddingVertical: ROW_PAD },
+  note: { color: colors.muted, fontSize: sz(14, 16), marginLeft: GUTTER },
   more: { alignSelf: 'center', marginHorizontal: 24, height: CARD_HEIGHT },
 });

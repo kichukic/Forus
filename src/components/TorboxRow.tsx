@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { formatSize, getApiKey, listVideoFiles, type TorboxFile } from '../api/torbox';
 import { Ionicons } from '@expo/vector-icons';
-import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, GUTTER, RADIUS, colors, isTV } from '../theme';
+import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, GUTTER, RADIUS, colors, isTV, sz } from '../theme';
 import type { FilePlayable } from '../types';
 import { FileCardContent } from './FileCardContent';
 import { FocusCard } from './FocusCard';
@@ -38,17 +38,30 @@ type Card = { type: 'file'; file: TorboxFile } | { type: 'settings' };
 
 export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refreshControl }: Props) {
   const [state, setState] = useState<State>({ status: 'loading' });
+  // The list is loaded again when the version changes, and goes back to
+  // loading while it does.
+  const [shownVersion, setShownVersion] = useState(version);
+  if (shownVersion !== version) {
+    setShownVersion(version);
+    setState({ status: 'loading' });
+  }
   const { width } = useWindowDimensions();
   const columns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP)));
 
   useEffect(() => {
-    setState({ status: 'loading' });
+    let alive = true;
     getApiKey()
       .then(async (key) => {
+        if (!alive) return;
         if (!key) return setState({ status: 'disconnected' });
-        setState({ status: 'ready', files: await listVideoFiles(key) });
+        const files = await listVideoFiles(key);
+        if (alive) setState({ status: 'ready', files });
       })
-      .catch((e) => setState({ status: 'error', message: String(e.message ?? e) }));
+      .catch((e) => alive && setState({ status: 'error', message: String(e?.message ?? e) }));
+    // The row is left when the tab is closed, so a late answer is dropped.
+    return () => {
+      alive = false;
+    };
   }, [version]);
 
   if (state.status === 'loading' && !grid) {
@@ -66,7 +79,7 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
     state.status === 'loading' ? (
       <ActivityIndicator color={colors.accent} style={styles.loading} />
     ) : state.status === 'error' ? (
-      <Text style={styles.note}>Couldn't load TorBox: {state.message}</Text>
+      <Text style={styles.note}>Couldn&apos;t load TorBox: {state.message}</Text>
     ) : state.status === 'ready' && state.files.length === 0 ? (
       <Text style={styles.note}>No finished video files in your TorBox account yet.</Text>
     ) : state.status === 'disconnected' && grid ? (
@@ -90,6 +103,12 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
         ) : undefined
       }
       refreshControl={grid ? refreshControl : undefined}
+      // Only a few cards are built at a time, so a phone with little memory
+      // is not asked to hold them all.
+      initialNumToRender={isTV ? 12 : 8}
+      maxToRenderPerBatch={isTV ? 12 : 8}
+      windowSize={7}
+      updateCellsBatchingPeriod={60}
       data={cards}
       keyExtractor={(c) => (c.type === 'file' ? `${c.file.source}:${c.file.itemId}:${c.file.fileId}` : 'settings')}
       showsHorizontalScrollIndicator={false}
@@ -113,7 +132,7 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
           <FocusCard onPress={onOpenSettings}>
             <View>
               <View style={styles.settingsTile}>
-                <Ionicons name="settings-outline" size={isTV ? 34 : 28} color={colors.accent} />
+                <Ionicons name="settings-outline" size={sz(28, 34)} color={colors.accent} />
               </View>
               <Text style={styles.settingsText}>
                 {state.status === 'disconnected' ? 'Connect TorBox' : 'TorBox settings'}
@@ -135,14 +154,14 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
 }
 
 const styles = StyleSheet.create({
-  row: { marginBottom: isTV ? 20 : 12 },
+  row: { marginBottom: sz(12, 20) },
   list: { paddingHorizontal: GUTTER, paddingVertical: 10 },
   gridList: { flex: 1 },
   grid: { paddingHorizontal: GUTTER, paddingBottom: 32 },
   // FocusCard has its own right margin; the row only needs spacing below.
   gridRow: { marginBottom: CARD_GAP },
   loading: { alignSelf: 'flex-start', marginLeft: GUTTER, marginVertical: 20 },
-  note: { color: colors.muted, fontSize: isTV ? 16 : 14, marginLeft: GUTTER, marginBottom: 4 },
+  note: { color: colors.muted, fontSize: sz(14, 16), marginLeft: GUTTER, marginBottom: 4 },
   settingsTile: {
     height: CARD_HEIGHT,
     borderRadius: RADIUS,
@@ -152,5 +171,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(155,92,255,0.35)',
   },
-  settingsText: { color: colors.text, fontSize: isTV ? 16 : 14, fontWeight: '700', marginTop: 8, paddingHorizontal: 2 },
+  settingsText: { color: colors.text, fontSize: sz(14, 16), fontWeight: '700', marginTop: 8, paddingHorizontal: 2 },
 });

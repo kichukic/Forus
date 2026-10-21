@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { CARD_HEIGHT, RADIUS, colors, isTV } from '../theme';
+import { CARD_HEIGHT, RADIUS, colors, sz } from '../theme';
 
 type VideoCardProps = {
   image?: string | null;
@@ -33,7 +33,7 @@ export function VideoCardContent({ image, title, subtitle, duration, live, place
         )}
         <View style={styles.topRight}>{live ? <LiveBadge /> : duration ? <Chip text={duration} /> : null}</View>
         <View style={styles.play}>
-          <Ionicons name="play" size={isTV ? 16 : 13} color="#fff" style={styles.playIcon} />
+          <Ionicons name="play" size={sz(13, 16)} color="#fff" style={styles.playIcon} />
         </View>
       </View>
       <Text style={styles.title} numberOfLines={2}>
@@ -107,14 +107,14 @@ export function shade(hex: string, amount: number): string {
 const styles = StyleSheet.create({
   picture: { height: CARD_HEIGHT, borderRadius: RADIUS, overflow: 'hidden', backgroundColor: colors.surface },
   blank: { justifyContent: 'center', padding: 14 },
-  placeholder: { color: colors.text, fontSize: isTV ? 18 : 15, fontWeight: '700', opacity: 0.85 },
+  placeholder: { color: colors.text, fontSize: sz(15, 18), fontWeight: '700', opacity: 0.85 },
   topRight: { position: 'absolute', top: 8, right: 8, flexDirection: 'row' },
   play: {
     position: 'absolute',
     right: 8,
     bottom: 8,
-    width: isTV ? 34 : 28,
-    height: isTV ? 34 : 28,
+    width: sz(28, 34),
+    height: sz(28, 34),
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
@@ -125,15 +125,15 @@ const styles = StyleSheet.create({
   playIcon: { marginLeft: 2 },
   title: {
     color: colors.text,
-    fontSize: isTV ? 16 : 14,
+    fontSize: sz(14, 16),
     fontWeight: '700',
-    lineHeight: isTV ? 21 : 19,
+    lineHeight: sz(19, 21),
     marginTop: 8,
     paddingHorizontal: 2,
   },
-  subtitle: { color: colors.muted, fontSize: isTV ? 13 : 12, marginTop: 3, paddingHorizontal: 2 },
+  subtitle: { color: colors.muted, fontSize: sz(12, 13), marginTop: 3, paddingHorizontal: 2 },
   chip: { backgroundColor: 'rgba(12,10,18,0.75)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  chipText: { color: '#fff', fontSize: isTV ? 13 : 11, fontWeight: '700' },
+  chipText: { color: '#fff', fontSize: sz(11, 13), fontWeight: '700' },
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#fff', marginRight: 5 },
-  liveText: { color: '#fff', fontSize: isTV ? 13 : 11, fontWeight: '800', letterSpacing: 1 },
-  liveInner: { flex: 1, padding: isTV ? 16 : 12, justifyContent: 'space-between' },
-  liveName: { color: '#fff', fontSize: isTV ? 24 : 20, fontWeight: '800', lineHeight: isTV ? 28 : 24 },
+  liveText: { color: '#fff', fontSize: sz(11, 13), fontWeight: '800', letterSpacing: 1 },
+  liveInner: { flex: 1, padding: sz(12, 16), justifyContent: 'space-between' },
+  liveName: { color: '#fff', fontSize: sz(20, 24), fontWeight: '800', lineHeight: sz(24, 28) },
 });

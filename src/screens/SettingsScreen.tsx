@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiKey } from '../api/torbox';
 import { LIVE_NEWS, MOVIES, SHOWS } from '../data/channels';
-import { GLOW, GUTTER, RADIUS, colors, isTV } from '../theme';
+import { GLOW, GUTTER, RADIUS, colors, sz } from '../theme';
 
 type Props = {
   // Bumped when the TorBox key changes, so the status here updates.
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
   content: { paddingHorizontal: GUTTER, paddingBottom: 120 },
-  title: { color: colors.text, fontSize: isTV ? 32 : 26, fontWeight: '900', marginBottom: 20 },
+  title: { color: colors.text, fontSize: sz(26, 32), fontWeight: '900', marginBottom: 20 },
   group: { marginBottom: 22 },
   groupTitle: {
     color: colors.muted,

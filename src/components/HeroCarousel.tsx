@@ -15,14 +15,18 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { loadVideos, type Video } from '../api/youtube';
+import { FocusRow } from './FocusRow';
 import type { VideoSource } from '../data/channels';
-import { GUTTER, RADIUS, SCRIM, colors, isTV } from '../theme';
+import { GUTTER, RADIUS, SCRIM, colors, isTV, sz } from '../theme';
 
 type Props = {
   // Module-level constants, so the effect below runs once.
   sources: VideoSource[];
   label: string;
   onPlay: (video: Video) => void;
+  // TV: put the remote's focus on Watch Now when the app opens. Only one
+  // carousel should, or switching tabs would pull focus off the tab bar.
+  takeFocus?: boolean;
 };
 
 type Featured = Video & { channel: string };
@@ -31,7 +35,7 @@ const SLIDES = 6;
 const HERO_SIZES = ['maxresdefault', 'hq720', 'mqdefault'];
 const ROTATE_MS = 6000;
 
-export function HeroCarousel({ sources, label, onPlay }: Props) {
+export function HeroCarousel({ sources, label, onPlay, takeFocus = false }: Props) {
   const { width, height } = useWindowDimensions();
   const [slides, setSlides] = useState<Featured[]>([]);
   const [index, setIndex] = useState(0);
@@ -78,22 +82,32 @@ export function HeroCarousel({ sources, label, onPlay }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <FlatList
-        ref={list}
-        horizontal
-        pagingEnabled
-        data={slides}
-        keyExtractor={(v) => v.id}
-        showsHorizontalScrollIndicator={false}
-        onScrollBeginDrag={() => (touched.current = Date.now())}
-        onMomentumScrollEnd={onScrollEnd}
-        getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-        renderItem={({ item, index: i }) => (
-          <View style={{ width, paddingHorizontal: GUTTER }}>
-            <Slide video={item} label={label} height={cardHeight} onPlay={() => onPlay(item)} first={i === 0} />
-          </View>
-        )}
-      />
+      <FocusRow>
+        <FlatList
+          ref={list}
+          horizontal
+          pagingEnabled
+          data={slides}
+          keyExtractor={(v) => v.id}
+          showsHorizontalScrollIndicator={false}
+          onScrollBeginDrag={() => (touched.current = Date.now())}
+          onMomentumScrollEnd={onScrollEnd}
+          getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+          renderItem={({ item, index: i }) => (
+            <View style={{ width, paddingHorizontal: GUTTER }}>
+              <Slide
+                video={item}
+                label={label}
+                height={cardHeight}
+                onPlay={() => onPlay(item)}
+                takeFocus={takeFocus && i === 0}
+                // On TV the remote moves between slides, so the dots follow focus.
+                onFocused={() => setIndex(i)}
+              />
+            </View>
+          )}
+        />
+      </FocusRow>
       <View style={styles.dots}>
         {slides.map((v, i) => (
           <View key={v.id} style={[styles.dot, i === index && styles.dotActive]} />
@@ -108,13 +122,15 @@ function Slide({
   label,
   height,
   onPlay,
-  first,
+  takeFocus,
+  onFocused,
 }: {
   video: Featured;
   label: string;
   height: number;
   onPlay: () => void;
-  first: boolean;
+  takeFocus: boolean;
+  onFocused: () => void;
 }) {
   // Not every upload has a full-resolution thumbnail, so step down through the
   // 16:9 sizes. (hqdefault is 4:3 with black bars baked in, so it's skipped.)
@@ -142,13 +158,16 @@ function Slide({
         </Text>
         <Pressable
           onPress={onPlay}
-          onFocus={() => setFocused(true)}
+          onFocus={() => {
+            setFocused(true);
+            onFocused();
+          }}
           onBlur={() => setFocused(false)}
-          hasTVPreferredFocus={isTV && first}
+          hasTVPreferredFocus={isTV && takeFocus}
           style={[styles.watch, focused && styles.watchFocused]}
         >
           <View style={styles.watchIcon}>
-            <Ionicons name="play" size={isTV ? 16 : 13} color="#fff" style={{ marginLeft: 2 }} />
+            <Ionicons name="play" size={sz(13, 16)} color="#fff" style={{ marginLeft: 2 }} />
           </View>
           <Text style={styles.watchText}>Watch Now</Text>
         </Pressable>
@@ -158,19 +177,19 @@ function Slide({
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: 4, marginBottom: isTV ? 12 : 6 },
+  wrap: { marginTop: 4, marginBottom: sz(6, 12) },
   skeleton: { marginHorizontal: GUTTER, borderRadius: RADIUS + 8, backgroundColor: colors.surface, marginBottom: 26 },
   slide: { borderRadius: RADIUS + 8, overflow: 'hidden', backgroundColor: colors.surface, justifyContent: 'flex-end' },
-  info: { padding: isTV ? 32 : 20 },
-  label: { color: 'rgba(246,244,250,0.75)', fontSize: isTV ? 16 : 13, fontWeight: '600', marginBottom: 6 },
+  info: { padding: sz(20, 32) },
+  label: { color: 'rgba(246,244,250,0.75)', fontSize: sz(13, 16), fontWeight: '600', marginBottom: 6 },
   title: {
     color: colors.text,
-    fontSize: isTV ? 38 : 26,
+    fontSize: sz(26, 38),
     fontWeight: '800',
-    lineHeight: isTV ? 44 : 31,
+    lineHeight: sz(31, 44),
     maxWidth: isTV ? '60%' : '100%',
   },
-  meta: { color: 'rgba(246,244,250,0.7)', fontSize: isTV ? 15 : 12.5, marginTop: 8, fontWeight: '500' },
+  meta: { color: 'rgba(246,244,250,0.7)', fontSize: sz(12.5, 15), marginTop: 8, fontWeight: '500' },
   watch: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -178,23 +197,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 30,
     paddingLeft: 6,
-    paddingRight: isTV ? 22 : 18,
+    paddingRight: sz(18, 22),
     paddingVertical: 6,
-    marginTop: isTV ? 20 : 16,
+    marginTop: sz(16, 20),
     borderWidth: 3,
     borderColor: 'transparent',
   },
   watchFocused: { borderColor: colors.accent, transform: [{ scale: 1.06 }] },
   watchIcon: {
-    width: isTV ? 34 : 28,
-    height: isTV ? 34 : 28,
+    width: sz(28, 34),
+    height: sz(28, 34),
     borderRadius: 17,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
   },
-  watchText: { color: colors.background, fontSize: isTV ? 18 : 15, fontWeight: '800' },
+  watchText: { color: colors.background, fontSize: sz(15, 18), fontWeight: '800' },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 12 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.faint },
   dotActive: { width: 18, backgroundColor: colors.accent },

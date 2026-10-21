@@ -1,6 +1,6 @@
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Source } from '../api/sources';
-import { colors, isTV } from '../theme';
+import { colors, sz } from '../theme';
 
 type Props = {
   sources: Source[];
@@ -50,21 +50,21 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.92)',
-    padding: isTV ? 48 : 20,
+    padding: sz(20, 48),
   },
   title: {
     color: colors.accent,
-    fontSize: isTV ? 30 : 22,
+    fontSize: sz(22, 30),
     fontWeight: '800',
-    marginBottom: isTV ? 20 : 12,
+    marginBottom: sz(12, 20),
   },
   list: { flexGrow: 0 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: isTV ? 14 : 10,
-    paddingHorizontal: isTV ? 20 : 14,
+    paddingVertical: sz(10, 14),
+    paddingHorizontal: sz(14, 20),
     marginBottom: 8,
     borderRadius: 8,
     borderWidth: 3,
@@ -73,17 +73,17 @@ const styles = StyleSheet.create({
   },
   rowFocused: { borderColor: colors.accent },
   rowPressed: { opacity: 0.7 },
-  label: { color: colors.text, fontSize: isTV ? 20 : 16, fontWeight: '700' },
-  state: { color: colors.muted, fontSize: isTV ? 16 : 13 },
+  label: { color: colors.text, fontSize: sz(16, 20), fontWeight: '700' },
+  state: { color: colors.muted, fontSize: sz(13, 16) },
   close: {
-    marginTop: isTV ? 24 : 16,
+    marginTop: sz(16, 24),
     alignSelf: 'flex-start',
-    paddingHorizontal: isTV ? 28 : 18,
-    paddingVertical: isTV ? 12 : 10,
+    paddingHorizontal: sz(18, 28),
+    paddingVertical: sz(10, 12),
     borderRadius: 8,
     borderWidth: 3,
     borderColor: 'transparent',
     backgroundColor: colors.surface,
   },
-  closeText: { color: colors.text, fontSize: isTV ? 20 : 16, fontWeight: '700' },
+  closeText: { color: colors.text, fontSize: sz(16, 20), fontWeight: '700' },
 });

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, isTV } from '../theme';
+import { colors, sz } from '../theme';
 import { LiveBadge } from './Cards';
 
 export type PlaybackTime = { t: number; d: number };
@@ -250,8 +250,8 @@ const styles = StyleSheet.create({
   roundPrimary: { backgroundColor: 'rgba(155,92,255,0.92)' },
   roundLabel: { position: 'absolute', bottom: 3, color: '#fff', fontSize: 9, fontWeight: '800' },
   bottom: { position: 'absolute', left: 14, right: 14, bottom: 8 },
-  time: { color: '#fff', fontSize: isTV ? 16 : 12.5, fontWeight: '700', marginBottom: 2 },
-  timeTotal: { color: 'rgba(255,255,255,0.65)', fontSize: isTV ? 16 : 12.5, fontWeight: '600' },
+  time: { color: '#fff', fontSize: sz(12.5, 16), fontWeight: '700', marginBottom: 2 },
+  timeTotal: { color: 'rgba(255,255,255,0.65)', fontSize: sz(12.5, 16), fontWeight: '600' },
   seekHit: { height: 22, justifyContent: 'center' },
   track: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.28)', overflow: 'hidden' },
   fill: { height: '100%', backgroundColor: colors.accent, borderRadius: 2 },

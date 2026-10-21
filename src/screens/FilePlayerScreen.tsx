@@ -5,7 +5,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { getApiKey, getStreamUrl } from '../api/torbox';
 import type { ShellControls } from '../components/PlayerShell';
 import { RelatedPanel } from '../components/RelatedPanel';
-import { colors, isTV } from '../theme';
+import { colors, isTV, sz } from '../theme';
 import type { FilePlayable, Playable } from '../types';
 
 type Props = {
@@ -128,9 +128,9 @@ const styles = StyleSheet.create({
     padding: 32,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  overlayText: { color: colors.text, fontSize: isTV ? 20 : 16, marginTop: 16, textAlign: 'center' },
-  errorTitle: { color: colors.text, fontSize: isTV ? 26 : 20, fontWeight: '800' },
-  hint: { color: colors.muted, fontSize: isTV ? 16 : 13, marginTop: 12, textAlign: 'center' },
+  overlayText: { color: colors.text, fontSize: sz(16, 20), marginTop: 16, textAlign: 'center' },
+  errorTitle: { color: colors.text, fontSize: sz(20, 26), fontWeight: '800' },
+  hint: { color: colors.muted, fontSize: sz(13, 16), marginTop: 12, textAlign: 'center' },
   close: {
     position: 'absolute',
     right: 12,

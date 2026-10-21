@@ -4,10 +4,13 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from './src/components/AnimatedSplash';
 import { BottomNav, BOTTOM_NAV_HEIGHT, type NavId } from './src/components/BottomNav';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { PlayerShell } from './src/components/PlayerShell';
+import { installErrorHandler, subscribeErrors } from './src/data/errors';
 import { addToHistory, clearHistory, loadHistory, playableKey } from './src/data/history';
 import type { CatalogMovie } from './src/api/catalog';
 import type { TorrentOption } from './src/api/torrents';
+import { FatalErrorScreen } from './src/screens/FatalErrorScreen';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -23,6 +26,10 @@ import type { Playable } from './src/types';
 
 // The screen behind the player. The player itself floats above whichever it is.
 type Screen = NavId | 'torbox';
+
+// Take over the error handler before anything else can fail, so an error that
+// reaches the top shows itself instead of closing the app.
+installErrorHandler();
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -41,10 +48,15 @@ export default function App() {
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
   // A release found by searching for its name, on its way to TorBox.
   const [sending, setSending] = useState<TorrentOption | null>(null);
+  // An error that nothing else caught. The app stays open and shows it.
+  const [crash, setCrash] = useState<Error | null>(null);
 
   useEffect(() => {
     loadHistory().then(setHistory);
   }, []);
+
+  // Anything fatal is shown on screen rather than ending the app.
+  useEffect(() => subscribeErrors((error, isFatal) => isFatal && setCrash(error)), []);
 
   const play = (item: Playable) => {
     setHistory((h) => addToHistory(h, item));
@@ -91,7 +103,8 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={styles.root}>
+      <ErrorBoundary label="App">
+        <View style={styles.root}>
         <StatusBar hidden={isTV} style="light" />
         {/* Home stays mounted so its tabs, rows and scroll position survive. */}
         <View style={layer('home')}>
@@ -197,7 +210,14 @@ export default function App() {
           </PlayerShell>
         )}
         {splash && <AnimatedSplash onDone={() => setSplash(false)} />}
-      </View>
+
+        {crash && (
+          <View style={StyleSheet.absoluteFill}>
+            <FatalErrorScreen error={crash} onDismiss={() => setCrash(null)} />
+          </View>
+        )}
+        </View>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

@@ -8,7 +8,7 @@ import { FocusCard } from '../components/FocusCard';
 import { cleanTitle } from '../components/VideoRow';
 import { LIVE_NEWS } from '../data/channels';
 import { playableKey } from '../data/history';
-import { CARD_GAP, GUTTER, colors, isTV } from '../theme';
+import { CARD_GAP, GUTTER, colors, isTV, sz } from '../theme';
 import type { Playable } from '../types';
 
 type Props = {
@@ -76,7 +76,7 @@ function Card({ item }: { item: Playable }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: GUTTER, marginBottom: 16 },
-  title: { flex: 1, color: colors.text, fontSize: isTV ? 32 : 26, fontWeight: '900' },
+  title: { flex: 1, color: colors.text, fontSize: sz(26, 32), fontWeight: '900' },
   clear: {
     flexDirection: 'row',
     alignItems: 'center',

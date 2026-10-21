@@ -23,7 +23,7 @@ import {
   type Source,
 } from '../api/sources';
 import { markBlocked, markFailed, markWorked } from '../api/sourceHealth';
-import { colors, isTV } from '../theme';
+import { colors, isTV, sz } from '../theme';
 import type { Playable, YouTubePlayable } from '../types';
 
 // 101/150: the owner disabled embedding. 152/153: embed configuration rejected.
@@ -401,17 +401,17 @@ const styles = StyleSheet.create({
   minimizeText: { color: '#fff', fontSize: 22, fontWeight: '800', lineHeight: 22 },
   sourcesButton: {
     position: 'absolute',
-    top: isTV ? 24 : 12,
-    right: isTV ? 32 : 12,
-    paddingHorizontal: isTV ? 22 : 14,
-    paddingVertical: isTV ? 10 : 7,
+    top: sz(12, 24),
+    right: sz(12, 32),
+    paddingHorizontal: sz(14, 22),
+    paddingVertical: sz(7, 10),
     borderRadius: 8,
     borderWidth: 3,
     borderColor: 'transparent',
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sourcesButtonFocused: { borderColor: colors.accent },
-  sourcesButtonText: { color: colors.text, fontSize: isTV ? 18 : 15, fontWeight: '700' },
+  sourcesButtonText: { color: colors.text, fontSize: sz(15, 18), fontWeight: '700' },
   hint: {
     position: 'absolute',
     left: 0,

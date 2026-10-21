@@ -21,6 +21,7 @@ import type { TorrentOption } from '../api/torrents';
 import { LiveTileContent, VideoCardContent } from '../components/Cards';
 import { FileCardContent } from '../components/FileCardContent';
 import { FocusCard } from '../components/FocusCard';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
@@ -29,7 +30,7 @@ import { CatalogScreen } from './CatalogScreen';
 import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
-import { GLOW, GUTTER, colors, isTV } from '../theme';
+import { GLOW, GUTTER, colors, isTV, sz } from '../theme';
 import type { Playable } from '../types';
 
 const THEMES_AT_START = 3;
@@ -77,17 +78,11 @@ export function HomeScreen({
   // Keeps the header clear of a phone's status bar and notch. Zero on TVs.
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>('all');
-  // A tab is only built the first time it is opened, then kept so its scroll
-  // position and loaded rows survive switching away.
-  const [opened, setOpened] = useState<Set<Tab>>(() => new Set(['all']));
   // Bumped on refresh; the rows are keyed on it, so they remount and refetch.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const open = (t: Tab) => {
-    setTab(t);
-    setOpened((s) => (s.has(t) ? s : new Set(s).add(t)));
-  };
+  const open = (t: Tab) => setTab(t);
 
   const refresh = () => {
     clearVideoCache();
@@ -110,8 +105,15 @@ export function HomeScreen({
 
   const playVideo = (v: { id: string; title: string }) => onPlay({ kind: 'video', videoId: v.id, title: v.title });
 
+  // Only the tab in front is mounted. Keeping the others alive holds their
+  // images and rows in memory, and a phone with little of it gets killed when
+  // a heavy tab is opened on top of them.
   const panel = (t: Tab, content: ReactNode) =>
-    opened.has(t) && <View style={[styles.panel, tab !== t && styles.hidden]}>{content}</View>;
+    t === tab ? (
+      <View style={styles.panel}>
+        <ErrorBoundary label={TABS.find((entry) => entry.id === t)?.label}>{content}</ErrorBoundary>
+      </View>
+    ) : null;
 
   const liveRow = (
     <View style={styles.row}>
@@ -136,7 +138,7 @@ export function HomeScreen({
       {/* The purple haze behind the header. */}
       <LinearGradient colors={GLOW} style={styles.glow} pointerEvents="none" />
 
-      <View style={[styles.top, { paddingTop: insets.top + (isTV ? 24 : 8) }]}>
+      <View style={[styles.top, { paddingTop: insets.top + (sz(8, 24)) }]}>
         <View style={styles.header}>
           <View style={styles.brandBlock}>
             <Text style={styles.brand}>
@@ -268,24 +270,45 @@ type TabScrollProps = {
   themes?: Theme[];
   refreshKey?: number;
   onPlay?: (v: { id: string; title: string }) => void;
+  // Keeps this tab's place, so it comes back where it was left.
+  tabKey?: string;
 };
 
 // One tab's scrolling page, ending in its themed rows and the credit line.
-function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay }: TabScrollProps) {
+function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay, tabKey }: TabScrollProps) {
   const [themeCount, setThemeCount] = useState(THEMES_AT_START);
+  const scroll = useRef<ScrollView>(null);
+  // Where this tab was left, put back once the rows have their height.
+  const restore = useRef(tabKey ? (scrollPositions.get(tabKey) ?? 0) : 0);
 
   const onScroll = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const fromBottom = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
+    const y = e.nativeEvent.contentOffset.y;
+    if (tabKey) scrollPositions.set(tabKey, y);
+    // The place to come back to is kept until it is actually reached.
+    if (restore.current > 0 && y >= restore.current - 4) restore.current = 0;
+    const fromBottom = e.contentSize.height - (y + e.layoutMeasurement.height);
     if (fromBottom < e.layoutMeasurement.height) {
       setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length));
     }
   };
 
+  // The rows come back in one by one, so the place to come back to is put
+  // back each time the page grows.
+  const restorePlace = () => {
+    if (restore.current > 0) scroll.current?.scrollTo({ y: restore.current, animated: false });
+  };
+
   return (
     <ScrollView
+      ref={scroll}
       style={styles.panel}
       contentContainerStyle={styles.content}
-      onScroll={themes.length ? onScroll : undefined}
+      onScroll={themes.length || tabKey ? onScroll : undefined}
+      onContentSizeChange={restorePlace}
+      onTouchStart={() => {
+        // A touch means the user is here now, not on their way back.
+        restore.current = 0;
+      }}
       scrollEventThrottle={250}
       refreshControl={refreshControl}
     >
@@ -339,7 +362,7 @@ function RoundButton({
       accessibilityLabel={label}
       style={({ pressed }) => [styles.round, (focused || pressed) && styles.roundActive]}
     >
-      <Ionicons name={icon} size={isTV ? 24 : 20} color={colors.text} />
+      <Ionicons name={icon} size={sz(20, 24)} color={colors.text} />
     </Pressable>
   );
 }
@@ -349,21 +372,21 @@ const styles = StyleSheet.create({
   hidden: { display: 'none' },
   panel: { flex: 1 },
   glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 360 },
-  top: { paddingBottom: isTV ? 12 : 8 },
-  content: { paddingTop: isTV ? 8 : 6, paddingBottom: isTV ? 40 : 110 },
+  top: { paddingBottom: sz(8, 12) },
+  content: { paddingTop: sz(6, 8), paddingBottom: sz(110, 40) },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: isTV ? 14 : 10,
+    gap: sz(10, 14),
     paddingHorizontal: GUTTER,
-    marginBottom: isTV ? 16 : 12,
+    marginBottom: sz(12, 16),
   },
   brandBlock: { flex: 1 },
-  brand: { color: colors.text, fontSize: isTV ? 32 : 25, fontWeight: '900', letterSpacing: -0.5 },
+  brand: { color: colors.text, fontSize: sz(25, 32), fontWeight: '900', letterSpacing: -0.5 },
   brandAccent: { color: colors.accent },
   round: {
-    width: isTV ? 50 : 42,
-    height: isTV ? 50 : 42,
+    width: sz(42, 50),
+    height: sz(42, 50),
     borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
@@ -372,21 +395,21 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   roundActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
-  tabs: { gap: isTV ? 12 : 8, paddingHorizontal: GUTTER },
+  tabs: { gap: sz(8, 12), paddingHorizontal: GUTTER },
   tab: {
-    paddingHorizontal: isTV ? 24 : 18,
-    paddingVertical: isTV ? 10 : 8,
+    paddingHorizontal: sz(18, 24),
+    paddingVertical: sz(8, 10),
     borderRadius: 22,
     borderWidth: 2,
     borderColor: 'transparent',
   },
   tabActive: { backgroundColor: colors.accent },
   tabFocused: { borderColor: colors.text },
-  tabText: { color: colors.muted, fontSize: isTV ? 17 : 13.5, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
+  tabText: { color: colors.muted, fontSize: sz(13.5, 17), fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
   tabTextActive: { color: '#fff' },
-  row: { marginBottom: isTV ? 30 : 24 },
-  list: { paddingHorizontal: GUTTER, paddingVertical: isTV ? 8 : 2 },
+  row: { marginBottom: sz(24, 30) },
+  list: { paddingHorizontal: GUTTER, paddingVertical: sz(2, 8) },
   moreRows: { marginVertical: 24 },
-  credit: { color: colors.faint, fontSize: isTV ? 15 : 12.5, textAlign: 'center', marginTop: 8, fontWeight: '600' },
+  credit: { color: colors.faint, fontSize: sz(12.5, 15), textAlign: 'center', marginTop: 8, fontWeight: '600' },
   heart: { color: colors.accent },
 });

@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
-import { colors, isTV } from '../theme';
+import { colors, sz } from '../theme';
 
 // Keeps the native splash up until this component has drawn its first frame.
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -43,7 +43,7 @@ export function AnimatedSplash({ onDone }: { onDone: () => void }) {
     });
   }, []);
 
-  const lift = mark.interpolate({ inputRange: [0, 1], outputRange: [0, isTV ? -40 : -56] });
+  const lift = mark.interpolate({ inputRange: [0, 1], outputRange: [0, sz(-56, -40)] });
   const grow = mark.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
   const rise = words.interpolate({ inputRange: [0, 1], outputRange: [18, 0] });
   const halo = glow.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.25] });
@@ -85,9 +85,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(155,92,255,0.28)',
   },
   mark: { width: NATIVE_MARK_SIZE, height: NATIVE_MARK_SIZE },
-  words: { position: 'absolute', top: '50%', marginTop: isTV ? 70 : 60, alignItems: 'center' },
-  brand: { color: colors.text, fontSize: isTV ? 54 : 42, fontWeight: '900', letterSpacing: -1 },
+  words: { position: 'absolute', top: '50%', marginTop: sz(60, 70), alignItems: 'center' },
+  brand: { color: colors.text, fontSize: sz(42, 54), fontWeight: '900', letterSpacing: -1 },
   brandAccent: { color: colors.accent },
-  credit: { color: colors.muted, fontSize: isTV ? 18 : 14, fontWeight: '600', marginTop: 6 },
+  credit: { color: colors.muted, fontSize: sz(14, 18), fontWeight: '600', marginTop: 6 },
   heart: { color: colors.accent },
 });

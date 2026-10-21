@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { checkApiKey, getApiKey, setApiKey } from '../api/torbox';
-import { GUTTER, colors, isTV } from '../theme';
+import { GUTTER, colors, sz } from '../theme';
 
 type Props = {
   onDone: () => void;
@@ -86,19 +86,19 @@ function Button({ label, onPress, disabled }: { label: string; onPress: () => vo
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: GUTTER },
-  title: { color: colors.accent, fontSize: isTV ? 30 : 24, fontWeight: '800' },
-  body: { color: colors.muted, fontSize: isTV ? 18 : 15, lineHeight: isTV ? 26 : 22, marginTop: 12, maxWidth: 720 },
+  title: { color: colors.accent, fontSize: sz(24, 30), fontWeight: '800' },
+  body: { color: colors.muted, fontSize: sz(15, 18), lineHeight: sz(22, 26), marginTop: 12, maxWidth: 720 },
   input: {
     marginTop: 24,
     maxWidth: 720,
     backgroundColor: colors.surface,
     color: colors.text,
-    fontSize: isTV ? 20 : 16,
+    fontSize: sz(16, 20),
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
   },
-  error: { color: colors.live, fontSize: isTV ? 16 : 14, marginTop: 10 },
+  error: { color: colors.live, fontSize: sz(14, 16), marginTop: 10 },
   buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 20 },
   button: {
     backgroundColor: colors.surface,
@@ -109,6 +109,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   buttonActive: { borderColor: colors.accent },
-  buttonText: { color: colors.text, fontSize: isTV ? 18 : 16, fontWeight: '700' },
+  buttonText: { color: colors.text, fontSize: sz(16, 18), fontWeight: '700' },
   spinner: { marginTop: 16, alignSelf: 'flex-start' },
 });

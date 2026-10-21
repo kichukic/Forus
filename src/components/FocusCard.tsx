@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Animated, Pressable, StyleSheet, type ViewStyle } from 'react-native';
-import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, RADIUS, colors, isTV } from '../theme';
+import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, RADIUS, colors, isTV, sz } from '../theme';
 
 type Props = {
   onPress: () => void;
@@ -33,7 +33,8 @@ export function FocusCard({ onPress, children, preferredFocus, width = CARD_WIDT
       onPressIn={() => !isTV && animate(0.96)}
       onPressOut={() => !isTV && animate(1)}
       hasTVPreferredFocus={preferredFocus}
-      style={[{ width, marginRight: CARD_GAP }, style]}
+      // A focused card grows, so it is drawn above its neighbours.
+      style={[{ width, marginRight: CARD_GAP }, focused && styles.raised, style]}
     >
       <Animated.View style={[styles.card, focused && styles.focused, { transform: [{ scale }] }]}>
         {children}
@@ -45,14 +46,15 @@ export function FocusCard({ onPress, children, preferredFocus, width = CARD_WIDT
 const styles = StyleSheet.create({
   card: {
     borderRadius: RADIUS + 4,
-    borderWidth: isTV ? 3 : 0,
+    borderWidth: sz(0, 3),
     borderColor: 'transparent',
-    padding: isTV ? 4 : 0,
+    padding: sz(0, 4),
   },
   focused: {
     borderColor: colors.accent,
     backgroundColor: colors.accentSoft,
   },
+  raised: { zIndex: 2, elevation: 2 },
 });
 
 export const cardImageStyle = { width: '100%' as const, height: CARD_HEIGHT, borderRadius: RADIUS };

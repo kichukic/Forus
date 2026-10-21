@@ -17,7 +17,7 @@ import { VideoCardContent } from '../components/Cards';
 import { FocusCard } from '../components/FocusCard';
 import { cleanTitle } from '../components/VideoRow';
 import { FULL_MOVIE, SCOPE_CHANNELS, type SearchScope } from '../data/channels';
-import { CARD_GAP, GUTTER, colors, isTV } from '../theme';
+import { CARD_GAP, GUTTER, colors, sz } from '../theme';
 import type { Playable } from '../types';
 
 type Props = {
@@ -138,14 +138,14 @@ export function SearchScreen({ scope, onPlay }: Props) {
 
   // The grid reflows when the phone rotates.
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / ((isTV ? 300 : 200) + CARD_GAP)));
+  const columns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / ((sz(200, 300)) + CARD_GAP)));
   const cardWidth = (width - GUTTER * 2 - CARD_GAP * (columns - 1)) / columns;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + GUTTER }]}>
       <Text style={styles.heading}>{text.heading}</Text>
       <View style={styles.inputWrap}>
-        <Ionicons name="search" size={isTV ? 22 : 19} color={colors.muted} />
+        <Ionicons name="search" size={sz(19, 22)} color={colors.muted} />
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -204,7 +204,7 @@ export function SearchScreen({ scope, onPlay }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  heading: { color: colors.text, fontSize: isTV ? 32 : 26, fontWeight: '900', marginHorizontal: GUTTER, marginBottom: 14 },
+  heading: { color: colors.text, fontSize: sz(26, 32), fontWeight: '900', marginHorizontal: GUTTER, marginBottom: 14 },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -216,8 +216,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  input: { flex: 1, color: colors.text, fontSize: isTV ? 22 : 16, paddingVertical: isTV ? 14 : 12 },
-  note: { color: colors.muted, fontSize: isTV ? 15 : 13, marginHorizontal: GUTTER, marginTop: 8 },
+  input: { flex: 1, color: colors.text, fontSize: sz(16, 22), paddingVertical: sz(12, 14) },
+  note: { color: colors.muted, fontSize: sz(13, 15), marginHorizontal: GUTTER, marginTop: 8 },
   spinner: { marginTop: 24 },
   grid: { paddingHorizontal: GUTTER, paddingTop: 18, paddingBottom: 120 },
   cell: { marginBottom: 18 },

@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Dimensions, Platform } from 'react-native';
 
 export const isTV = Platform.isTV;
 
@@ -16,12 +16,28 @@ export const colors = {
   live: '#ff3b5c',
 };
 
-// TVs are viewed from across the room; phones need tighter spacing.
-export const GUTTER = isTV ? 48 : 18;
-export const CARD_WIDTH = isTV ? 300 : 230;
+// Sizes in the app are designed for a 400dp-wide phone and a 1280dp-wide TV,
+// and scaled to the actual screen: small or low-density phones shrink a little,
+// and a 1080p TV (usually 960dp wide) shrinks to about three quarters.
+const window = Dimensions.get('window');
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+export const UI_SCALE = isTV
+  ? clamp(Math.max(window.width, window.height) / 1280, 0.6, 1.1)
+  : clamp(Math.min(window.width, window.height) / 400, 0.8, 1.05);
+
+/** A size given for phone and TV, scaled to this screen. */
+export const sz = (phone: number, tv: number) => Math.round((isTV ? tv : phone) * UI_SCALE * 2) / 2;
+
+// TVs are viewed from across the room; phones need tighter spacing. TVs also
+// crop their edges (overscan), so the TV margin never shrinks below 48.
+export const GUTTER = isTV ? 48 : sz(18, 48);
+export const CARD_WIDTH = sz(230, 280);
 export const CARD_HEIGHT = Math.round((CARD_WIDTH * 9) / 16);
-export const CARD_GAP = isTV ? 20 : 14;
-export const RADIUS = isTV ? 16 : 14;
+export const CARD_GAP = sz(14, 20);
+export const RADIUS = sz(14, 16);
+// Room above and below a row of cards, so a focused card on TV (which grows
+// and gets a ring) isn't clipped by the row.
+export const ROW_PAD = isTV ? 18 : 2;
 
 // The darkening laid over pictures so white text on them stays readable.
 export const SCRIM = ['transparent', 'rgba(12,10,18,0.55)', 'rgba(12,10,18,0.96)'] as const;

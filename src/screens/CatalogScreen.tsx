@@ -35,6 +35,15 @@ type Props = {
 const DEBOUNCE_MS = 600;
 // How many releases a search shows before the films take over.
 const MAX_RELEASES = 60;
+// Only a few cards are built at a time. A phone with little memory cannot
+// hold fifty posters at once, and the ones it does hold are the ones that
+// crash it.
+const LIST_PERF = {
+  initialNumToRender: isTV ? 12 : 8,
+  maxToRenderPerBatch: isTV ? 12 : 8,
+  windowSize: 7,
+  updateCellsBatchingPeriod: 60,
+};
 
 export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl }: Props) {
   const insets = useSafeAreaInsets();
@@ -122,8 +131,9 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   // The grid reflows when the phone rotates.
   const { width } = useWindowDimensions();
   const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 300 : 230)));
-  // The cards fill their column, so the grid never overflows.
-  const cardWidth = Math.floor((width - GUTTER * 2) / columns);
+  // The cards fill their column, so the grid never overflows. A width that
+  // comes out wrong (a split screen, a fold) must not reach the cards.
+  const cardWidth = Math.max(120, Math.floor((width - GUTTER * 2) / columns));
 
   const movies = searching ? (results ?? []) : browse;
 
@@ -173,6 +183,7 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
           keyExtractor={(r) => r.hash}
           contentContainerStyle={styles.list}
           refreshControl={refreshControl}
+          {...LIST_PERF}
           ListHeaderComponent={
             <View>
               {header}
@@ -250,6 +261,7 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.grid}
         refreshControl={refreshControl}
+        {...LIST_PERF}
         onEndReached={loadMore}
         onEndReachedThreshold={0.6}
         ListHeaderComponent={

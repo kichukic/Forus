@@ -1,5 +1,5 @@
 import { ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, GUTTER, RADIUS, colors, isTV } from '../theme';
+import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, GUTTER, RADIUS, colors, sz } from '../theme';
 
 // A row's heading, with an optional small line under it.
 export function SectionHeader({
@@ -36,9 +36,9 @@ export function SkeletonRow() {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: GUTTER, marginBottom: isTV ? 12 : 10 },
-  title: { color: colors.text, fontSize: isTV ? 24 : 19, fontWeight: '800', letterSpacing: 0.2 },
-  subtitle: { color: colors.muted, fontSize: isTV ? 14 : 12.5, marginTop: 2 },
+  header: { paddingHorizontal: GUTTER, marginBottom: sz(10, 12) },
+  title: { color: colors.text, fontSize: sz(19, 24), fontWeight: '800', letterSpacing: 0.2 },
+  subtitle: { color: colors.muted, fontSize: sz(12.5, 14), marginTop: 2 },
   skeletons: { paddingHorizontal: GUTTER, paddingVertical: 4 },
   skeletonPicture: { height: CARD_HEIGHT, borderRadius: RADIUS, backgroundColor: colors.surface },
   skeletonLine: { height: 12, borderRadius: 6, backgroundColor: colors.surface, marginTop: 10, width: '85%' },
