@@ -6,6 +6,7 @@
 #   ./build-apk.sh --install   build, then install on the phone connected by USB
 #   ./build-apk.sh --push      build, then copy it to the phone's Download folder
 #   ./build-apk.sh --clean     regenerate the android/ project first, even if nothing changed
+#   MAX_WORKERS=2 ./build-apk.sh   fewer parallel jobs, if the build runs out of memory
 #
 # Options can be combined, e.g. ./build-apk.sh --install --push
 set -euo pipefail
@@ -21,7 +22,7 @@ for arg in "$@"; do
     --push) PUSH=true ;;
     --clean) CLEAN=true ;;
     -h | --help)
-      sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -93,7 +94,7 @@ start=$(date +%s)
   cd android
   # Limited parallelism and memory: with everything at full speed the native
   # build can run the machine out of memory.
-  ./gradlew assembleRelease --no-daemon --max-workers=3 \
+  ./gradlew assembleRelease --no-daemon --max-workers="${MAX_WORKERS:-3}" \
     -Dorg.gradle.parallel=false \
     "-Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m" \
     -Pkotlin.daemon.jvm.options=-Xmx1g \
