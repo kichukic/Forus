@@ -33,12 +33,16 @@ type Meta = {
   videos?: { id?: string; name?: string; season?: number; episode?: number; released?: string; overview?: string; thumbnail?: string }[];
 };
 
-function biggerPoster(url: string | undefined): string | undefined {
+// Metahub serves every poster in three sizes. The real Stremio app requests
+// the medium one for catalog grids and only pulls the large art on detail
+// screens — large posters are several times heavier and stall slow networks,
+// which is what left rows of blank cards on fast scroll.
+function posterAt(url: string | undefined, size: 'large' | 'medium'): string | undefined {
   if (!url) return undefined;
-  return url.replace('/poster/small/', '/poster/large/');
+  return url.replace(/\/poster\/(small|medium|large)\//, `/poster/${size}/`);
 }
 
-function parseMeta(m: Meta, type: StreamioType): StreamioItem | null {
+function parseMeta(m: Meta, type: StreamioType, posterSize: 'large' | 'medium' = 'medium'): StreamioItem | null {
   const id = m.imdb_id || m.id;
   if (!id || !m.name) return null;
   if (isAdultTitle(m.name)) return null;
@@ -47,7 +51,7 @@ function parseMeta(m: Meta, type: StreamioType): StreamioItem | null {
     type,
     title: m.name,
     year: m.year ?? m.releaseInfo,
-    poster: biggerPoster(m.poster),
+    poster: posterAt(m.poster, posterSize),
     background: m.background,
     genres: m.genres ?? m.genre,
     description: m.description,
@@ -90,7 +94,7 @@ export async function loadCatalogPage(
   const extras: string[] = [];
   if (genre) extras.push(`genre=${encodeURIComponent(genre)}`);
   if (skip > 0) extras.push(`skip=${skip}`);
-  const extraPath = extras.length ? '/' + extras.join('/') : '';
+  const extraPath = extras.length ? '/' + extras.join('&') : '';
   const url = `${CATALOG_HOST}/${type}/${catalogId}${extraPath}.json`;
   const body = await fetchJson(url);
   return parseList(body?.metas, type);
@@ -107,7 +111,8 @@ export async function loadMeta(type: StreamioType, id: string): Promise<{ item: 
   const body = await fetchJson(`${CINEMETA}/meta/${type}/${id}.json`);
   const m = body?.meta as Meta | undefined;
   if (!m) return null;
-  const item = parseMeta(m, type);
+  // Detail screen: the large art looks right on a hero header.
+  const item = parseMeta(m, type, 'large');
   if (!item) return null;
   return { item, videos: m.videos };
 }

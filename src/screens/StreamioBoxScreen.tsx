@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, memo, type ReactElement } from 'react';
 import {
   FlatList,
   Platform,
@@ -41,16 +41,19 @@ type Props = {
 
 const DEBOUNCE_MS = 700;
 const MIN_SEARCH = 3;
-// The same budget the tabs that scroll well use; stripping it cheaper leaves
-// too little on screen and the list hitches as it rebuilds under the finger.
+
 const LIST_PERF = {
-  initialNumToRender: isTV ? 12 : 8,
-  maxToRenderPerBatch: isTV ? 12 : 8,
-  windowSize: 7,
-  updateCellsBatchingPeriod: 60,
-  // Android keeps drawn-but-off-screen views alive; letting go saves memory.
+  initialNumToRender: isTV ? 12 : 9,
+  maxToRenderPerBatch: isTV ? 12 : 9,
+  windowSize: 5,
+  updateCellsBatchingPeriod: 50,
   removeClippedSubviews: Platform.OS === 'android',
 };
+
+function warmPosters(urls: string[]) {
+  if (urls.length === 0) return;
+  Image.prefetch(urls).catch(() => {});
+}
 
 export function StreamioBoxScreen({ onOpenMovie, onOpenSeries, embedded, header, refreshControl, history, onPlay }: Props) {
   const insets = useSafeAreaInsets();
@@ -62,26 +65,36 @@ export function StreamioBoxScreen({ onOpenMovie, onOpenSeries, embedded, header,
   const [results, setResults] = useState<StreamioItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [minLoading, setMinLoading] = useState(true);
   const [exhausted, setExhausted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const skip = useRef(0);
   const loadingMoreRef = useRef(false);
+  const browseRef = useRef<StreamioItem[] | null>(null);
+  const exhaustedRef = useRef(false);
   const latest = useRef('');
   const searching = query.trim().length >= MIN_SEARCH;
 
-  // First load: one page (50 titles), all of them shown straight away.
+  useEffect(() => {
+    browseRef.current = browse;
+  }, [browse]);
+
+  useEffect(() => {
+    exhaustedRef.current = exhausted;
+  }, [exhausted]);
+
+  // First load: one page (50 titles), shown straight away.
   const resetAndLoad = useCallback(async () => {
     setLoading(true);
-    setMinLoading(true);
-    setTimeout(() => setMinLoading(false), 2500);
     setError(null);
     setExhausted(false);
+    exhaustedRef.current = false;
     skip.current = 0;
     try {
       const page = await loadCatalogPage(type, catalogId, 0, genre);
       setBrowse(page);
+      browseRef.current = page;
       skip.current = page.length;
+      warmPosters(page.map((m) => m.poster).filter((u): u is string => !!u));
     } catch {
       setError("Couldn't load the catalog.");
     } finally {
@@ -95,21 +108,29 @@ export function StreamioBoxScreen({ onOpenMovie, onOpenSeries, embedded, header,
     return () => clearTimeout(t);
   }, [type, catalogId, genre, searching, resetAndLoad]);
 
-  // Scrolling to the bottom asks for the next 50.
+  // Scrolling to the bottom asks for the next page seamlessly.
   const loadMore = useCallback(async () => {
-    if (loadingMoreRef.current || loadingMore || exhausted || searching || browse === null) return;
+    if (loadingMoreRef.current || exhaustedRef.current || searching || !browseRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const page = await loadCatalogPage(type, catalogId, skip.current, genre);
       if (page.length === 0) {
         setExhausted(true);
+        exhaustedRef.current = true;
         return;
       }
+      warmPosters(page.map((m) => m.poster).filter((u): u is string => !!u));
       skip.current += page.length;
       setBrowse((current) => {
         const seen = new Set((current ?? []).map((m) => m.id));
-        return [...(current ?? []), ...page.filter((m) => !seen.has(m.id))];
+        const newItems = page.filter((m) => !seen.has(m.id));
+        if (newItems.length === 0) {
+          setExhausted(true);
+          exhaustedRef.current = true;
+          return current;
+        }
+        return [...(current ?? []), ...newItems];
       });
     } catch {
       setError("Couldn't load more.");
@@ -117,7 +138,7 @@ export function StreamioBoxScreen({ onOpenMovie, onOpenSeries, embedded, header,
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [browse, exhausted, loadingMore, searching, type, catalogId, genre]);
+  }, [type, catalogId, genre, searching]);
 
   useEffect(() => {
     const q = query.trim();
@@ -142,16 +163,14 @@ export function StreamioBoxScreen({ onOpenMovie, onOpenSeries, embedded, header,
   const cardWidth = Math.max(120, Math.floor((width - GUTTER * 2) / columns));
 
   const movies = searching ? (results ?? []) : (browse ?? []);
-  const isLoading = loading || minLoading;
 
-  // Watch history: stream plays land here (including StreamioBox ones), so
-  // they stay reachable from the tab where they were started.
+  // Watch history: stream plays land here (including StreamioBox ones).
   const watched = (history ?? []).filter((h) => h.kind === 'stream').slice(0, 12);
 
-  const open = (item: StreamioItem) => {
+  const open = useCallback((item: StreamioItem) => {
     if (item.type === 'series') onOpenSeries(item);
     else onOpenMovie(item);
-  };
+  }, [onOpenMovie, onOpenSeries]);
 
   const heading = embedded ? (
     <SectionHeader title="StreamioBox" subtitle="Stremio-style catalogs: movies and series" style={styles.sectionHeader} />
@@ -267,7 +286,13 @@ export function StreamioBoxScreen({ onOpenMovie, onOpenSeries, embedded, header,
                     >
                       <View style={styles.poster}>
                         {item.kind === 'stream' && item.poster ? (
-                          <Image source={{ uri: item.poster }} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
+                          <Image
+                            source={{ uri: item.poster }}
+                            style={StyleSheet.absoluteFill}
+                            contentFit="cover"
+                            transition={150}
+                            cachePolicy="memory-disk"
+                          />
                         ) : (
                           <View style={[StyleSheet.absoluteFill, styles.posterBlank]}>
                             <Text style={styles.posterBlankText} numberOfLines={3}>{item.title}</Text>
@@ -288,43 +313,65 @@ export function StreamioBoxScreen({ onOpenMovie, onOpenSeries, embedded, header,
           </View>
         }
         renderItem={({ item }) => (
-          <View style={[styles.cell, { width: cardWidth }]}>
-            <FocusCard onPress={() => open(item)} width={cardWidth - 8} style={styles.card}>
-              <PosterCard item={item} />
-            </FocusCard>
-          </View>
+          <StreamioCell item={item} cardWidth={cardWidth} onOpen={open} />
         )}
         ListEmptyComponent={
-          isLoading ? loadingSpinner : <Text style={styles.note}>{searching ? 'No results.' : 'Nothing here yet.'}</Text>
+          loading ? loadingSpinner : <Text style={styles.note}>{searching ? 'No results.' : 'Nothing here yet.'}</Text>
         }
         ListFooterComponent={
           searching ? null : loadingMore ? (
             <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-              <Loader label="Loading more" icon="film-outline" style={styles.spinner} />
+              <Loader label="Loading more" icon="film-outline" />
             </View>
           ) : exhausted ? (
-            <Text style={styles.endNote}>That's everything.</Text>
+            <Text style={styles.endNote}>That&apos;s everything.</Text>
           ) : null
         }
-        onEndReached={() => { if (!exhausted && !loadingMoreRef.current) loadMore(); }}
-        onEndReachedThreshold={0.6}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.2}
       />
     </View>
   );
 }
 
-// Lives at module scope so the card type stays stable between renders — an
-// inline component would remount every visible card whenever state changes.
+const StreamioCell = memo(function StreamioCell({
+  item,
+  cardWidth,
+  onOpen,
+}: {
+  item: StreamioItem;
+  cardWidth: number;
+  onOpen: (item: StreamioItem) => void;
+}) {
+  return (
+    <View style={[styles.cell, { width: cardWidth }]}>
+      <FocusCard onPress={() => onOpen(item)} width={cardWidth - 8} style={styles.card}>
+        <PosterCard item={item} />
+      </FocusCard>
+    </View>
+  );
+});
+
 function PosterCard({ item }: { item: StreamioItem }) {
+  const [failed, setFailed] = useState(false);
+  const showBlank = !item.poster || failed;
+
   return (
     <View>
       <View style={styles.poster}>
-        {item.poster ? (
-          <Image source={{ uri: item.poster }} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
-        ) : (
+        {showBlank ? (
           <View style={[StyleSheet.absoluteFill, styles.posterBlank]}>
             <Text style={styles.posterBlankText} numberOfLines={3}>{item.title}</Text>
           </View>
+        ) : (
+          <Image
+            source={{ uri: item.poster }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+            onError={() => setFailed(true)}
+          />
         )}
       </View>
       <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
@@ -355,8 +402,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: colors.text, fontSize: isTV ? 22 : 16, paddingVertical: isTV ? 13 : 11 },
   note: { color: colors.muted, fontSize: isTV ? 15 : 13, marginHorizontal: GUTTER, marginTop: 10 },
   endNote: { color: colors.faint, fontSize: isTV ? 14 : 12, textAlign: 'center', paddingVertical: 18 },
-  spinner: { marginTop: 24, marginBottom: 24 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: GUTTER - 4, paddingTop: 4 },
+  grid: { paddingHorizontal: GUTTER - 4, paddingTop: 4, paddingBottom: 80 },
   gridRow: { marginBottom: 4 },
   cell: { padding: 4, marginBottom: 8 },
   card: { marginRight: 0 },

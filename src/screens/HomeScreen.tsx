@@ -253,6 +253,7 @@ function HomeScreenView({
 
   // One identity for good, so the memoized rows don't redraw with the page.
   const playVideo = useEvent((v: { id: string; title: string }) => onPlay({ kind: 'video', videoId: v.id, title: v.title }));
+  const openStreamioMovie = useEvent((item: StreamioItem) => onOpenMovie(item as unknown as CatalogMovie));
 
   // Only the tab in front is mounted. Keeping the others alive holds their
   // images and rows in memory, and a phone with little of it gets killed when
@@ -454,7 +455,7 @@ function HomeScreenView({
         <StreamioBoxScreen
           key={`streamiobox-${refreshKey}`}
           embedded
-          onOpenMovie={(item) => onOpenMovie(item as unknown as CatalogMovie)}
+          onOpenMovie={openStreamioMovie}
           onOpenSeries={onOpenStreamioSeries}
           refreshControl={refreshControl}
           history={history}
