@@ -54,11 +54,13 @@ export const HeroCarousel = memo(function HeroCarousel({ sources, label, onPlay,
   useEffect(() => {
     if (slides.length) return;
     let cancelled = false;
-    Promise.all(sources.map((s) => loadVideos(s).catch(() => [] as Video[]))).then((lists) => {
+    const activeSources = sources.length > 8 ? sources.slice(0, 8) : sources;
+    Promise.all(activeSources.map((s) => loadVideos(s).catch(() => [] as Video[]))).then((lists) => {
       if (cancelled) return;
       const all = lists
-        .flatMap((l, i) => l.map((v) => ({ ...v, channel: sources[i].name })))
-        .sort((a, b) => b.published.localeCompare(a.published));
+        .flatMap((l, i) => (Array.isArray(l) ? l.map((v) => ({ ...v, channel: activeSources[i]?.name ?? '' })) : []))
+        .filter((v) => v && v.id)
+        .sort((a, b) => (b.published || '').localeCompare(a.published || ''));
       // One slide per channel first, so the carousel isn't all from one place.
       const firstPerChannel = all.filter((v, i) => all.findIndex((o) => o.channel === v.channel) === i);
       const rest = all.filter((v) => !firstPerChannel.includes(v));

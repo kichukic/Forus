@@ -88,6 +88,18 @@ fi
 touch "$stamp"
 echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
+# R8/ProGuard switches: a clean prebuild rewrites gradle.properties from the
+# template, so the flags are (re-)written on every build.
+props=android/gradle.properties
+[ -s "$props" ] && [ -n "$(tail -c1 "$props" 2>/dev/null || true)" ] && echo "" >> "$props"
+for key in android.enableMinifyInReleaseBuilds android.enableShrinkResourcesInReleaseBuilds; do
+  if grep -q "^$key=" "$props" 2>/dev/null; then
+    sed -i -e "s/^$key=.*$/$key=true/" "$props"
+  else
+    printf '\n%s=true\n' "$key" >> "$props"
+  fi
+done
+
 step "Building ForUs $version (build $code)"
 start=$(date +%s)
 (
@@ -111,6 +123,13 @@ for old in builds/*-latest.apk; do
 done
 out="builds/ForUs-v$version-latest.apk"
 cp "$apk" "$out"
+
+# R8 renames class names; the mapping translates future obfuscated crash
+# stack traces back to readable ones. Keep it with the matching build.
+mapping=android/app/build/outputs/mapping/release/mapping.txt
+if [ -f "$mapping" ]; then
+  cp "$mapping" "builds/ForUs-v$version-mapping.txt"
+fi
 
 step "Done in $(($(date +%s) - start))s"
 echo "  $out ($(du -h "$out" | cut -f1))"

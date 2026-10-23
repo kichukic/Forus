@@ -7,7 +7,7 @@
 // list is handed that exact height. On a phone there is no wrapper, so the
 // list is drawn as it is and `height` is undefined.
 import { useState, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Dimensions, StyleSheet, View } from 'react-native';
 import { isTV } from '../theme';
 
 type Props = {
@@ -15,15 +15,28 @@ type Props = {
 };
 
 export function ListFrame({ children }: Props) {
-  const [height, setHeight] = useState(0);
+  const windowHeight = Dimensions.get('window').height;
+  const initialHeight = isTV ? Math.max(300, windowHeight - 140) : 0;
+  const [height, setHeight] = useState(initialHeight);
+
   if (!isTV) return <>{children(undefined)}</>;
+
   return (
-    <View style={styles.fill} onLayout={(e) => setHeight(Math.round(e.nativeEvent.layout.height))}>
-      {height > 0 ? children(height) : null}
+    <View
+      style={styles.fill}
+      onLayout={(e) => {
+        const measured = Math.round(e.nativeEvent.layout.height);
+        // Avoid collapsing into an incomplete intermediate layout glitch
+        if (measured >= 200) {
+          setHeight(measured);
+        }
+      }}
+    >
+      {children(height)}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1 },
+  fill: { flex: 1, width: '100%' },
 });

@@ -30,7 +30,11 @@ export function StreamPlayerScreen({ url, title, onClose }: Props) {
         style={StyleSheet.absoluteFill}
         contentFit="contain"
         nativeControls
-        fullscreenOptions={{ enable: !isTV }}
+        fullscreenOptions={{
+          enable: !isTV,
+          orientation: 'landscape',
+          autoExitOnRotate: true,
+        }}
         onFullscreenEnter={fullscreenOrientation.onFullscreenEnter}
         onFullscreenExit={fullscreenOrientation.onFullscreenExit}
       />

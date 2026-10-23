@@ -8,7 +8,7 @@ import { isTV } from '../theme';
 export function FocusRow({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   if (isTV && TVFocusGuideView) {
     return (
-      <TVFocusGuideView autoFocus style={style}>
+      <TVFocusGuideView autoFocus style={[{ width: '100%' }, style]}>
         {children}
       </TVFocusGuideView>
     );

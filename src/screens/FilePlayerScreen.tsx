@@ -113,7 +113,11 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
         // In the corner window a tap opens the player instead.
         nativeControls={!mini && !isTV}
         contentFit="contain"
-        fullscreenOptions={{ enable: !isTV }}
+        fullscreenOptions={{
+          enable: !isTV,
+          orientation: 'landscape',
+          autoExitOnRotate: true,
+        }}
         onFullscreenEnter={fullscreenOrientation.onFullscreenEnter}
         onFullscreenExit={fullscreenOrientation.onFullscreenExit}
       />

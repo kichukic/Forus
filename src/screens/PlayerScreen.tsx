@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { HWEvent } from 'react-native';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { PlayerControls, ProgressLine, type PlaybackTime } from '../components/PlayerControls';
 import type { ShellControls } from '../components/PlayerShell';
@@ -296,6 +297,21 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
   // A phone held upright shows the video at the top with its title below.
   const portraitPhone = !isTV && height > width;
+  const isLandscape = !isTV && width > height;
+
+  const toggleFullscreen = useCallback(() => {
+    if (isLandscape) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+    }
+  }, [isLandscape]);
+
+  useEffect(() => {
+    return () => {
+      ScreenOrientation.unlockAsync().catch(() => {});
+    };
+  }, []);
 
   return (
     <View style={styles.screen}>
@@ -338,6 +354,8 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
                   onToggle={() => send(paused ? 'play' : 'pause')}
                   onSeekBy={seekBy}
                   onSeekTo={(sec) => send('seekTo', sec)}
+                  isFullscreen={isLandscape}
+                  onToggleFullscreen={!isTV ? toggleFullscreen : undefined}
                 />
               )}
             </StoreValue>

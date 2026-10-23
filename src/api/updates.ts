@@ -1,6 +1,8 @@
 // A tiny in-app updater: the app polls a manifest on GitHub Releases and, when
 // a newer versionCode is published, downloads the APK and hands it to Android's
-// package installer. The manifest is a plain file (no API key, no rate limit).
+// package installer. The manifest is a plain file (no API key, no rate limit),
+// and carries the SHA-256 of the exact APK it points at, so a truncated or
+// tampered download is rejected before it can reach the installer.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import * as FileSystem from 'expo-file-system';
@@ -8,11 +10,14 @@ import { getContentUriAsync } from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { Platform } from 'react-native';
 
+import { Sha256 } from './sha256';
+
 export type Update = {
   version: string;
   versionCode: number;
   url: string;
   size?: number;
+  sha256?: string;
   notes?: string;
 };
 
@@ -22,6 +27,38 @@ const MANIFEST_URL = 'https://github.com/kichukic/Forus/releases/latest/download
 const CHECK_KEY = 'updater-last-check-v2';
 // The manifest is about 200 bytes, so checking often costs nothing.
 const CHECK_EVERY_MS = 30 * 60 * 1000;
+
+// A hash from a manifest, as lowercase hex, or undefined when absent or
+// malformed (older manifests carry none; the check is skipped for those).
+function checksum(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  return /^[0-9a-fA-F]{64}$/.test(value) ? value.toLowerCase() : undefined;
+}
+
+// The SHA-256 of a file, read one megabyte at a time so a whole APK never sits
+// in memory. `open()` lives on the native base class under the File class, so
+// the read side is typed here by hand.
+const READ_CHUNK = 1024 * 1024;
+
+async function fileHash(file: FileSystem.File): Promise<string> {
+  const readable = file as unknown as {
+    open: (mode?: FileSystem.FileMode) => FileSystem.FileHandle;
+  };
+  const handle = readable.open(FileSystem.FileMode.ReadOnly);
+  try {
+    const hasher = new Sha256();
+    for (;;) {
+      const piece = handle.readBytes(READ_CHUNK);
+      if (piece.length === 0) break;
+      hasher.update(piece);
+      // Hand a moment back so the interface can redraw between megabytes.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    return hasher.hex();
+  } finally {
+    handle.close();
+  }
+}
 
 export function installedVersionCode(): number {
   const raw = Application.nativeBuildVersion;
@@ -65,6 +102,7 @@ export async function checkForUpdate(force = false): Promise<Update | null> {
       versionCode: remoteCode,
       url: String(manifest.url),
       size: manifest.size,
+      sha256: checksum(manifest.sha256),
       notes: manifest.notes,
     };
     await AsyncStorage.setItem(CHECK_KEY, JSON.stringify({ at: Date.now(), update }));
@@ -86,6 +124,21 @@ export async function downloadUpdate(update: Update, onProgress?: (written: numb
   const output = await FileSystem.File.downloadFileAsync(update.url, file, {
     onProgress: onProgress ? (p) => onProgress(p.bytesWritten, p.totalBytes) : undefined,
   });
+
+  // The manifest carries the SHA-256 of the exact APK published with it, so a
+  // truncated or tampered download fails here and never reaches the installer.
+  // Manifests from before the checksum arrived are simply taken at face value.
+  if (update.sha256) {
+    const sum = await fileHash(output);
+    if (sum !== update.sha256) {
+      try {
+        file.delete();
+      } catch {
+        // ignore
+      }
+      throw new Error('The downloaded update failed its integrity check and was discarded. Try again shortly.');
+    }
+  }
   return output.uri;
 }
 

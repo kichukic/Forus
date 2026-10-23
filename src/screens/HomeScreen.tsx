@@ -72,7 +72,14 @@ const HINDI_THEMES = THEMES.filter((t) => t.kind === 'hindi');
 // The All tab is a mix of everything, so it carries the themed rows of the
 // other tabs as well.
 const ALL_THEMES = [...MOVIE_THEMES, ...SHOW_THEMES, ...HINDI_THEMES];
-const ALL_CHANNELS = [...SHOWS, ...MOVIES];
+const HERO_ALL_SOURCES = [
+  MOVIES[0],
+  SHOWS[0],
+  MOVIES[1],
+  SHOWS[1],
+  MOVIES[2],
+  SHOWS[4],
+];
 // Where each tab was left. Only the tab in front is mounted, so the place is
 // kept here instead of in the tab itself.
 const scrollPositions = new Map<string, number>();
@@ -268,18 +275,20 @@ function HomeScreenView({
   const liveRow = (
     <View style={styles.row}>
       <SectionHeader title="Live News" subtitle="Kerala's news channels, streaming now" />
-      <FlatList
-        horizontal
-        data={LIVE_NEWS}
-        keyExtractor={(c) => c.channelId}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <FocusCard onPress={() => onPlay({ kind: 'live', channelId: item.channelId, title: item.name })}>
-            <LiveTileContent name={item.name} color={item.color} />
-          </FocusCard>
-        )}
-      />
+      <FocusRow>
+        <FlatList
+          horizontal
+          data={LIVE_NEWS}
+          keyExtractor={(c) => c.channelId}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => (
+            <FocusCard onPress={() => onPlay({ kind: 'live', channelId: item.channelId, title: item.name })}>
+              <LiveTileContent name={item.name} color={item.color} />
+            </FocusCard>
+          )}
+        />
+      </FocusRow>
     </View>
   );
 
@@ -335,7 +344,7 @@ function HomeScreenView({
           {liveRow}
           <HeroCarousel
             key={`hero-all-${refreshKey}`}
-            sources={ALL_CHANNELS}
+            sources={HERO_ALL_SOURCES}
             label="New today"
             onPlay={playVideo}
             // On TV the remote starts on Watch Now, until Back sends it to the tabs.
@@ -352,18 +361,20 @@ function HomeScreenView({
           {history.length > 0 && (
             <View style={styles.row}>
               <SectionHeader title="Continue watching" />
-              <FlatList
-                horizontal
-                data={history}
-                keyExtractor={playableKey}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.list}
-                renderItem={({ item }) => (
-                  <FocusCard onPress={() => onPlay(item)}>
-                    <HistoryCard item={item} />
-                  </FocusCard>
-                )}
-              />
+              <FocusRow>
+                <FlatList
+                  horizontal
+                  data={history}
+                  keyExtractor={playableKey}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.list}
+                  renderItem={({ item }) => (
+                    <FocusCard onPress={() => onPlay(item)}>
+                      <HistoryCard item={item} />
+                    </FocusCard>
+                  )}
+                />
+              </FocusRow>
             </View>
           )}
 
@@ -567,12 +578,11 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
           // An exact height on TV; see ListFrame.
           style={height ? { height } : styles.panel}
           contentContainerStyle={styles.content}
-          // A new tab's first frame builds just the top two rows, so the switch
-          // itself is quick; the rest follow a row at a time.
-          initialNumToRender={2}
-          maxToRenderPerBatch={1}
-          windowSize={isTV ? 5 : 7}
-          updateCellsBatchingPeriod={isTV ? 120 : 60}
+          // On TV render enough rows initially to prevent focus traps and layout glitches.
+          initialNumToRender={isTV ? 6 : 2}
+          maxToRenderPerBatch={isTV ? 4 : 1}
+          windowSize={isTV ? 7 : 7}
+          updateCellsBatchingPeriod={60}
           // The remote's focus search needs the rows near the screen attached.
           removeClippedSubviews={false}
           // More themed rows once the end is a screen or so away.
@@ -680,7 +690,7 @@ function RoundButton({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   hidden: { display: 'none' },
-  panel: { flex: 1 },
+  panel: { flex: 1, width: '100%' },
   glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 360 },
   top: { paddingBottom: sz(8, 12) },
   content: { paddingTop: sz(6, 8), paddingBottom: sz(110, 40) },

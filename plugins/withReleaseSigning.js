@@ -1,6 +1,11 @@
 // Signs release builds with the app's own key from signing/release.properties
 // instead of the shared debug key. Without that file (e.g. on another machine)
 // release builds fall back to the debug key, as before.
+//
+// The keystore and key passwords come from the environment first
+// (FORUS_KEYSTORE_PASSWORD and FORUS_KEY_PASSWORD), so they never have to sit
+// in plaintext in release.properties; the file's values are the fallback for
+// machines that keep them there.
 const { withAppBuildGradle } = require('expo/config-plugins');
 
 const SIGNING_CONFIG = `
@@ -10,9 +15,9 @@ const SIGNING_CONFIG = `
             if (file.exists()) {
                 file.withInputStream { props.load(it) }
                 storeFile rootProject.file('../signing/' + props['storeFile'])
-                storePassword props['storePassword']
+                storePassword System.getenv('FORUS_KEYSTORE_PASSWORD') ?: props['storePassword']
                 keyAlias props['keyAlias']
-                keyPassword props['keyPassword']
+                keyPassword System.getenv('FORUS_KEY_PASSWORD') ?: props['keyPassword']
             }
         }`;
 
