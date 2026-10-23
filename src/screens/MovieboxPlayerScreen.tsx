@@ -18,6 +18,7 @@ import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { VideoOverlay } from '../components/VideoOverlay';
 import { useRemoteSeek } from '../hooks/useRemoteSeek';
+import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import type { ShellControls } from '../components/PlayerShell';
 import { colors, isTV, sz } from '../theme';
 import type { MovieboxPlayable, Playable } from '../types';
@@ -42,6 +43,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const player = useVideoPlayer(null, (p) => {
     p.staysActiveInBackground = false;
   });
+  const fullscreenOrientation = useFullscreenOrientation();
   const { status, error } = useEvent(player, 'statusChange', { status: player.status });
   const { currentTime } = useEvent(player, 'timeUpdate', {
     currentTime: 0,
@@ -172,6 +174,8 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         nativeControls={!mini && !isTV}
         contentFit="contain"
         fullscreenOptions={{ enable: !isTV }}
+        onFullscreenEnter={fullscreenOrientation.onFullscreenEnter}
+        onFullscreenExit={fullscreenOrientation.onFullscreenExit}
       />
 
       {isTV && !mini && (

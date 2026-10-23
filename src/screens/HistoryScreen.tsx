@@ -5,6 +5,7 @@ import { thumbnailUrl } from '../api/youtube';
 import { LiveTileContent, VideoCardContent } from '../components/Cards';
 import { FileCardContent } from '../components/FileCardContent';
 import { FocusCard } from '../components/FocusCard';
+import { ListFrame } from '../components/ListFrame';
 import { cleanTitle } from '../components/VideoRow';
 import { LIVE_NEWS } from '../data/channels';
 import { playableKey } from '../data/history';
@@ -43,24 +44,30 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
           <Text style={styles.emptyText}>Videos, live channels and TorBox files you play show up here.</Text>
         </View>
       ) : (
-        <FlatList
-          key={columns}
-          data={history}
-          numColumns={columns}
-          keyExtractor={playableKey}
-          contentContainerStyle={styles.grid}
-          renderItem={({ item, index }) => (
-            <FocusCard
-              width={cardWidth}
-              // TV: the remote starts on the most recent item.
-              preferredFocus={index === 0}
-              onPress={() => onPlay(item)}
-              style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP, marginBottom: 18 }}
-            >
-              <Card item={item} />
-            </FocusCard>
+        <ListFrame>
+          {(height) => (
+            <FlatList
+              key={columns}
+              data={history}
+              numColumns={columns}
+              keyExtractor={playableKey}
+              // An exact height on TV; see ListFrame.
+              style={height ? { height } : styles.list}
+              contentContainerStyle={styles.grid}
+              renderItem={({ item, index }) => (
+                <FocusCard
+                  width={cardWidth}
+                  // TV: the remote starts on the most recent item.
+                  preferredFocus={index === 0}
+                  onPress={() => onPlay(item)}
+                  style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP, marginBottom: 18 }}
+                >
+                  <Card item={item} />
+                </FocusCard>
+              )}
+            />
           )}
-        />
+        </ListFrame>
       )}
     </View>
   );
@@ -75,11 +82,15 @@ function Card({ item }: { item: Playable }) {
   if (item.kind === 'moviebox') {
     return <VideoCardContent image={item.poster} title={item.title} subtitle="MovieBox" />;
   }
+  if (item.kind === 'stream') {
+    return <VideoCardContent image={item.poster} title={item.title} subtitle="Stream" />;
+  }
   return <VideoCardContent image={thumbnailUrl(item.videoId)} title={cleanTitle(item.title)} />;
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
+  list: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: GUTTER, marginBottom: 16 },
   title: { flex: 1, color: colors.text, fontSize: sz(26, 32), fontWeight: '900' },
   clear: {

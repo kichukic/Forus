@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Linking } from 'react-native';
 import { getApiKey } from '../api/torbox';
+import { getAddonUrls, addAddon, removeAddon, fetchManifest, type AddonManifest } from '../api/addons';
 import { LIVE_NEWS, MOVIES, SHOWS } from '../data/channels';
 import { GLOW, GUTTER, RADIUS, colors, isTV, sz } from '../theme';
 
@@ -19,11 +21,18 @@ type Props = {
 export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory, onCheckForUpdates }: Props) {
   const insets = useSafeAreaInsets();
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [addons, setAddons] = useState<string[]>([]);
+  const [newUrl, setNewUrl] = useState('');
   const [cleared, setCleared] = useState(false);
 
   useEffect(() => {
     getApiKey().then((k) => setConnected(!!k));
   }, [torboxVersion]);
+
+  const refreshAddons = () => getAddonUrls().then(setAddons);
+  useEffect(() => {
+    refreshAddons();
+  }, []);
 
   return (
     <View style={styles.screen}>
@@ -60,6 +69,64 @@ export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory, on
             detail={`${LIVE_NEWS.length} live · ${SHOWS.length} shows · ${MOVIES.length} movies`}
           />
           <Row icon="shield-checkmark-outline" title="Only free, official uploads" detail="No pirated sources" />
+        </Group>
+
+        <Group title="Addons">
+          <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+            <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 8, lineHeight: 18 }}>
+              Configure the addon on its own site first (paste your TorBox key there), then copy the
+              "Install" URL it gives you and paste it below. The URL already carries your key.
+            </Text>
+            <Pressable
+              onPress={() => Linking.openURL('https://torrentio.strem.fun/configure')}
+              style={{ alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: 8 }}
+            >
+              <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13 }}>Configure Torrentio</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => Linking.openURL('https://aiostreams.elfhosted.com/stremio/configure')}
+              style={{ alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: 8 }}
+            >
+              <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13 }}>Configure AIOStreams</Text>
+            </Pressable>
+          </View>
+          {addons.map((u) => (
+            <Row
+              key={u}
+              icon="apps-outline"
+              title={u}
+              detail="Installed"
+              onPress={() => {
+                removeAddon(u).then(refreshAddons);
+              }}
+            />
+          ))}
+          <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+            <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 6 }}>Install by URL</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput
+                value={newUrl}
+                onChangeText={setNewUrl}
+                placeholder="https://..."
+                placeholderTextColor={colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={{ flex: 1, backgroundColor: colors.surface, color: colors.text, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
+              />
+              <Pressable
+                onPress={() => {
+                  if (!newUrl.trim()) return;
+                  addAddon(newUrl.trim()).then(() => {
+                    setNewUrl('');
+                    refreshAddons();
+                  });
+                }}
+                style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: colors.accent }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Add</Text>
+              </Pressable>
+            </View>
+          </View>
         </Group>
 
         <Group title="App">

@@ -23,6 +23,7 @@ export async function getRelated(item: Playable): Promise<RelatedCard[]> {
   if (item.kind === 'live') return relatedLive(item.channelId);
   // A MovieBox film is related to the other films of its own sort.
   if (item.kind === 'moviebox') return relatedMoviebox(item);
+  if (item.kind === 'stream') return [];
   return relatedToVideo(item.videoId, item.title);
 }
 

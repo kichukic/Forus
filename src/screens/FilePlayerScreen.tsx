@@ -7,6 +7,7 @@ import { getApiKey, getStreamUrl } from '../api/torbox';
 import { searchByName as searchSubtitles, loadSubtitle } from '../api/opensubtitles';
 import { cueAt, type SubtitleCue } from '../api/subtitles';
 import type { ShellControls } from '../components/PlayerShell';
+import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import { Loader } from '../components/Loader';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { VideoOverlay } from '../components/VideoOverlay';
@@ -32,6 +33,7 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const player = useVideoPlayer(null, (p) => {
     p.staysActiveInBackground = false;
   });
+  const fullscreenOrientation = useFullscreenOrientation();
   const { status, error } = useEvent(player, 'statusChange', { status: player.status });
   const { currentTime } = useEvent(player, 'timeUpdate', { currentTime: 0, currentLiveTimestamp: 0, currentOffsetFromLive: 0, bufferedPosition: 0 });
   const [showOverlay, setShowOverlay] = useState(true);
@@ -112,6 +114,8 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
         nativeControls={!mini && !isTV}
         contentFit="contain"
         fullscreenOptions={{ enable: !isTV }}
+        onFullscreenEnter={fullscreenOrientation.onFullscreenEnter}
+        onFullscreenExit={fullscreenOrientation.onFullscreenExit}
       />
 
       {spoken ? (

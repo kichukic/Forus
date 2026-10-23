@@ -11,8 +11,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CatalogMovie } from '../api/catalog';
-import { findTorrents, type TorrentOption } from '../api/torrents';
+import { findTorrents, magnetFor, type TorrentOption } from '../api/torrents';
+import { getApiKey, createTorrent, getTorrent, getStreamUrl, mainVideoFile } from '../api/torbox';
+import { getAllStreams, type StreamResult } from '../api/addons';
 import { ReleaseList } from '../components/ReleaseList';
+import { Loader } from '../components/Loader';
 import { addTransfer } from '../data/transfers';
 import { GUTTER, RADIUS, SCRIM, colors, isTV } from '../theme';
 import type { Playable } from '../types';
@@ -28,6 +31,40 @@ type Props = {
 export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
   const insets = useSafeAreaInsets();
   const [torrents, setTorrents] = useState<TorrentOption[] | null>(null);
+  const [addonStreams, setAddonStreams] = useState<{ addon: string; streams: StreamResult[] }[] | null>(null);
+  const [instantLoading, setInstantLoading] = useState(false);
+  const instantPlay = async (hash: string, name: string, tracker: string | undefined, magnet: string) => {
+    setInstantLoading(true);
+    try {
+      const key = await getApiKey();
+      if (!key) {
+        setInstantLoading(false);
+        addTransfer({ hash, name, quality: '', size: undefined, seeders: undefined, tracker, magnet });
+        return;
+      }
+      const created = await createTorrent(key, magnet, name);
+      let torrent = await getTorrent(key, created.torrentId);
+      for (let i = 0; i < 20; i++) {
+        if (torrent && (torrent.downloadFinished || torrent.downloadPresent)) break;
+        await new Promise((r) => setTimeout(r, 1500));
+        torrent = await getTorrent(key, created.torrentId);
+      }
+      if (torrent && (torrent.downloadFinished || torrent.downloadPresent)) {
+        const file = mainVideoFile(torrent);
+        if (file) {
+          const url = await getStreamUrl(key, { source: 'torrents', itemId: torrent.id, fileId: file.id });
+          setInstantLoading(false);
+          onPlay({ kind: 'stream', url, title: name, poster: movie.poster ?? undefined });
+          return;
+        }
+      }
+      setInstantLoading(false);
+      addTransfer({ hash, name, quality: '', size: undefined, seeders: undefined, tracker, magnet });
+    } catch {
+      setInstantLoading(false);
+      addTransfer({ hash, name, quality: '', size: undefined, seeders: undefined, tracker, magnet });
+    }
+  };
   const [listError, setListError] = useState<string | null>(null);
   // Sending now runs in the background, so this screen never blocks on it.
 
@@ -36,6 +73,9 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
     findTorrents(movie.id)
       .then((list) => alive && setTorrents(list))
       .catch(() => alive && setListError("Couldn't look up releases. Check the internet connection."));
+    getAllStreams('movie', movie.id)
+      .then((list) => alive && setAddonStreams(list))
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -74,6 +114,39 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
           </View>
           {movie.description ? <Text style={styles.description}>{movie.description}</Text> : null}
 
+          {addonStreams && addonStreams.length > 0 && (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={styles.sectionTitle}>Streams (addons)</Text>
+              {addonStreams.map((g, gi) =>
+                g.streams.map((st, si) => (
+                  <Pressable
+                    key={`${gi}-${si}`}
+                    onPress={() => {
+                      if (st.url) {
+                        onPlay({ kind: 'stream', url: st.url, title: st.title || st.name || movie.title, poster: movie.poster ?? undefined });
+                      } else if (st.infoHash) {
+                        const title = st.title || st.name || movie.title;
+                        const magnet = magnetFor(st.infoHash, title);
+                        instantPlay(st.infoHash, title, g.addon, magnet);
+                      }
+                    }}
+                    style={({ focused, pressed }) => [styles.release, (focused || pressed) && styles.releaseActive]}
+                  >
+                    <View style={styles.releaseMain}>
+                      <Text style={styles.releaseName} numberOfLines={2}>{st.title || st.name || 'Stream'}</Text>
+                      <Text style={styles.releaseMeta}>{st.url ? 'Play now' : st.infoHash ? 'Send to TorBox' : ''}</Text>
+                    </View>
+                    <Ionicons
+                      name={st.url ? 'play' : 'cloud-download-outline'}
+                      size={20}
+                      color={st.url ? colors.accent : colors.faint}
+                    />
+                  </Pressable>
+                )),
+              )}
+            </View>
+          )}
+
           <Text style={styles.sectionTitle}>
             {torrents === null ? 'Looking for releases…' : 'Releases'}
           </Text>
@@ -81,12 +154,17 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
           <ReleaseList
             releases={torrents}
             onSend={(item) => {
-              addTransfer(item);
+              instantPlay(item.hash, item.name, undefined, item.magnet);
             }}
             error={listError}
             emptyText="No releases found for this film."
           />
         </ScrollView>
+      {instantLoading && (
+        <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+          <Loader size="large" label="Loading movie" icon="film-outline" />
+        </View>
+      )}
     </View>
   );
 }
@@ -149,4 +227,20 @@ const styles = StyleSheet.create({
   },
   connectText: { color: '#fff', fontSize: isTV ? 15 : 13, fontWeight: '800' },
   cancelActive: { borderColor: colors.accent },
+  release: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: isTV ? 14 : 11,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    borderRadius: RADIUS,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  releaseActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  releaseMain: { flex: 1 },
+  releaseName: { color: colors.text, fontSize: isTV ? 16 : 14, fontWeight: '700' },
+  releaseMeta: { color: colors.muted, fontSize: isTV ? 13 : 12, marginTop: 3 },
 });

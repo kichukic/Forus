@@ -300,7 +300,7 @@ function Frost({ intensity, style, children }: { intensity: number; style: Style
 }
 
 const styles = StyleSheet.create({
-  center: { alignItems: 'center', justifyContent: 'center', padding: 20 },
+  center: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: 20 },
   tvBackdrop: { backgroundColor: 'rgba(6,4,12,0.86)' },
   tvCard: { backgroundColor: colors.surface },
   backdrop: {
@@ -311,6 +311,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   cardBlur: {
+    alignSelf: 'center',
     width: '100%',
     maxWidth: isTV ? 560 : 420,
     borderRadius: 28,

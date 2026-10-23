@@ -19,12 +19,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clearVideoCache, thumbnailUrl } from '../api/youtube';
 import { clearCatalogCache, type CatalogMovie } from '../api/catalog';
+import type { StreamioItem } from '../api/streamiobox';
 import type { MovieboxSubject } from '../api/moviebox';
 import type { TorrentOption } from '../api/torrents';
 import { LiveTileContent, VideoCardContent } from '../components/Cards';
 import { FileCardContent } from '../components/FileCardContent';
 import { FocusCard } from '../components/FocusCard';
 import { FocusRow } from '../components/FocusRow';
+import { ListFrame } from '../components/ListFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
@@ -32,6 +34,7 @@ import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
 import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
 import { CatalogScreen } from './CatalogScreen';
+import { StreamioBoxScreen } from './StreamioBoxScreen';
 import { MovieboxScreen } from './MovieboxScreen';
 import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
@@ -54,6 +57,7 @@ const STALE_AFTER_MS = 10 * 60 * 1000;
 const TABS = [
   { id: 'all', label: 'All' },
   { id: 'moviebox', label: 'MovieBox' },
+  { id: 'streamiobox', label: 'StreamioBox' },
   { id: 'movies', label: 'Malayalam Movies' },
   { id: 'shows', label: 'Shows' },
   { id: 'hindi', label: 'Hindi' },
@@ -91,6 +95,8 @@ type Props = {
   onOpenMovie: (movie: CatalogMovie) => void;
   // Opens a film from MovieBox.
   onOpenMoviebox: (subject: MovieboxSubject) => void;
+  // Opens a series from StreamioBox.
+  onOpenStreamioSeries: (item: StreamioItem) => void;
   // Sends a release found by searching to TorBox.
   onSendRelease: (option: TorrentOption) => void;
   // TV has no bottom bar, so these sit in the header there.
@@ -121,6 +127,7 @@ function HomeScreenView({
   onOpenSearch,
   onOpenMovie,
   onOpenMoviebox,
+  onOpenStreamioSeries,
   onSendRelease,
   onOpenHistory,
   onOpenSettings,
@@ -288,7 +295,7 @@ function HomeScreenView({
             </Text>
           </View>
           {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
-          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' ? 'all' : tab)} />
+          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' ? 'all' : tab)} />
           {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
           {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
         </View>
@@ -441,6 +448,19 @@ function HomeScreenView({
           refreshControl={refreshControl}
         />,
       )}
+
+      {panel(
+        'streamiobox',
+        <StreamioBoxScreen
+          key={`streamiobox-${refreshKey}`}
+          embedded
+          onOpenMovie={(item) => onOpenMovie(item as unknown as CatalogMovie)}
+          onOpenSeries={onOpenStreamioSeries}
+          refreshControl={refreshControl}
+          history={history}
+          onPlay={onPlay}
+        />,
+      )}
     </View>
   );
 }
@@ -452,6 +472,9 @@ function HistoryCard({ item }: { item: Playable }) {
   }
   if (item.kind === 'file') return <FileCardContent fileName={item.title} detail="TorBox" />;
   if (item.kind === 'moviebox') {
+    return <VideoCardContent image={item.poster} title={item.title} subtitle="Watch again" />;
+  }
+  if (item.kind === 'stream') {
     return <VideoCardContent image={item.poster} title={item.title} subtitle="Watch again" />;
   }
   return <VideoCardContent image={thumbnailUrl(item.videoId)} title={cleanTitle(item.title)} subtitle="Watch again" />;
@@ -473,23 +496,14 @@ type TabScrollProps = {
 // tab costs nothing until it is scrolled to, and rows far behind are let go.
 function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay, tabKey }: TabScrollProps) {
   const [themeCount, setThemeCount] = useState(THEMES_AT_START);
-  // The "more rows" placeholder is built a few screens ahead of being seen; it
-  // only animates while the end of the page, where it sits, is on screen. That
-  // is worked out from the scroll position and the page's height, both of which
-  // are reported as they change.
-  const [moreInView, setMoreInView] = useState(false);
-  const metrics = useRef({ y: 0, height: 0, content: 0 });
-  const checkEnd = () => {
-    const { y, height, content } = metrics.current;
-    if (height > 0) setMoreInView(content - (y + height) < height * END_IN_VIEW);
-  };
   const scroll = useRef<FlatList<ReactNode>>(null);
-  useEffect(() => {
-    activePage.current = scroll.current;
-    return () => {
-      if (activePage.current === scroll.current) activePage.current = null;
-    };
-  }, []);
+  // Registered as the page in front when the list itself appears, which on TV
+  // is a moment after the tab (once ListFrame has measured the room).
+  const [setScroll] = useState(() => (list: FlatList<ReactNode> | null) => {
+    if (list) activePage.current = list;
+    else if (activePage.current === scroll.current) activePage.current = null;
+    scroll.current = list;
+  });
   // Where this tab was left, put back once the rows have their height.
   const restore = useRef(tabKey ? (scrollPositions.get(tabKey) ?? 0) : 0);
   // Only while the tab is opening. After that the page grows and shrinks as
@@ -503,8 +517,6 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
   const onScroll = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.contentOffset.y;
     if (tabKey) scrollPositions.set(tabKey, y);
-    metrics.current = { y, height: e.layoutMeasurement.height, content: e.contentSize.height };
-    checkEnd();
     // The place to come back to is kept until it is actually reached.
     if (restore.current > 0 && y >= restore.current - 4) restore.current = 0;
   };
@@ -544,48 +556,43 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
   ];
 
   return (
-    <FlatList
-      ref={scroll}
-      data={rows}
-      keyExtractor={rowKey}
-      renderItem={renderRow}
-      style={styles.panel}
-      contentContainerStyle={styles.content}
-      // A new tab's first frame builds just the top two rows, so the switch
-      // itself is quick; the rest follow a row at a time.
-      initialNumToRender={2}
-      maxToRenderPerBatch={1}
-      windowSize={isTV ? 5 : 7}
-      updateCellsBatchingPeriod={isTV ? 120 : 60}
-      // The remote's focus search needs the rows near the screen attached.
-      removeClippedSubviews={false}
-      // More themed rows once the end is a screen or so away.
-      onEndReached={() => setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length))}
-      onEndReachedThreshold={1.2}
-      onScroll={onScroll}
-      scrollEventThrottle={250}
-      onContentSizeChange={(_, content) => {
-        restorePlace();
-        metrics.current.content = content;
-        checkEnd();
-      }}
-      onLayout={(e) => {
-        metrics.current.height = e.nativeEvent.layout.height;
-        checkEnd();
-      }}
-      onTouchStart={() => {
-        // A touch means the user is here now, not on their way back.
-        restore.current = 0;
-      }}
-      onScrollBeginDrag={() => (restore.current = 0)}
-      refreshControl={refreshControl}
-      showsVerticalScrollIndicator={false}
-    />
+    <ListFrame>
+      {(height) => (
+        <FlatList
+          ref={setScroll}
+          data={rows}
+          keyExtractor={rowKey}
+          renderItem={renderRow}
+          // An exact height on TV; see ListFrame.
+          style={height ? { height } : styles.panel}
+          contentContainerStyle={styles.content}
+          // A new tab's first frame builds just the top two rows, so the switch
+          // itself is quick; the rest follow a row at a time.
+          initialNumToRender={2}
+          maxToRenderPerBatch={1}
+          windowSize={isTV ? 5 : 7}
+          updateCellsBatchingPeriod={isTV ? 120 : 60}
+          // The remote's focus search needs the rows near the screen attached.
+          removeClippedSubviews={false}
+          // More themed rows once the end is a screen or so away.
+          onEndReached={() => setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length))}
+          onEndReachedThreshold={1.2}
+          onScroll={onScroll}
+          scrollEventThrottle={250}
+          onContentSizeChange={restorePlace}
+          onTouchStart={() => {
+            // A touch means the user is here now, not on their way back.
+            restore.current = 0;
+          }}
+          onScrollBeginDrag={() => (restore.current = 0)}
+          refreshControl={refreshControl}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+    </ListFrame>
   );
 }
 
-// The end of the page counts as in view within this share of a screen.
-const END_IN_VIEW = 0.9;
 const rowKey = (row: ReactNode, index: number) =>
   isValidElement(row) && row.key != null ? String(row.key) : String(index);
 const renderRow = ({ item }: { item: ReactNode }) => <>{item}</>;

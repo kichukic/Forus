@@ -14,8 +14,9 @@ export type Playable =
   | { kind: 'video'; videoId: string; title: string }
   | { kind: 'live'; channelId: string; title: string }
   | { kind: 'file'; source: TorboxSource; itemId: number; fileId: number; title: string }
+  | { kind: 'stream'; url: string; title: string; poster?: string }
   | MovieboxPlayable;
 
-export type YouTubePlayable = Exclude<Playable, { kind: 'file' } | { kind: 'moviebox' }>;
+export type YouTubePlayable = Exclude<Playable, { kind: 'file' } | { kind: 'moviebox' } | { kind: 'stream' }>;
 export type FilePlayable = Extract<Playable, { kind: 'file' }>;
 export type MovieboxItem = Extract<Playable, { kind: 'moviebox' }>;
