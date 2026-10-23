@@ -88,28 +88,16 @@ fi
 touch "$stamp"
 echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
-# R8/ProGuard switches: a clean prebuild rewrites gradle.properties from the
-# template, so the flags are (re-)written on every build.
-props=android/gradle.properties
-[ -s "$props" ] && [ -n "$(tail -c1 "$props" 2>/dev/null || true)" ] && echo "" >> "$props"
-for key in android.enableMinifyInReleaseBuilds android.enableShrinkResourcesInReleaseBuilds; do
-  if grep -q "^$key=" "$props" 2>/dev/null; then
-    sed -i -e "s/^$key=.*$/$key=true/" "$props"
-  else
-    printf '\n%s=true\n' "$key" >> "$props"
-  fi
-done
-
 step "Building ForUs $version (build $code)"
 start=$(date +%s)
 (
   cd android
   # Limited parallelism and memory: with everything at full speed the native
   # build can run the machine out of memory.
-  ./gradlew assembleRelease --no-daemon --max-workers="${MAX_WORKERS:-3}" \
+  ./gradlew assembleRelease --no-daemon --max-workers="${MAX_WORKERS:-2}" \
     -Dorg.gradle.parallel=false \
-    "-Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m" \
-    -Pkotlin.daemon.jvm.options=-Xmx1g \
+    "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m" \
+    -Pkotlin.daemon.jvm.options=-Xmx1024m \
     -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
 )
 
