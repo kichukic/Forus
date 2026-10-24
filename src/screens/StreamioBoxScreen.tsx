@@ -159,7 +159,7 @@ export function StreamioBoxScreen({ onOpenMovie, onOpenSeries, embedded, header,
   }, [query, type]);
 
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 300 : 120)));
+  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 230 : 120)));
   const cardWidth = Math.max(120, Math.floor((width - GUTTER * 2) / columns));
 
   const movies = searching ? (results ?? []) : (browse ?? []);

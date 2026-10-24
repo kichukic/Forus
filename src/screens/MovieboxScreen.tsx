@@ -213,7 +213,7 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
 
   // The grid reflows when the phone rotates.
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 240 : 150)));
+  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 230 : 150)));
   const cardWidth = Math.max(96, Math.floor((width - GUTTER * 2) / columns));
 
   const searchBox = (
