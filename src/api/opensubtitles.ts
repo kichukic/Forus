@@ -2,6 +2,7 @@
 // REST API answers without a key, and the download link without its ".gz"
 // ending returns the plain SRT text, so no decompression is needed here.
 import { parseSrt, type SubtitleCue } from './subtitles';
+import { getCached, setCached } from './cache';
 
 const BASE = 'https://rest.opensubtitles.org';
 
@@ -27,22 +28,32 @@ export function cleanFileName(name: string): string {
 
 /** Subtitles for a film, by its IMDb id when it is known. */
 export async function searchByImdb(imdbId: string, language = 'eng'): Promise<OpenSubtitle[]> {
+  const key = `subs:imdb:${imdbId}:${language}`;
+  const cached = await getCached<OpenSubtitle[]>(key);
+  if (cached) return cached;
   const url = `${BASE}/search/imdbid-${imdbId.replace(/^tt/, '')}/sublanguageid-${language}`;
   const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' } });
   if (!res.ok) return [];
   const list = await res.json().catch(() => []);
-  return toList(Array.isArray(list) ? list : []);
+  const result = toList(Array.isArray(list) ? list : []);
+  await setCached(key, result, 30 * 60 * 1000);
+  return result;
 }
 
 /** Subtitles for a name, when no IMDb id is known (TorBox files). */
 export async function searchByName(name: string, language = 'eng'): Promise<OpenSubtitle[]> {
   const cleaned = cleanFileName(name);
   if (cleaned.length < 2) return [];
+  const key = `subs:name:${cleaned}:${language}`;
+  const cached = await getCached<OpenSubtitle[]>(key);
+  if (cached) return cached;
   const url = `${BASE}/search/query-${encodeURIComponent(cleaned)}/sublanguageid-${language}`;
   const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' } });
   if (!res.ok) return [];
   const list = await res.json().catch(() => []);
-  return toList(Array.isArray(list) ? list : []);
+  const result = toList(Array.isArray(list) ? list : []);
+  await setCached(key, result, 30 * 60 * 1000);
+  return result;
 }
 
 function toList(list: any[]): OpenSubtitle[] {

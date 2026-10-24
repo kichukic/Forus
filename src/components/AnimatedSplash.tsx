@@ -42,7 +42,7 @@ type Props = {
   progress: number;
   status: string;
   // Thumbnails for the wall.
-  posters: string[];
+  posters: (string | number)[];
   onDone: () => void;
 };
 
@@ -298,7 +298,7 @@ export function AnimatedSplash({ ready, progress, status, posters, onDone }: Pro
 }
 
 // One poster on the wall, or a coloured placeholder until its picture arrives.
-function Tile({ uri, height, colour }: { uri: string | null; height: number; colour: [string, string] }) {
+function Tile({ uri, height, colour }: { uri: string | number | null; height: number; colour: [string, string] }) {
   return (
     <View style={[styles.tile, { height }]}>
       <LinearGradient colors={colour} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />

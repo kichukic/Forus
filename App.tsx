@@ -64,7 +64,7 @@ export default function App() {
     done: false,
   });
   // The splash's poster wall: last launch's posters until enough fresh ones arrive.
-  const [savedPosters, setSavedPosters] = useState<string[]>([]);
+  const [savedPosters, setSavedPosters] = useState<(string | number)[]>([]);
   // Where the TorBox screen goes back to.
   const [torboxFrom, setTorboxFrom] = useState<NavId>('home');
   const [playing, setPlaying] = useState<Playable | null>(null);
@@ -351,7 +351,7 @@ export default function App() {
             ready={preload.done}
             progress={preload.progress}
             status={preload.label}
-            posters={(preload.posters?.length ?? 0) >= MIN_FRESH_POSTERS ? preload.posters! : savedPosters}
+            posters={(preload.posters?.length ?? 0) >= MIN_FRESH_POSTERS ? preload.posters! : (savedPosters.length ? savedPosters : [require('./assets/images/splash-icon.png')])}
             onDone={() => setSplash(false)}
           />
         )}

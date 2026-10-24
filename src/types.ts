@@ -17,6 +17,9 @@ export type Playable =
   | { kind: 'stream'; url: string; title: string; poster?: string }
   | MovieboxPlayable;
 
-export type YouTubePlayable = Exclude<Playable, { kind: 'file' } | { kind: 'moviebox' } | { kind: 'stream' }>;
+export type YouTubePlayable = Exclude<
+  Playable,
+  { kind: 'file' } | { kind: 'moviebox' } | { kind: 'stream' }
+>;
 export type FilePlayable = Extract<Playable, { kind: 'file' }>;
 export type MovieboxItem = Extract<Playable, { kind: 'moviebox' }>;
