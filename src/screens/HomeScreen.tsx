@@ -60,7 +60,6 @@ const TABS = [
   { id: 'moviebox', label: 'MovieBox' },
   { id: 'streamiobox', label: 'StreamioBox' },
   { id: 'cinebox', label: 'Cinebox' },
-  { id: 'cinebox', label: 'Cinebox' },
   { id: 'movies', label: 'Malayalam Movies' },
   { id: 'shows', label: 'Shows' },
   { id: 'hindi', label: 'Hindi' },

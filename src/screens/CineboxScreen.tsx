@@ -61,6 +61,9 @@ export function CineboxScreen({
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<CineboxItem[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
 
@@ -73,9 +76,12 @@ export function CineboxScreen({
   const loadTrending = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setPage(1);
+    setHasMore(true);
     try {
-      const list = await trendingCinebox(type);
+      const list = await trendingCinebox(type, 1);
       setItems(list);
+      setHasMore(list.length >= 18);
     } catch {
       setError("Couldn't load Cinebox. Check the internet connection.");
     } finally {
@@ -99,13 +105,45 @@ export function CineboxScreen({
     const timer = setTimeout(async () => {
       setLoading(true);
       setError(null);
-      const found = await searchCinebox(q).catch(() => [] as CineboxItem[]);
+      setPage(1);
+      setHasMore(true);
+      const found = await searchCinebox(q, 1).catch(() => [] as CineboxItem[]);
       if (latest.current !== q) return;
       setItems(found);
+      setHasMore(found.length >= 18);
       setLoading(false);
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || loading) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const q = query.trim();
+      const found = searching
+        ? await searchCinebox(q, nextPage).catch(() => [] as CineboxItem[])
+        : await trendingCinebox(type, nextPage).catch(() => [] as CineboxItem[]);
+      if (!found.length) {
+        setHasMore(false);
+        return;
+      }
+      setItems((current) => {
+        const seen = new Set((current ?? []).map((m) => m.id));
+        const newItems = found.filter((m) => !seen.has(m.id));
+        if (!newItems.length) {
+          setHasMore(false);
+          return current;
+        }
+        return [...(current ?? []), ...newItems];
+      });
+      setPage(nextPage);
+      setHasMore(found.length >= 18);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, loading, page, query, searching, type]);
 
   const openItem = useCallback(
     async (item: CineboxItem) => {
@@ -218,6 +256,15 @@ export function CineboxScreen({
         contentContainerStyle={styles.grid}
         refreshControl={refreshControl}
         {...LIST_PERF}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+              <Loader size="small" label="Loading more" icon="film-outline" />
+            </View>
+          ) : null
+        }
         ListHeaderComponent={
           <View>
             {heading}
