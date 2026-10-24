@@ -9,7 +9,7 @@ const ITEM = CARD_WIDTH + CARD_GAP;
 export const rowListProps = {
   // A TV shows about six cards across, and its chip is far slower than a
   // phone's, so it keeps fewer cards ready beyond the screen.
-  initialNumToRender: isTV ? 6 : 4,
+  initialNumToRender: isTV ? 8 : 4,
   maxToRenderPerBatch: isTV ? 3 : 4,
   windowSize: isTV ? 3 : 5,
   updateCellsBatchingPeriod: isTV ? 80 : 50,

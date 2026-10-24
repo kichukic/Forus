@@ -252,7 +252,7 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
       {failed ? (
         <Text style={styles.note}>{"Couldn't load. Check the internet connection."}</Text>
       ) : !videos ? (
-        <SkeletonLoader columns={isTV ? 6 : 3} cardWidth={CARD_WIDTH} rows={1} style={styles.loading} />
+        <SkeletonLoader columns={isTV ? 7 : 3} cardWidth={CARD_WIDTH} rows={1} style={styles.loading} />
       ) : videos.length === 0 ? (
         <Text style={styles.note}>Nothing new right now.</Text>
       ) : (

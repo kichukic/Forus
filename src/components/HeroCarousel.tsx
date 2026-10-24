@@ -49,7 +49,8 @@ export const HeroCarousel = memo(function HeroCarousel({ sources, label, onPlay,
   const touched = useRef(0);
 
   const cardWidth = width - GUTTER * 2;
-  const cardHeight = isTV ? Math.round(height * 0.5) : Math.round(cardWidth * 1.02);
+  // On TV it leaves room below for the first row of cards.
+  const cardHeight = isTV ? Math.round(height * 0.4) : Math.round(cardWidth * 1.02);
 
   useEffect(() => {
     if (slides.length) return;

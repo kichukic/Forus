@@ -9,7 +9,7 @@ import { ListFrame } from '../components/ListFrame';
 import { cleanTitle } from '../components/VideoRow';
 import { LIVE_NEWS } from '../data/channels';
 import { playableKey } from '../data/history';
-import { CARD_GAP, GUTTER, colors, isTV, sz } from '../theme';
+import { CARD_GAP, CARD_WIDTH, GUTTER, colors, isTV, sz } from '../theme';
 import type { Playable } from '../types';
 
 type Props = {
@@ -22,7 +22,12 @@ type Props = {
 export function HistoryScreen({ history, onPlay, onClear }: Props) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const columns = isTV ? 4 : width > 600 ? 3 : 2;
+  // On TV as many cards as fit at the usual card size.
+  const columns = isTV
+    ? Math.max(4, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP)))
+    : width > 600
+      ? 3
+      : 2;
   const cardWidth = (width - GUTTER * 2 - CARD_GAP * (columns - 1)) / columns;
 
   return (

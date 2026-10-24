@@ -206,7 +206,7 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
 
   // The grid reflows when the phone rotates.
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / ((sz(200, 300)) + CARD_GAP)));
+  const columns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / ((sz(200, 230)) + CARD_GAP)));
   const cardWidth = (width - GUTTER * 2 - CARD_GAP * (columns - 1)) / columns;
 
   return (

@@ -553,7 +553,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
           // light sweeping across them.
           <SkeletonLoader
             key="more-rows"
-            columns={isTV ? 6 : 3}
+            columns={isTV ? 7 : 3}
             cardWidth={CARD_WIDTH}
             rows={1}
             label="More rows coming"
