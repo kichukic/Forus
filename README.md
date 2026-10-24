@@ -356,3 +356,15 @@ npx expo run:android
 ## 9. License & Usage Notice
 
 This software is developed strictly for educational and personal research into cross-platform UI architectures, resilient media transport protocols, and hardware-accelerated video rendering on Android. All video streams originate from public third-party endpoints, decentralized indexes, and official distributor uploads.
+
+### 9.1. P2P & Torrent Source Risk Notice
+
+> [!WARNING]
+> **Torrent & Peer-to-Peer (P2P) Streaming Involves Privacy and Legal Risks:**
+>
+> * **Public IP Exposure in Swarms:** Standard BitTorrent and DHT mechanisms expose your device's public IP address to all peers and seeders participating in the active swarm. When not proxied through an encrypted cloud debrid service (such as TorBox) or a secure VPN, your network identity is publicly discoverable by third parties and Internet Service Providers (ISPs).
+> * **Copyrighted Material & Jurisdiction Compliance:** Public torrent indexers (such as Torrentio, The Pirate Bay, and Nyaa) crawl decentralized swarms containing user-uploaded content. Streaming, caching, or downloading copyrighted media without legitimate rights or authorization may violate intellectual property laws in your jurisdiction.
+> * **Cloud Debrid Recommended for Privacy:** When configured with a personal TorBox API key, torrent links are cached and downloaded remotely to TorBox cloud infrastructure and streamed to your player via secure, point-to-point encrypted HTTPS/HLS channels, eliminating direct P2P swarm exposure on your local network.
+> * **No Media Hosting:** The developers and maintainers of this repository do not host, store, cache, upload, or distribute any media files, video streams, or torrent trackers. This application operates exclusively as a client-side user interface and indexing parser.
+>
+> Users assume full legal and operational responsibility for verifying copyright licenses and complying with local telecommunications and digital media regulations when querying torrent sources.
