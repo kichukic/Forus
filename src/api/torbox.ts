@@ -1,7 +1,7 @@
 // Plays files that are already in the user's own TorBox cloud. This only lists
 // and streams the account's existing downloads; it does not search for or add
 // anything.
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import type { TorboxSource } from '../types';
 
 const BASE = 'https://api.torbox.app/v1/api';
@@ -34,19 +34,26 @@ type ApiItem = {
 
 export async function getApiKey(): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem(KEY_STORAGE);
+    return await SecureStore.getItemAsync(KEY_STORAGE);
   } catch {
     return null;
   }
 }
 
 export async function setApiKey(key: string | null): Promise<void> {
-  if (key) await AsyncStorage.setItem(KEY_STORAGE, key);
-  else await AsyncStorage.removeItem(KEY_STORAGE);
+  if (key) await SecureStore.setItemAsync(KEY_STORAGE, key);
+  else await SecureStore.deleteItemAsync(KEY_STORAGE);
 }
 
 async function call<T>(path: string, key: string): Promise<T> {
-  const res = await fetch(`${BASE}/${path}`, { headers: { Authorization: `Bearer ${key}` } });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/${path}`, { headers: { Authorization: `Bearer ${key}` }, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
   const body = await res.json().catch(() => null);
   if (!res.ok || !body?.success) {
     throw new Error(body?.detail || body?.error || `TorBox returned ${res.status}`);
@@ -183,11 +190,19 @@ export async function createTorrent(
   form.append('seed', '1');
   if (name) form.append('name', name);
 
-  const res = await fetch(`${BASE}/torrents/createtorrent`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}` },
-    body: form,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/torrents/createtorrent`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}` },
+      body: form,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const body = await res.json().catch(() => null);
   if (!res.ok || !body?.success) {
     throw new Error(body?.detail || body?.error || `TorBox returned ${res.status}`);

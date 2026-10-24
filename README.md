@@ -1,189 +1,357 @@
-# ForUs
+# ForUs — Universal Streaming Platform for Android & Android TV
 
-An app for free Malayalam TV: live news, serials and shows. All of it comes from
-official channels' free YouTube uploads. There are no logins, no API keys and no
-pirated sources.
+[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Android%20TV-blue?style=flat-square)](https://developer.android.com/tv)
+[![React Native](https://img.shields.io/badge/React%20Native-0.86%20(react--native--tvos)-informational?style=flat-square)](https://github.com/react-native-tvos/react-native-tvos)
+[![Expo](https://img.shields.io/badge/Expo-SDK%2057%20(CNG)-black?style=flat-square)](https://docs.expo.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue?style=flat-square)](https://www.typescriptlang.org/)
+[![Video Engine](https://img.shields.io/badge/Video%20Engine-expo--video%20(ExoPlayer)-success?style=flat-square)](https://docs.expo.dev/versions/latest/sdk/video/)
+[![License](https://img.shields.io/badge/License-Private-red?style=flat-square)](#)
 
-The same APK runs on Android TV (in the TV launcher, driven by the remote) and on
-Android phones (touch, either orientation).
+---
 
-## Channels
+## 1. Executive Summary
 
-Edit [src/data/channels.ts](src/data/channels.ts) to add or remove channels.
+**ForUs** is a multi-source media aggregation and playback application engineered from the ground up for cross-form-factor Android deployment. Operating across both **Android TV** (remote-driven 10-foot Leanback interface) and **mobile/tablet touch displays** (adaptive portrait/landscape layouts), the platform eliminates mandatory accounts, authentication walls, and intrusive web layers in favor of a clean, hardware-accelerated native streaming pipeline.
 
-- **Search** (top right) searches YouTube but keeps only results from the
-  official channels in [src/data/channels.ts](src/data/channels.ts)
-  (`TRUSTED_CHANNELS`), plus matching files in your TorBox. YouTube itself is
-  full of pirated re-uploads, which this filter keeps out.
-- **New today** merges the newest uploads from every show and movie channel.
-  Pull down on the home screen (or press **Refresh** on a TV) to fetch fresh
-  lists.
-- **Recently Watched** appears at the top once you've played something: the last
-  20 videos and live channels, newest first, saved on the device.
-- **Live News** plays a channel's current YouTube live stream.
-- **Serials & Shows** lists each channel's latest long videos (Shorts are left out).
-- **Movies** lists complete films from verified distributor channels (Speed Audio
-  & Video, Matinee Now, Musiczone Movies). Each has `titleFilter` set, so only
-  uploads titled "full movie" appear and trailers and songs are left out.
+The application synthesizes live broadcast feeds, decentralized metadata registries, high-speed Content Delivery Networks (CDNs), Stremio addon protocols, and cloud debrid services into a singular, cohesive media dashboard.
 
-## My TorBox
+---
 
-Plays the video files already in your own [TorBox](https://torbox.app) account
-(torrents, Usenet and web downloads), in the app's own video player. Choose
-**Connect TorBox** on the home screen and paste your API key from TorBox's
-settings. The key is checked with TorBox and saved only on that device.
+## 2. System Architecture
 
-The app only lists and plays what is already in the account. It has no search
-and doesn't add downloads. Each play asks TorBox for a fresh stream link,
-because the links expire. MKV files with DTS audio may play without sound
-because most phones and TVs can't decode DTS.
+```mermaid
+flowchart TD
+    subgraph UI ["Presentation Layer (Dual-Mode Responsive)"]
+        TV["Android TV Leanback UI\n(FocusEngine, D-Pad Remote)"]
+        Mobile["Mobile / Tablet Touch UI\n(Gesture Navigation, Auto-Orientation)"]
+        Shell["PlayerShell\n(Mini-Player / Picture-in-Picture)"]
+    end
 
-## Movie Catalog
+    subgraph State ["Application State & Memory"]
+        History["LRU Watch History\n(AsyncStorage)"]
+        HealthMat["Source Health Matrix\n(Circuit Breaker)"]
+        Transfers["TorBox Transfer Queue\n(Active Daemon)"]
+    end
 
-The **Catalog** section in the TorBox tab is a film catalog: browse the popular
-films or search for one, then pick a release and the app sends it to your
-TorBox and plays it.
+    subgraph Engines ["Content Aggregation Engines"]
+        JACKBOX["JACKBOX Engine\n(TMDB API Proxy)"]
+        MovieBox["MovieBox Engine\n(Signed CDN Resolver)"]
+        Streamio["StreamioBox Engine\n(Stremio Addon Protocol)"]
+        TorBoxEng["TorBox Cloud Engine\n(Debrid / Torrent Cache)"]
+        LiveEng["Live & Official Broadcast\n(YouTube Scraper Mesh)"]
+    end
 
-- The catalog comes from [Cinemeta](https://v3-cinemeta.strem.io), Stremio's
-  free metadata service. It needs no key and gives every film an IMDb id.
-  The list grows as you scroll.
-- The releases for a film come from [Torrentio](https://torrentio.strem.fun), a
-  public Stremio addon. It answers with the releases the indexers have, with
-  their quality, size and number of seeds.
-- A search also looks for releases **by name**, across The Pirate Bay's open
-  index and Nyaa, so anything with a torrent can be found — films the other
-  sources don't know about, anime, and the rest. Releases come first in a
-  search, with the films they matched under them.
-- Picking a release builds a magnet link and hands it to TorBox, which
-  downloads it into your own cloud. The app then follows the download, shows
-  the progress, and opens the file in the player when it's ready.
+    subgraph Transport ["Transport & Stream Resolution"]
+        DirectCDN["Direct CDN Resolver\n(1080p / 720p MP4)"]
+        DebridStream["TorBox Debrid Stream\n(HLS / WebDL / Direct File)"]
+        YTBridge["YouTube / Extractor Bridge\n(Piped, Invidious, Cobalt)"]
+    end
 
-Nothing is downloaded until you pick a release, and everything goes into your
-own TorBox account, so a film you start here also shows up under **My
-TorBox**. TorBox allows 60 uncached downloads an hour; if you hit that, its
-own message is shown.
+    subgraph CorePlayer ["Native Playback Subsystem"]
+        Exo["expo-video Engine\n(Hardware-Accelerated ExoPlayer)"]
+        Subtitles["Subtitle Engine\n(OpenSubtitles REST / SRT Parser)"]
+    end
 
-The public indexes turn away bursts and are sometimes blocked outright, so
-each one is optional: one that stops answering is remembered and left alone
-for a while, and the search carries on with whatever else answers.
+    TV --> Shell
+    Mobile --> Shell
+    Shell --> Engines
+    Engines --> Transport
+    Transport --> CorePlayer
+    CorePlayer --> Subtitles
+    Engines -.-> State
+```
 
-## MovieBox
+---
 
-The **MovieBox** tab is a second film catalog, on the same lines as the
-MovieBoxTV app: the sections it shows (Trending, Movie, Anime, TV, Kids,
-Indian, Hindi, Tamil, Telugu) as rows of posters, a search over the same
-catalogue, and a page for each film with its seasons and episodes.
+## 3. Core Content Engines
 
-- The catalogue and the streams come from the MovieBox API the app itself
-  uses, on `api6.aoneroom.com` and the hosts behind it. No account is needed:
-  the app signs in as a visitor and keeps that token on the device.
-- Every request is signed the way the app signs it, in
-  [src/api/moviebox.ts](src/api/moviebox.ts). The MD5 it needs is written
-  out in [src/api/md5.ts](src/api/md5.ts), so nothing native is added to the
-  app.
-- **Play now** streams the file itself, in the app's own player. The service
-  offers a short preview to everyone, and the whole file is fetched by its id
-  — the same request the patched app makes. The links expire, so a fresh one
-  is fetched each time and again if the video stops.
-- **Send to TorBox** is there as well: the same film is looked up by name on
-  the torrent indexes, and a release can be sent to your TorBox like any
-  other film in the catalog.
+### 3.1. JACKBOX Engine (`src/api/moviedbbox.ts`, `src/screens/JackBoxScreen.tsx`)
+The **JACKBOX** engine acts as the primary global discovery layer for international feature films and television series:
+* **Metadata Resolution:** Interfaces directly with The Movie Database (TMDB) API via authenticated endpoints, completely bypassing anti-bot Cloudflare challenges that cripple web scrapers.
+* **Pagination & Memory Management:** Implements cursor-based infinite scrolling (`loadMore`) with automated batching and memory-efficient list views via `FlatList` subview clipping.
+* **Metadata Normalization:** Automatically extracts and links canonical identifiers (`imdb_id`, `tmdb_id`, external IDs, genres, runtimes, and certifications) to prepare titles for direct stream resolution.
 
-The service is not a public API and can change or refuse requests at any
-time, so this tab is kept separate from the rest of the app: if it stops
-answering, only this tab is affected.
+### 3.2. MovieBox Cryptographic CDN Engine (`src/api/moviebox.ts`, `src/api/directStreams.ts`)
+A zero-login reverse-engineered client for the MovieBox enterprise content delivery network:
+* **Cryptographic Request Signing:** Emulates native client request signing using deterministic MD5 HMAC hashing (`src/api/md5.ts`) with visitor session negotiation on `api6.aoneroom.com`.
+* **Direct MP4 Extraction:** Interrogates subject hierarchies (`searchSubjects` ➔ `playableRows` ➔ `directStream`) to resolve direct, clean, full-length **1080p, 720p, and 480p CDN MP4 video streams**.
+* **Zero-Buffer Playback:** Streams raw `.mp4` URLs directly into the native video player without web wrappers, iframe sandboxes, or advertisement injections.
 
-## Remote
+#### MovieBox Request Signing & CDN Stream Sequence
 
-| Button | On the home screen | In the player |
-| --- | --- | --- |
-| Arrows | Move between cards | Left/right skip 10 seconds |
-| OK | Play | Pause / play |
-| Back | Exit | Back to home |
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant UI as Application UI
+    participant API as MovieBox Client (moviebox.ts)
+    participant Auth as Auth & Signing (md5.ts)
+    participant Remote as api6.aoneroom.com
+    participant CDN as CDN Edge Server
+    participant Player as Native ExoPlayer
 
-On a phone, tap a card to play it and use YouTube's own controls. ✕ or Back
-closes the player, and rotating to landscape fills the screen.
+    User->>UI: Select Title or Episode
+    UI->>API: resolveDirectMovieStreams(title, year)
+    API->>Auth: Compute MD5 signature & timestamp
+    Auth-->>API: Signed payload + Visitor Token
+    API->>Remote: POST /api/v1/search (query, signature)
+    Remote-->>API: Match subject metadata & subjectId
+    API->>Remote: GET /api/v1/detail (subjectId, season, ep)
+    Remote-->>API: Stream row definitions (resolutions, file sizes)
+    API->>Remote: GET /api/v1/download (rowId, visitorToken)
+    Remote-->>API: Signed CDN video URL (.mp4)
+    API-->>UI: DirectStreamOption (1080p, 720p)
+    UI->>Player: Mount VideoView with direct CDN stream
+    Player->>CDN: Range request (Byte streaming)
+    CDN-->>Player: Video stream buffer
+    Player-->>User: Instant Hardware-Accelerated Playback
+```
 
-## Sources
+### 3.3. StreamioBox Addon Protocol Engine (`src/api/streamiobox.ts`, `src/screens/StreamioBoxScreen.tsx`)
+Implements the decentralized Stremio Addon Specification v3:
+* **Catalog Discovery:** Ingests cinematic collections from Cinemeta (`v3-cinemeta.strem.io`), indexing series metadata, season/episode catalogs, and episode thumbnails.
+* **P2P Release Aggregation:** Connects to public indexer engines (e.g., Torrentio) to scrape active swarms, reporting resolution (`4K`, `1080p`, `720p`), file container size, audio codecs, and active seed ratios.
 
-A video can be played from more than one place, so the player keeps a list of
-sources and moves down it until one of them works. The first source is the
-official YouTube one; the rest are fallbacks for when a channel doesn't allow
-embedding or YouTube itself is unreachable.
+### 3.4. TorBox Cloud Debrid Integration (`src/api/torbox.ts`, `src/data/transfers.ts`)
+Facilitates seamless cloud torrent and Usenet integration:
+* **Cached Cloud Streaming:** Connects to the user's TorBox account via API key stored in secure local storage.
+* **Magnet Link Synthesis & Ingestion:** Compiles torrent hashes into standard magnet URIs and dispatches them to TorBox's cloud seedbox infrastructure for instantaneous caching.
+* **Real-time Download Daemon:** Continuously inspects transfer lifecycles, notifying the user via foreground toasts (`TransferToast.tsx`) and triggering automatic stream playback when caching finishes.
+* **DHT Index Scraping:** Direct multi-provider query pipelines targeting The Pirate Bay and Nyaa to locate niche titles, regional cinema, and anime releases.
 
-| Source | What it is |
-| --- | --- |
-| YouTube | The official embed, driven by the YouTube iframe API |
-| YouTube watch page / mobile | The normal YouTube page in the player, used when a channel refuses embeds |
-| VidSrc | The VidSrc embed frontend |
-| Piped | The Piped embed frontend, plus Piped's API for a direct stream |
-| Invidious | The Invidious embed frontend, plus Invidious's API for a direct stream |
-| Cobalt | The Cobalt API for a direct stream |
-| Consumet | A Consumet mirror for a direct stream |
+### 3.5. Official Live Broadcast & Fallback Mesh (`src/api/sources.ts`, `src/api/extractors.ts`)
+Aggregates official Malayalam news channels and entertainment distributors:
+* **Official Channel Allowlist:** Strictly restricts search queries and home carousels to verified broadcaster channel IDs (`TRUSTED_CHANNELS` in `src/data/channels.ts`), preventing pirated duplicate re-uploads.
+* **Dynamic Live Resolution:** Interrogates YouTube channel `/live` endpoints in real-time to locate ephemeral video IDs for live 24/7 news broadcasts.
+* **Fallback Extraction Mesh:** If YouTube restricts iframe embedding on specific networks, traffic automatically cascades across an array of resilient proxies:
+  * **Piped API & Frontends**
+  * **Invidious Embed Instances**
+  * **Cobalt API Direct Stream Extractor**
+  * **Consumet Media Extraction Workers**
 
-The third-party services are public and often down, so they are treated as
-optional: a source that fails is remembered and skipped for a while, and the
-app falls back to the next one. **Sources** on the player (top right on a TV,
-under the title on a phone) opens the list, so a source can be picked by hand.
+---
 
-Live channels are looked up on YouTube first: the channel's `/live` page says
-which stream is on air right now, and that stream is played. YouTube removed
-permanent live embeds, so the old `/embed/live_stream` link is only the last
-resort.
+## 4. Playback Architecture & Subsystems
 
-Adding a source means adding one entry in
-[src/api/sources.ts](src/api/sources.ts); the instance lists for the public
-services are in [src/api/extractors.ts](src/api/extractors.ts).
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       PlayerShell                           │
+│  ┌───────────────────────┐       ┌────────────────────────┐ │
+│  │   StreamPlayerScreen  │  OR   │  MovieboxPlayerScreen  │ │
+│  │     (expo-video)      │       │     (Custom D-Pad)     │ │
+│  └───────────────────────┘       └────────────────────────┘ │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                ┌──────────────┴──────────────┐
+                ▼                             ▼
+   ExoPlayer Native Core         OpenSubtitles Parser
+   - Hardware Decoding (HEVC/AVC) - Real-time REST Querying
+   - Surface Lifecycle Management - Synchronized VTT/SRT Overlay
+   - Landscape Fullscreen Locks   - Encoding Detection (UTF-8)
+```
 
-## Running on a TV or phone
+* **ExoPlayer Hardware Acceleration:** Core video rendering is handled by `expo-video`, wrapping Android's underlying Media3/ExoPlayer native APIs. Supports hardware decoding for AVC/H.264, HEVC/H.265, and VP9.
+* **D-Pad TV Navigation Matrix:** Full support for standard Android TV directional inputs:
+  * `DPAD_LEFT` / `DPAD_RIGHT`: 10-second relative seeking with debounce throttling (`useRemoteSeek.ts`).
+  * `DPAD_CENTER` / `ENTER`: Instant play/pause toggle.
+  * `BACK`: Hierarchical collapse — exits fullscreen to mini-player, then closes player, then navigates home.
+* **Screen Orientation System (`useFullscreenOrientation.ts`):** On mobile devices, triggering fullscreen invokes native sensor orientation locks (`expo-screen-orientation`), transitioning the display into landscape mode with automated return to portrait upon player dismissal.
+* **OpenSubtitles Synchronization (`src/api/opensubtitles.ts`, `src/hooks/useOpenSubtitles.ts`):** Queries OpenSubtitles REST endpoints by IMDb ID, title, and season/episode, fetching and parsing `.srt` files into active subtitle cues.
 
-You need Node 20+, JDK 17 and the Android SDK (installing Android Studio gives
-you both). Then:
+#### Multi-Tier Stream Resolution Flow
 
-```sh
+```mermaid
+flowchart TD
+    Start(["User Requests Title Playback"]) --> CheckDirect{"Direct CDN Stream\nAvailable? (MovieBox)"}
+    
+    CheckDirect -- "Yes" --> PlayDirect["Launch expo-video (ExoPlayer)\nStream 1080p/720p CDN MP4 directly"]
+    
+    CheckDirect -- "No" --> CheckDebrid{"TorBox Key Present & Cached?"}
+    
+    CheckDebrid -- "Yes" --> GetDebridLink["Request authenticated HLS/File URL\nfrom TorBox API"]
+    GetDebridLink --> PlayDebrid["Stream from TorBox High-Speed Cloud\n(Instant Debrid Playback)"]
+    
+    CheckDebrid -- "No" --> CheckSwarm{"Search Torrentio / DHT\n(PirateBay & Nyaa)"}
+    
+    CheckSwarm -- "Seeds Found" --> SendTransfer["Add to Cloud Transfer Daemon\n(addTransfer)"]
+    SendTransfer --> MonitorTransfer["Poll Cloud Download Progress\nShow In-App Notification"]
+    MonitorTransfer --> Ready{"Download Complete?"}
+    Ready -- "Yes" --> PlayDebrid
+    Ready -- "No / Pending" --> ToastWait["Background Download Active\nNotify User via Toast"]
+    
+    CheckSwarm -- "No Torrents" --> FallbackMesh{"YouTube / Web VOD?"}
+    FallbackMesh -- "Live / Channel" --> ResolveLive["Resolve Live Stream ID\nvia Channel /live Page"]
+    ResolveLive --> PlayYT["Mount WebView Bridge Player\n(Fallback: Piped / Cobalt / Invidious)"]
+    FallbackMesh -- "None" --> ErrorState["Display 'No Streams Found' Toast"]
+```
+
+#### Dual-Mode UI Navigation & Player State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> HomeScreen: App Launch / Preload Complete
+
+    state HomeScreen {
+        [*] --> TabBrowsing
+        TabBrowsing --> FocusRow: Remote Up / Tab Switch
+        FocusRow --> TabBrowsing: D-Pad Down / Select Content
+    }
+
+    HomeScreen --> DetailScreen: Select Movie / Series Card
+    DetailScreen --> FullscreenPlayer: Tap 'Watch Now' / Select Stream
+    HomeScreen --> FullscreenPlayer: Select Quick Play / History Item
+
+    state FullscreenPlayer {
+        [*] --> NativeBuffering
+        NativeBuffering --> ActivePlaying: ExoPlayer Ready
+        ActivePlaying --> Seeking: D-Pad Left/Right (10s Seek)
+        Seeking --> ActivePlaying: Settle (550ms Debounce)
+        ActivePlaying --> Paused: D-Pad OK / Touch Tap
+        Paused --> ActivePlaying: D-Pad OK / Resume
+    }
+
+    FullscreenPlayer --> MiniPlayer: Mobile Back Press (Phone)
+    FullscreenPlayer --> DetailScreen: TV Remote Back Press
+    MiniPlayer --> FullscreenPlayer: Tap Floating Mini Bar
+    MiniPlayer --> HomeScreen: Swipe Dismiss / Close (✕)
+    DetailScreen --> HomeScreen: Back Button / Remote Back
+```
+
+---
+
+## 5. Resilience & Fault-Tolerance Patterns
+
+* **Circuit Breaker (`src/api/sourceHealth.ts`):** Tracks availability across all public scrapers and instances. An endpoint that throws HTTP 4xx/5xx or times out is placed on temporary quarantine cooldown with exponential backoff, preventing request stalls.
+* **Network Budgeting (`src/api/http.ts`):** Every network call is wrapped by `fetchWithTimeout` (default 8–12 seconds). Prevents hanging TCP connections from blocking the UI thread on high-latency mobile networks.
+* **State Preservation & Fast Resume:** 
+  * Home tabs and scroll offsets maintain state across screen transitions.
+  * Dedicated memory threshold (`RESTORE_WINDOW_MS`) restores previous scroll coordinates when returning from video playback.
+  * Stale data is gracefully revalidated after `STALE_AFTER_MS` (10 minutes) without jarring layout shifts.
+
+#### Adaptive Circuit Breaker State Transition
+
+```mermaid
+stateDiagram-v2
+    [*] --> Closed: Initial State (Normal Operation)
+    
+    state Closed {
+        [*] --> ServingTraffic: Requests routed to primary extractors
+    }
+
+    Closed --> Open: Failures >= Error Threshold (Consecutive Errors)
+    
+    state Open {
+        [*] --> Quarantine: Provider blacklisted for cooldown window (10-30 min)
+    }
+
+    Open --> HalfOpen: Cooldown Window Expires
+    
+    state HalfOpen {
+        [*] --> ProbeRequest: Single test request dispatched
+    }
+
+    HalfOpen --> Closed: Probe Request Succeeds (Reset Error Counters)
+    HalfOpen --> Open: Probe Request Fails (Renew Quarantine Cooldown)
+```
+
+---
+
+## 6. Directory Layout
+
+```
+MytvstreamApp/
+├── App.tsx                     # Root controller, state coordinator, back handler
+├── app.json                    # Expo config & Android TV Leanback declarations
+├── build-apk.sh                # Automated CI/CD release build & device deployment script
+├── package.json                # Dependency specifications & overrides
+├── plugins/                    # Expo Config Plugins (Custom signing, TV configs)
+└── src/
+    ├── api/                    # Core communication & extraction engines
+    │   ├── directStreams.ts    # MovieBox CDN direct MP4 stream resolver
+    │   ├── extractors.ts       # Cobalt, Piped, Invidious & Consumet extractors
+    │   ├── http.ts             # fetchWithTimeout networking budget utility
+    │   ├── md5.ts              # Native-free pure JS MD5 cryptographic hashing
+    │   ├── moviebox.ts         # Reverse-engineered MovieBox API client
+    │   ├── moviedbbox.ts       # TMDB API client & JACKBOX engine
+    │   ├── opensubtitles.ts    # Subtitle discovery and SRT parser
+    │   ├── sourceHealth.ts     # Scraper health tracking & circuit breaker
+    │   ├── sources.ts          # Multi-source playback fallback dispatcher
+    │   ├── streamiobox.ts      # Stremio Addon Protocol v3 client
+    │   ├── torbox.ts           # TorBox API client & stream tokenizer
+    │   └── torrents.ts         # Torrentio, PirateBay & Nyaa scrapers
+    ├── components/             # Reusable UI primitives (FocusCard, Shimmer, etc.)
+    │   ├── FocusCard.tsx       # TV remote focus-aware card wrapper
+    │   ├── HeroCarousel.tsx    # Responsive featured content carousel
+    │   ├── PlayerShell.tsx     # Floating mini-player container
+    │   └── ReleaseList.tsx     # Stream & torrent release listing view
+    ├── data/                   # Static models, registries & local databases
+    │   ├── channels.ts         # Verified channel allowlist & category indices
+    │   ├── history.ts          # LRU playback history persistence
+    │   └── transfers.ts        # TorBox background cloud transfer daemon
+    ├── hooks/                  # Custom React hooks (D-pad remote, orientation, events)
+    ├── screens/                # Top-level application views
+    │   ├── HomeScreen.tsx      # Main tabbed dashboard (TV & Mobile)
+    │   ├── JackBoxScreen.tsx   # JACKBOX TMDB discovery & search view
+    │   ├── MovieboxScreen.tsx  # MovieBox catalog & row explorer
+    │   ├── MovieScreen.tsx     # Movie details, direct streams & releases
+    │   ├── StreamPlayerScreen.tsx # Native ExoPlayer video playback interface
+    │   └── TorboxSetupScreen.tsx  # API key registration & account status
+    └── theme.ts                # Design tokens, color system, and TV scale helpers
+```
+
+---
+
+## 7. Build Toolchain & Deployment
+
+### 7.1. Prerequisites
+* **Node.js:** v20.x or higher
+* **Java Development Kit:** JDK 21 (required by Android Gradle Plugin 8.x/Gradle 9.x)
+* **Android SDK:** Platforms 34–36, Build-Tools 36.0.0
+* **Android NDK:** 27.1.12297006
+
+### 7.2. Environment Configuration
+Set the following paths in your shell profile:
+
+```bash
+export JAVA_HOME="$HOME/Android/jdk-21"
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
+```
+
+### 7.3. Compilation Commands
+
+```bash
+# Install dependencies
 npm install
+
+# Perform clean Continuous Native Generation (CNG) prebuild
 npx expo prebuild --platform android --clean
-adb connect <tv-ip-address>:5555    # TV: turn on Developer options → Network debugging first
-                                    # Phone: plug in by USB with USB debugging on instead
-npx expo run:android                # builds, installs and starts the app on the device
+
+# Local development build and run
+npx expo run:android
+
+# Automated release build, installation, and storage push
+./build-apk.sh --install --push
 ```
 
-To build an APK you can copy onto the TV yourself:
+### 7.4. Release Hardening & Optimization
+* **R8 Obfuscation & Tree-Shaking:** Automated R8 minification is enabled for all release variants (`android.enableMinifyInReleaseBuilds=true`), optimizing dex sizes and stripping unused symbols.
+* **ProGuard Mapping:** `build-apk.sh` captures and preserves `mapping.txt` alongside each compiled APK to facilitate symbol de-obfuscation in production crash analytics.
+* **Package Verification:** Automated updates check package integrity using SHA-256 digests published in the version manifest (`version.json`).
 
-```sh
-cd android && ./gradlew assembleRelease
-# app/build/outputs/apk/release/app-release.apk
-```
+---
 
-## Release signing
+## 8. TV Remote Reference
 
-Release builds are signed with the app's own key: `signing/forus-release.jks`,
-with its settings (key file, alias, passwords) in `signing/release.properties`.
-Both live outside git; losing the key means losing the ability to ship updates
-under the same app identity, so keep it backed up somewhere safe.
+| Key / Action | Home Dashboard | Video Playback |
+| :--- | :--- | :--- |
+| **D-Pad Up / Down** | Vertical navigation across content rows | Display / hide on-screen playback controls |
+| **D-Pad Left / Right** | Horizontal carousel / grid navigation | Relative 10-second seek backward / forward |
+| **Select / Enter** | Open selected title / trigger action | Toggle Play / Pause |
+| **Back Button** | Focus top tab navigation ➔ Exit app | Exit fullscreen ➔ Return to parent view |
 
-The passwords are read from the environment first, so they don't have to sit in
-plaintext in `release.properties`:
+---
 
-```sh
-export FORUS_KEYSTORE_PASSWORD=…   # Keystore password
-export FORUS_KEY_PASSWORD=…        # Key password (same key in "release.properties")
-```
+## 9. License & Usage Notice
 
-Whatever is unset falls back to the values in `signing/release.properties`, so
-machines that keep them there keep working unchanged. To move the passwords out
-of the file, copy the two values into environment variables (for example in
-`~/.profile`) and empty them out of the file.
-
-## Hardening in the builds
-
-- **R8 obfuscation and shrinking** runs on release builds
-  (`android.enableMinifyInReleaseBuilds` etc. in gradle.properties; a clean
-  prebuild regenerates that file, and `build-apk.sh` rewrites the flags after
-  every prebuild). `build-apk.sh` also copies the resulting
-  `mapping.txt` next to the APK, so a future crash stack trace can be
-  translated back into readable class names.
-- **The updater checks the APK** against the `sha256` in the version manifest
-  that `scripts/publish.sh` publishes next to it; a truncated or tampered
-  download is deleted and refused before it reaches the installer. Releases
-  published with an old manifest (no checksum) skip the check.
+This software is developed strictly for educational and personal research into cross-platform UI architectures, resilient media transport protocols, and hardware-accelerated video rendering on Android. All video streams originate from public third-party endpoints, decentralized indexes, and official distributor uploads.

@@ -35,7 +35,19 @@ const DEFAULT_ADDONS: string[] = [
 ];
 
 function normalize(url: string): string {
-  return url.trim().replace(/\/+$/, '');
+  const u = url.trim().replace(/\/+$/, '');
+  // Only allow http(s) URLs; reject javascript:/data: etc.
+  if (!/^https?:\/\//i.test(u)) throw new Error('Addon URL must start with http:// or https://');
+  return u;
+}
+
+export function isValidAddonUrl(url: string): boolean {
+  try {
+    normalize(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function loadStored(): Promise<string[]> {
@@ -71,7 +83,10 @@ export async function removeAddon(url: string): Promise<void> {
 
 async function fetchJson(url: string): Promise<any | null> {
   try {
-    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    clearTimeout(timer);
     if (!res.ok) return null;
     return await res.json();
   } catch {

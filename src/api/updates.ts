@@ -96,7 +96,8 @@ export async function checkForUpdate(force = false): Promise<Update | null> {
     if (!res.ok) return newer(cached?.update);
     const manifest = (await res.json()) as Partial<Update>;
     const remoteCode = Number(manifest.versionCode);
-    if (!Number.isFinite(remoteCode) || !manifest.url) return newer(cached?.update);
+    const sha = checksum(manifest.sha256);
+    if (!Number.isFinite(remoteCode) || !manifest.url || !sha) return newer(cached?.update);
     const update: Update = {
       version: String(manifest.version ?? remoteCode),
       versionCode: remoteCode,
@@ -114,6 +115,13 @@ export async function checkForUpdate(force = false): Promise<Update | null> {
 }
 
 export async function downloadUpdate(update: Update, onProgress?: (written: number, total: number) => void): Promise<string> {
+  // Only accept HTTPS downloads from the trusted release host.
+  if (!update.url || !/^https:\/\//i.test(update.url)) {
+    throw new Error('The update URL is not a trusted HTTPS link.');
+  }
+  if (!/github\.com/i.test(update.url)) {
+    throw new Error('The update URL is not from the trusted release host.');
+  }
   const dir = FileSystem.Paths.cache;
   const file = new FileSystem.File(dir, `forus-${update.versionCode}.apk`);
   try {
@@ -125,19 +133,23 @@ export async function downloadUpdate(update: Update, onProgress?: (written: numb
     onProgress: onProgress ? (p) => onProgress(p.bytesWritten, p.totalBytes) : undefined,
   });
 
-  // The manifest carries the SHA-256 of the exact APK published with it, so a
-  // truncated or tampered download fails here and never reaches the installer.
-  // Manifests from before the checksum arrived are simply taken at face value.
-  if (update.sha256) {
-    const sum = await fileHash(output);
-    if (sum !== update.sha256) {
-      try {
-        file.delete();
-      } catch {
-        // ignore
-      }
-      throw new Error('The downloaded update failed its integrity check and was discarded. Try again shortly.');
+  // Require a checksum: without one we cannot verify integrity, so reject.
+  if (!update.sha256) {
+    try {
+      file.delete();
+    } catch {
+      // ignore
     }
+    throw new Error('The update manifest is missing an integrity checksum; refusing to install.');
+  }
+  const sum = await fileHash(output);
+  if (sum !== update.sha256) {
+    try {
+      file.delete();
+    } catch {
+      // ignore
+    }
+    throw new Error('The downloaded update failed its integrity check and was discarded. Try again shortly.');
   }
   return output.uri;
 }
