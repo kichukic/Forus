@@ -94,10 +94,10 @@ start=$(date +%s)
   cd android
   # Limited parallelism and memory: with everything at full speed the native
   # build can run the machine out of memory.
-  ./gradlew assembleRelease --no-daemon --max-workers="${MAX_WORKERS:-3}" \
+  ./gradlew assembleRelease --no-daemon --max-workers="${MAX_WORKERS:-2}" \
     -Dorg.gradle.parallel=false \
-    "-Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m" \
-    -Pkotlin.daemon.jvm.options=-Xmx1g \
+    "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m" \
+    -Pkotlin.daemon.jvm.options=-Xmx1024m \
     -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
 )
 
@@ -111,6 +111,13 @@ for old in builds/*-latest.apk; do
 done
 out="builds/ForUs-v$version-latest.apk"
 cp "$apk" "$out"
+
+# R8 renames class names; the mapping translates future obfuscated crash
+# stack traces back to readable ones. Keep it with the matching build.
+mapping=android/app/build/outputs/mapping/release/mapping.txt
+if [ -f "$mapping" ]; then
+  cp "$mapping" "builds/ForUs-v$version-mapping.txt"
+fi
 
 step "Done in $(($(date +%s) - start))s"
 echo "  $out ($(du -h "$out" | cut -f1))"

@@ -1,5 +1,6 @@
 import type { VideoSource } from '../data/channels';
 import { stripEmoji } from '../data/text';
+import { forgetRows } from '../data/rowMemory';
 import { fetchWithTimeout } from './http';
 
 export type Video = {
@@ -94,21 +95,36 @@ function ageToDate(age?: string): string {
   return m ? new Date(Date.now() - Number(m[1]) * AGE_UNITS[m[2]]).toISOString() : '';
 }
 
-// A channel's latest long-form uploads from the browse endpoint.
+// The channel's Videos tab, newest first. It leaves out Shorts like the UULF
+// list but holds 30 uploads instead of 100, so the answer is under half the
+// size: that matters on a TV, which reads a dozen of these while starting up.
+const VIDEOS_TAB = 'EgZ2aWRlb3PyBgQKAjoA';
+
+// A channel's latest long-form uploads from the browse endpoint: the Videos
+// tab, or the UULF list if the tab comes back empty.
 async function browseLatest(channelId: string): Promise<Video[]> {
-  const res = await fetchWithTimeout(BROWSE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ context: { client: SEARCH_CLIENT }, browseId: `VLUULF${channelId.slice(2)}` }),
-  });
-  if (!res.ok) return [];
-  return collectLockups(await res.json()).lockups.map((l) => ({
+  const lockups =
+    (await browseLockups({ browseId: channelId, params: VIDEOS_TAB })) ??
+    (await browseLockups({ browseId: `VLUULF${channelId.slice(2)}` })) ??
+    [];
+  return lockups.map((l) => ({
     id: l.id,
     title: l.title,
     published: ageToDate(l.age),
     thumbnail: thumbnailUrl(l.id),
     duration: l.duration,
   }));
+}
+
+async function browseLockups(body: object): Promise<Lockup[] | null> {
+  const res = await fetchWithTimeout(BROWSE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context: { client: SEARCH_CLIENT }, ...body }),
+  });
+  if (!res.ok) return null;
+  const { lockups } = collectLockups(await res.json());
+  return lockups.length ? lockups : null;
 }
 
 export async function loadVideos(source: VideoSource): Promise<Video[]> {
@@ -134,11 +150,28 @@ export async function loadVideos(source: VideoSource): Promise<Video[]> {
 export function clearVideoCache() {
   cache.clear();
   pageCache.clear();
+  searchCache.clear();
+  forgetRows();
 }
 
 export type VideoPage = { videos: Video[]; continuation?: string };
 
 type Lockup = { id: string; title: string; duration?: string; channelId?: string; age?: string };
+
+const CHANNEL_ID = /^UC[\w-]{22}$/;
+const AGE_TEXT = /^\d+ \w+ ago$/;
+
+// The first value `pick` finds anywhere inside `o`, depth first.
+function findIn(o: any, pick: (o: any) => string | undefined): string | undefined {
+  if (!o || typeof o !== 'object') return undefined;
+  const hit = pick(o);
+  if (hit !== undefined) return hit;
+  for (const key in o) {
+    const found = findIn(o[key], pick);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
 
 // YouTube's newer list items ("lockups"), as used by playlists and "watch next",
 // plus the token for the following page when there is one.
@@ -154,16 +187,18 @@ function collectLockups(json: any): { lockups: Lockup[]; continuation?: string }
       lockups.push({
         id: lockup.contentId,
         title: stripEmoji(meta?.title?.content ?? ''),
-        // Both sit deep in nested view models; searching the text is simplest.
-        duration: JSON.stringify(lockup.contentImage ?? {}).match(/"thumbnailBadgeViewModel":\{"text":"([^"]+)"/)?.[1],
-        channelId: JSON.stringify(meta ?? {}).match(/"browseId":"(UC[\w-]{22})"/)?.[1],
-        age: JSON.stringify(meta ?? {}).match(/"content":"(\d+ \w+ ago)"/)?.[1],
+        // These sit deep in nested view models, at depths that vary, so they
+        // are searched for. Walking the objects is several times cheaper than
+        // turning them back into text, which counts on a slow TV.
+        duration: findIn(lockup.contentImage, (o) => o.thumbnailBadgeViewModel?.text),
+        channelId: findIn(meta, (o) => (typeof o.browseId === 'string' && CHANNEL_ID.test(o.browseId) ? o.browseId : undefined)),
+        age: findIn(meta, (o) => (typeof o.content === 'string' && AGE_TEXT.test(o.content) ? o.content : undefined)),
       });
       return;
     }
     const command = o.continuationCommand;
     if (command?.request === 'CONTINUATION_REQUEST_TYPE_BROWSE' && command.token) continuation = command.token;
-    Object.values(o).forEach(walk);
+    for (const key in o) walk(o[key]);
   };
   walk(json);
   return { lockups, continuation };
@@ -245,7 +280,7 @@ function parseSearch(json: any, trusted: Map<string, string>): SearchPage {
       return;
     }
     if (o.continuationCommand?.token) page.continuation = o.continuationCommand.token;
-    Object.values(o).forEach(walk);
+    for (const key in o) walk(o[key]);
   };
   walk(json);
   return page;
@@ -289,11 +324,41 @@ export async function searchVideos(
 
 // The same search a batch at a time, for rows that keep loading as they are
 // scrolled. Pass the previous batch's continuation for the next one.
+// Searches answered lately, so a themed row built again doesn't search again.
+const searchCache = new Map<string, { at: number; page: SearchPage }>();
+// The same words searched within different sets of channels are different
+// searches, so each set gets a number for the key.
+const channelSetIds = new WeakMap<Map<string, string>, number>();
+let channelSets = 0;
+function channelSetId(trusted: Map<string, string>): number {
+  let id = channelSetIds.get(trusted);
+  if (id === undefined) {
+    id = ++channelSets;
+    channelSetIds.set(trusted, id);
+  }
+  return id;
+}
+
 export async function searchVideoPage(
   query: string,
   trusted: Map<string, string>,
   after?: string,
   maxPages = MAX_PAGES,
+): Promise<SearchPage> {
+  const key = `${channelSetId(trusted)}\n${query}\n${after ?? ''}\n${maxPages}`;
+  const hit = searchCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.page;
+  const page = await searchPages(query, trusted, after, maxPages);
+  // An empty answer may be a passing failure, so it isn't kept.
+  if (page.results.length) searchCache.set(key, { at: Date.now(), page });
+  return page;
+}
+
+async function searchPages(
+  query: string,
+  trusted: Map<string, string>,
+  after: string | undefined,
+  maxPages: number,
 ): Promise<SearchPage> {
   const results: SearchResult[] = [];
   let continuation = after;

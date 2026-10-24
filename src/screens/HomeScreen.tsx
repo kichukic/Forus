@@ -1,4 +1,4 @@
-import { Children, useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
+import { Children, isValidElement, memo, useEffect, useImperativeHandle, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import {
   Animated,
   AppState,
@@ -19,12 +19,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clearVideoCache, thumbnailUrl } from '../api/youtube';
 import { clearCatalogCache, type CatalogMovie } from '../api/catalog';
+import type { StreamioItem } from '../api/streamiobox';
 import type { MovieboxSubject } from '../api/moviebox';
 import type { TorrentOption } from '../api/torrents';
 import { LiveTileContent, VideoCardContent } from '../components/Cards';
 import { FileCardContent } from '../components/FileCardContent';
 import { FocusCard } from '../components/FocusCard';
 import { FocusRow } from '../components/FocusRow';
+import { ListFrame } from '../components/ListFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
@@ -32,26 +34,35 @@ import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
 import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
 import { CatalogScreen } from './CatalogScreen';
+import { StreamioBoxScreen } from './StreamioBoxScreen';
 import { MovieboxScreen } from './MovieboxScreen';
+import { CineboxScreen } from './CineboxScreen';
 import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
-import { GLOW, GUTTER, colors, isTV, sz } from '../theme';
-import { Loader } from '../components/Loader';
+import { CARD_WIDTH, GLOW, GUTTER, colors, isTV, sz } from '../theme';
 import { TransferList } from '../components/TransferList';
 import type { Playable } from '../types';
+import { useEvent } from '../hooks/useEvent';
+import { SkeletonLoader } from '../components/SkeletonLoader';
 
-const THEMES_AT_START = 3;
-const THEMES_PER_STEP = 3;
+// Each themed row is a search of about 0.7 MB. A TV starts with one and reads
+// the rest as the page is scrolled down to them.
+// How long a tab that opens tries to get back to where it was left.
+const RESTORE_WINDOW_MS = 1500;
+const THEMES_AT_START = isTV ? 1 : 3;
+const THEMES_PER_STEP = isTV ? 2 : 3;
 // Back in the app after this long, the rows reload by themselves.
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
 const TABS = [
   { id: 'all', label: 'All' },
-  { id: 'moviebox', label: 'MovieBox by Kishor' },
+  { id: 'moviebox', label: 'MovieBox' },
+  { id: 'streamiobox', label: 'StreamioBox' },
+  { id: 'cinebox', label: 'Cinebox' },
   { id: 'movies', label: 'Malayalam Movies' },
   { id: 'shows', label: 'Shows' },
-  { id: 'disha', label: 'For Disha Chotu' },
+  { id: 'hindi', label: 'Hindi' },
   { id: 'news', label: 'News' },
   { id: 'torbox', label: 'TorBox' },
 ] as const;
@@ -63,19 +74,22 @@ const HINDI_THEMES = THEMES.filter((t) => t.kind === 'hindi');
 // The All tab is a mix of everything, so it carries the themed rows of the
 // other tabs as well.
 const ALL_THEMES = [...MOVIE_THEMES, ...SHOW_THEMES, ...HINDI_THEMES];
-const ALL_CHANNELS = [...SHOWS, ...MOVIES];
+const HERO_ALL_SOURCES = [
+  MOVIES[0],
+  SHOWS[0],
+  MOVIES[1],
+  SHOWS[1],
+  MOVIES[2],
+  SHOWS[4],
+];
 // Where each tab was left. Only the tab in front is mounted, so the place is
 // kept here instead of in the tab itself.
 const scrollPositions = new Map<string, number>();
 // The page of the tab in front, for the TV Back button to scroll to the top.
-const activePage: { current: ScrollView | null } = { current: null };
+const activePage: { current: FlatList<ReactNode> | null } = { current: null };
 // TV: how long a tab must stay highlighted before it opens, so moving across
 // several tabs doesn't load each one on the way.
 const TAB_FOCUS_DELAY_MS = 350;
-// TV: a tab opens with its first rows and adds the rest one at a time, so its
-// chip isn't building a dozen rows of cards in the moment the tab changes.
-const TV_FIRST_ROWS = 2;
-const TV_ROW_STAGGER_MS = 140;
 // The news channels' recorded uploads, one row each on the News tab.
 const NEWS_SOURCES = LIVE_NEWS.map(({ name, channelId }) => ({ name, channelId }));
 
@@ -90,6 +104,8 @@ type Props = {
   onOpenMovie: (movie: CatalogMovie) => void;
   // Opens a film from MovieBox.
   onOpenMoviebox: (subject: MovieboxSubject) => void;
+  // Opens a series from StreamioBox.
+  onOpenStreamioSeries: (item: StreamioItem) => void;
   // Sends a release found by searching to TorBox.
   onSendRelease: (option: TorrentOption) => void;
   // TV has no bottom bar, so these sit in the header there.
@@ -108,7 +124,11 @@ export type HomeHandle = {
   openTab: (id: Tab) => void;
 };
 
-export function HomeScreen({
+// Memoized: the app redraws for many reasons (the player, other screens, the
+// splash's progress) that change nothing here.
+export const HomeScreen = memo(HomeScreenView);
+
+function HomeScreenView({
   history,
   torboxVersion,
   onPlay,
@@ -116,6 +136,7 @@ export function HomeScreen({
   onOpenSearch,
   onOpenMovie,
   onOpenMoviebox,
+  onOpenStreamioSeries,
   onSendRelease,
   onOpenHistory,
   onOpenSettings,
@@ -147,7 +168,7 @@ export function HomeScreen({
   useImperativeHandle(ref, () => ({
     goTop: () => {
       if ((scrollPositions.get(tab) ?? 0) > 40) {
-        activePage.current?.scrollTo({ y: 0, animated: true });
+        activePage.current?.scrollToOffset({ offset: 0, animated: true });
         scrollPositions.set(tab, 0);
       } else if (tab !== 'all') {
         open('all');
@@ -159,7 +180,7 @@ export function HomeScreen({
     },
     openTab: (id) => {
       setTab(id);
-      activePage.current?.scrollTo({ y: 0, animated: true });
+      activePage.current?.scrollToOffset({ offset: 0, animated: true });
     },
   }));
 
@@ -239,7 +260,9 @@ export function HomeScreen({
     />
   );
 
-  const playVideo = (v: { id: string; title: string }) => onPlay({ kind: 'video', videoId: v.id, title: v.title });
+  // One identity for good, so the memoized rows don't redraw with the page.
+  const playVideo = useEvent((v: { id: string; title: string }) => onPlay({ kind: 'video', videoId: v.id, title: v.title }));
+  const openStreamioMovie = useEvent((item: StreamioItem) => onOpenMovie(item as unknown as CatalogMovie));
 
   // Only the tab in front is mounted. Keeping the others alive holds their
   // images and rows in memory, and a phone with little of it gets killed when
@@ -254,18 +277,20 @@ export function HomeScreen({
   const liveRow = (
     <View style={styles.row}>
       <SectionHeader title="Live News" subtitle="Kerala's news channels, streaming now" />
-      <FlatList
-        horizontal
-        data={LIVE_NEWS}
-        keyExtractor={(c) => c.channelId}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <FocusCard onPress={() => onPlay({ kind: 'live', channelId: item.channelId, title: item.name })}>
-            <LiveTileContent name={item.name} color={item.color} />
-          </FocusCard>
-        )}
-      />
+      <FocusRow>
+        <FlatList
+          horizontal
+          data={LIVE_NEWS}
+          keyExtractor={(c) => c.channelId}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => (
+            <FocusCard onPress={() => onPlay({ kind: 'live', channelId: item.channelId, title: item.name })}>
+              <LiveTileContent name={item.name} color={item.color} />
+            </FocusCard>
+          )}
+        />
+      </FocusRow>
     </View>
   );
 
@@ -282,7 +307,7 @@ export function HomeScreen({
             </Text>
           </View>
           {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
-          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' ? 'all' : tab)} />
+          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' || tab === 'cinebox' ? 'all' : tab)} />
           {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
           {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
         </View>
@@ -321,7 +346,7 @@ export function HomeScreen({
           {liveRow}
           <HeroCarousel
             key={`hero-all-${refreshKey}`}
-            sources={ALL_CHANNELS}
+            sources={HERO_ALL_SOURCES}
             label="New today"
             onPlay={playVideo}
             // On TV the remote starts on Watch Now, until Back sends it to the tabs.
@@ -338,18 +363,20 @@ export function HomeScreen({
           {history.length > 0 && (
             <View style={styles.row}>
               <SectionHeader title="Continue watching" />
-              <FlatList
-                horizontal
-                data={history}
-                keyExtractor={playableKey}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.list}
-                renderItem={({ item }) => (
-                  <FocusCard onPress={() => onPlay(item)}>
-                    <HistoryCard item={item} />
-                  </FocusCard>
-                )}
-              />
+              <FocusRow>
+                <FlatList
+                  horizontal
+                  data={history}
+                  keyExtractor={playableKey}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.list}
+                  renderItem={({ item }) => (
+                    <FocusCard onPress={() => onPlay(item)}>
+                      <HistoryCard item={item} />
+                    </FocusCard>
+                  )}
+                />
+              </FocusRow>
             </View>
           )}
 
@@ -378,9 +405,9 @@ export function HomeScreen({
       )}
 
       {panel(
-        'disha',
-        <TabScroll refreshControl={refreshControl} themes={HINDI_THEMES} tabKey="disha" refreshKey={refreshKey} onPlay={playVideo}>
-          <HeroCarousel key={`hero-disha-${refreshKey}`} sources={HINDI_MOVIES} label="Picked for Disha ♥" onPlay={playVideo} />
+        'hindi',
+        <TabScroll refreshControl={refreshControl} themes={HINDI_THEMES} tabKey="hindi" refreshKey={refreshKey} onPlay={playVideo}>
+          <HeroCarousel key={`hero-hindi-${refreshKey}`} sources={HINDI_MOVIES} label="Hindi pick of the day" onPlay={playVideo} />
           {HINDI_MOVIES.map((source) => (
             <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
           ))}
@@ -435,6 +462,31 @@ export function HomeScreen({
           refreshControl={refreshControl}
         />,
       )}
+
+      {panel(
+        'streamiobox',
+        <StreamioBoxScreen
+          key={`streamiobox-${refreshKey}`}
+          embedded
+          onOpenMovie={openStreamioMovie}
+          onOpenSeries={onOpenStreamioSeries}
+          refreshControl={refreshControl}
+          history={history}
+          onPlay={onPlay}
+        />,
+      )}
+
+      {panel(
+        'cinebox',
+        <CineboxScreen
+          key={`cinebox-${refreshKey}`}
+          embedded
+          refreshControl={refreshControl}
+          onOpenMovie={onOpenMovie}
+          onOpenSeries={onOpenStreamioSeries}
+          onPlay={onPlay}
+        />,
+      )}
     </View>
   );
 }
@@ -446,6 +498,9 @@ function HistoryCard({ item }: { item: Playable }) {
   }
   if (item.kind === 'file') return <FileCardContent fileName={item.title} detail="TorBox" />;
   if (item.kind === 'moviebox') {
+    return <VideoCardContent image={item.poster} title={item.title} subtitle="Watch again" />;
+  }
+  if (item.kind === 'stream') {
     return <VideoCardContent image={item.poster} title={item.title} subtitle="Watch again" />;
   }
   return <VideoCardContent image={thumbnailUrl(item.videoId)} title={cleanTitle(item.title)} subtitle="Watch again" />;
@@ -462,75 +517,110 @@ type TabScrollProps = {
   tabKey?: string;
 };
 
-// One tab's scrolling page, ending in its themed rows and the credit line.
+// One tab's scrolling page, ending in its themed rows and the credit line. It
+// is a list, so only the rows near the screen are built: the rest of a long
+// tab costs nothing until it is scrolled to, and rows far behind are let go.
 function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay, tabKey }: TabScrollProps) {
   const [themeCount, setThemeCount] = useState(THEMES_AT_START);
-  const rows = Children.toArray(children);
-  const [rowCount, setRowCount] = useState(isTV ? TV_FIRST_ROWS : rows.length);
-  const allRows = !isTV || rowCount >= rows.length;
-  useEffect(() => {
-    if (allRows) return;
-    const timer = setTimeout(() => setRowCount((n) => n + 1), TV_ROW_STAGGER_MS);
-    return () => clearTimeout(timer);
-  }, [rowCount, allRows]);
-  const scroll = useRef<ScrollView>(null);
-  useEffect(() => {
-    activePage.current = scroll.current;
-    return () => {
-      if (activePage.current === scroll.current) activePage.current = null;
-    };
-  }, []);
+  const scroll = useRef<FlatList<ReactNode>>(null);
+  // Registered as the page in front when the list itself appears, which on TV
+  // is a moment after the tab (once ListFrame has measured the room).
+  const [setScroll] = useState(() => (list: FlatList<ReactNode> | null) => {
+    if (list) activePage.current = list;
+    else if (activePage.current === scroll.current) activePage.current = null;
+    scroll.current = list;
+  });
   // Where this tab was left, put back once the rows have their height.
   const restore = useRef(tabKey ? (scrollPositions.get(tabKey) ?? 0) : 0);
+  // Only while the tab is opening. After that the page grows and shrinks as
+  // rows load and are let go, and chasing the old place would drag the page
+  // about on its own (a TV remote never touches the screen to stop it).
+  useEffect(() => {
+    const timer = setTimeout(() => (restore.current = 0), RESTORE_WINDOW_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   const onScroll = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.contentOffset.y;
     if (tabKey) scrollPositions.set(tabKey, y);
     // The place to come back to is kept until it is actually reached.
     if (restore.current > 0 && y >= restore.current - 4) restore.current = 0;
-    const fromBottom = e.contentSize.height - (y + e.layoutMeasurement.height);
-    if (fromBottom < e.layoutMeasurement.height) {
-      setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length));
-    }
   };
 
-  // The rows come back in one by one, so the place to come back to is put
-  // back each time the page grows.
+  // The rows come back in a few at a time, so the place to come back to is
+  // put back each time the page grows.
   const restorePlace = () => {
-    if (restore.current > 0) scroll.current?.scrollTo({ y: restore.current, animated: false });
+    if (restore.current > 0) scroll.current?.scrollToOffset({ offset: restore.current, animated: false });
   };
+
+  const rows: ReactNode[] = [
+    ...Children.toArray(children),
+    ...(onPlay
+      ? themes
+          .slice(0, themeCount)
+          .map((theme) => <ThemeRow key={`${theme.query}-${refreshKey}`} theme={theme} onPlay={onPlay} />)
+      : []),
+    // Only built near the bottom of the list, so it animates only when seen.
+    ...(onPlay && themeCount < themes.length
+      ? [
+          // Looks like the next row on its way: its heading, then cards with
+          // light sweeping across them.
+          <SkeletonLoader
+            key="more-rows"
+            columns={isTV ? 7 : 3}
+            cardWidth={CARD_WIDTH}
+            rows={1}
+            label="More rows coming"
+            icon="sparkles-outline"
+            style={styles.moreRows}
+          />,
+        ]
+      : []),
+    <Text key="credit" style={styles.credit}>
+      Made with <Text style={styles.heart}>♥</Text>
+    </Text>,
+  ];
 
   return (
-    <ScrollView
-      ref={scroll}
-      style={styles.panel}
-      contentContainerStyle={styles.content}
-      onScroll={themes.length || tabKey ? onScroll : undefined}
-      onContentSizeChange={restorePlace}
-      onTouchStart={() => {
-        // A touch means the user is here now, not on their way back.
-        restore.current = 0;
-      }}
-      scrollEventThrottle={250}
-      refreshControl={refreshControl}
-    >
-      {allRows ? rows : rows.slice(0, rowCount)}
-
-      {allRows && themes.length > 0 && onPlay && (
-        <>
-          {themes.slice(0, themeCount).map((theme) => (
-            <ThemeRow key={`${theme.query}-${refreshKey}`} theme={theme} onPlay={onPlay} />
-          ))}
-          {themeCount < themes.length && <Loader label="More rows coming" icon="sparkles-outline" style={styles.moreRows} />}
-        </>
+    <ListFrame>
+      {(height) => (
+        <FlatList
+          ref={setScroll}
+          data={rows}
+          keyExtractor={rowKey}
+          renderItem={renderRow}
+          // An exact height on TV; see ListFrame.
+          style={height ? { height } : styles.panel}
+          contentContainerStyle={styles.content}
+          // On TV render enough rows initially to prevent focus traps and layout glitches.
+          initialNumToRender={isTV ? 6 : 2}
+          maxToRenderPerBatch={isTV ? 4 : 1}
+          windowSize={isTV ? 7 : 7}
+          updateCellsBatchingPeriod={60}
+          // The remote's focus search needs the rows near the screen attached.
+          removeClippedSubviews={false}
+          // More themed rows once the end is a screen or so away.
+          onEndReached={() => setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length))}
+          onEndReachedThreshold={1.2}
+          onScroll={onScroll}
+          scrollEventThrottle={250}
+          onContentSizeChange={restorePlace}
+          onTouchStart={() => {
+            // A touch means the user is here now, not on their way back.
+            restore.current = 0;
+          }}
+          onScrollBeginDrag={() => (restore.current = 0)}
+          refreshControl={refreshControl}
+          showsVerticalScrollIndicator={false}
+        />
       )}
-
-      <Text style={styles.credit}>
-        Made with <Text style={styles.heart}>♥</Text> by Kishor
-      </Text>
-    </ScrollView>
+    </ListFrame>
   );
 }
+
+const rowKey = (row: ReactNode, index: number) =>
+  isValidElement(row) && row.key != null ? String(row.key) : String(index);
+const renderRow = ({ item }: { item: ReactNode }) => <>{item}</>;
 
 // A tab's new content fades in and slides a little from the side being moved
 // towards.
@@ -539,13 +629,16 @@ function SlideIn({ direction, children }: { direction: number; children: ReactNo
   useEffect(() => {
     Animated.timing(progress, {
       toValue: 1,
-      duration: 320,
+      duration: isTV ? 220 : 320,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, []);
-  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [direction * 36, 0] });
-  return <Animated.View style={[styles.panel, { opacity: progress, transform: [{ translateX }] }]}>{children}</Animated.View>;
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [direction * (isTV ? 24 : 36), 0] });
+  // TV: only the slide. Fading a whole page of pictures makes a TV redraw every
+  // one of them each frame, while it is also building the tab.
+  const opacity = isTV ? 1 : progress;
+  return <Animated.View style={[styles.panel, { opacity, transform: [{ translateX }] }]}>{children}</Animated.View>;
 }
 
 function TabButton({
@@ -611,7 +704,7 @@ function RoundButton({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   hidden: { display: 'none' },
-  panel: { flex: 1 },
+  panel: { flex: 1, width: '100%' },
   glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 360 },
   top: { paddingBottom: sz(8, 12) },
   content: { paddingTop: sz(6, 8), paddingBottom: sz(110, 40) },
@@ -650,7 +743,8 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#fff' },
   row: { marginBottom: sz(24, 30) },
   list: { paddingHorizontal: GUTTER, paddingVertical: sz(2, 8) },
-  moreRows: { marginVertical: 24, alignSelf: 'center' },
   heart: { color: colors.accent },
+  // The cards run off the right edge, as a real row's do.
+  moreRows: { paddingLeft: GUTTER, marginTop: sz(4, 8), overflow: 'hidden' },
   credit: { color: colors.faint, fontSize: sz(12.5, 15), textAlign: 'center', marginTop: 8, fontWeight: '600' },
 });

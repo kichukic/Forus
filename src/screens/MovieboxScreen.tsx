@@ -93,12 +93,18 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   // The rows are kept with the section they came from, so the rows of the
   // section before are not on screen while the new ones are on their way.
   const [shelves, setShelves] = useState<{ tab: number; rows: MovieboxShelf[] } | null>(null);
+  // The genre and language the user is browsing by. Null means "everything".
+  const [genreFilter, setGenreFilter] = useState<string | null>(null);
   // The films a search matched, kept with the name they were found for.
   const [results, setResults] = useState<{ query: string; subjects: MovieboxSubject[] } | null>(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   // How many rows of the section in front have been let in.
   const [reveal, setReveal] = useState({ tab: -1, count: SHELVES_AT_START });
+  // The footer hint only animates while it is actually on screen.
+  const [nearBottom, setNearBottom] = useState(false);
+  const viewportH = useRef(0);
+  const contentH = useRef(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -207,7 +213,7 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
 
   // The grid reflows when the phone rotates.
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 240 : 150)));
+  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 230 : 150)));
   const cardWidth = Math.max(96, Math.floor((width - GUTTER * 2) / columns));
 
   const searchBox = (
@@ -234,22 +240,43 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
     </View>
   );
 
+  const GENRES = ['All', 'Action', 'Comedy', 'Drama', 'Romance', 'Thriller', 'Horror', 'Sci-Fi', 'Animation', 'Crime', 'Adventure', 'Fantasy', 'Mystery', 'Family'];
+
+  function matchesFilter(subject: MovieboxSubject): boolean {
+    if (genreFilter && genreFilter !== 'All') {
+      if (!(subject.genre ?? '').toLowerCase().includes(genreFilter.toLowerCase())) return false;
+    }
+    return true;
+  }
+
+  const filteredRows = (shelfRows ?? []).map((shelf) => ({
+    ...shelf,
+    subjects: shelf.subjects.filter(matchesFilter),
+  })).filter((shelf) => shelf.subjects.length > 0);
+
+  // Filters belong to the section in front, so they are cleared when it changes.
+  const [filterTab, setFilterTab] = useState(tab);
+  if (filterTab !== tab) {
+    setFilterTab(tab);
+    setGenreFilter(null);
+  }
+
   const shownTabs = tabs.filter((entry) => !emptyTabs.includes(entry.id));
 
   // A section starts with a few rows, and the rest come as it is scrolled.
   if (reveal.tab !== (tab ?? -1)) setReveal({ tab: tab ?? -1, count: SHELVES_AT_START });
-  const rows = shelfRows ?? [];
-  const shownRows = rows.slice(0, reveal.count);
-  const moreRows = reveal.count < rows.length;
+  const moreRows = reveal.count < filteredRows.length;
 
   // The same measure the All tab uses: within a screen of the bottom.
   const growRows = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     const left = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
+    const nb = left < e.layoutMeasurement.height;
+    setNearBottom(nb || contentH <= viewportH);
     if (left < e.layoutMeasurement.height) {
       setReveal((current) =>
-        current.count >= rows.length
+        current.count >= filteredRows.length
           ? current
-          : { ...current, count: Math.min(current.count + SHELVES_PER_STEP, rows.length) },
+          : { ...current, count: Math.min(current.count + SHELVES_PER_STEP, filteredRows.length) },
       );
     }
   };
@@ -278,13 +305,13 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
 
   const heading = embedded ? (
     <SectionHeader
-      title="MovieBox by Kishor"
+      title="MovieBox"
       subtitle="Films and series, played here as they are"
       style={styles.sectionHeader}
     />
   ) : (
     <View style={[styles.header, { paddingTop: insets.top + (isTV ? 20 : 10) }]}>
-      <Text style={styles.heading}>MovieBox by Kishor</Text>
+      <Text style={styles.heading}>MovieBox</Text>
       <Text style={styles.subheading}>Films and series, played here as they are.</Text>
     </View>
   );
@@ -338,11 +365,19 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
   return (
     <View style={styles.screen}>
       <FlatList
-        data={shownRows}
+        data={filteredRows.slice(0, reveal.count)}
         keyExtractor={(shelf) => shelf.title}
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}
         {...SHELF_PERF}
+        onLayout={(e) => {
+          viewportH.current = e.nativeEvent.layout.height;
+          setNearBottom((prev) => prev || contentH.current <= viewportH.current);
+        }}
+        onContentSizeChange={(_, h) => {
+          contentH.current = h;
+          setNearBottom((prev) => prev || h <= viewportH.current);
+        }}
         onScroll={growRows}
         scrollEventThrottle={200}
         ListHeaderComponent={
@@ -350,6 +385,25 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
             {heading}
             {searchBox}
             {tabsRow}
+            <View style={styles.filterWrap}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {GENRES.map((g) => (
+                  <Pressable
+                    key={`g-${g}`}
+                    onPress={() => setGenreFilter(g === 'All' ? null : g)}
+                    style={({ focused, pressed }) => [
+                      styles.chip,
+                      (genreFilter === g || (g === 'All' && !genreFilter)) && styles.chipActive,
+                      (focused || pressed) && styles.chipFocused,
+                    ]}
+                  >
+                    <Text style={[styles.chipText, (genreFilter === g || (g === 'All' && !genreFilter)) && styles.chipTextActive]}>
+                      {g}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
             {error ? <Text style={styles.note}>{error}</Text> : null}
             {searching && waiting ? (
               <View style={styles.searching}>
@@ -403,6 +457,20 @@ const styles = StyleSheet.create({
   sectionHeader: { paddingHorizontal: GUTTER, marginBottom: 10 },
   content: { paddingBottom: sz(110, 40) },
   moreRows: { marginVertical: 24, alignSelf: 'center' },
+  filterWrap: { paddingHorizontal: GUTTER, paddingBottom: 6, gap: 6 },
+  filterRow: { gap: 8, paddingRight: GUTTER },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  chipActive: { backgroundColor: colors.accent },
+  chipFocused: { borderColor: colors.text },
+  chipText: { color: colors.muted, fontSize: isTV ? 13 : 11.5, fontWeight: '800' },
+  chipTextActive: { color: '#fff' },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',

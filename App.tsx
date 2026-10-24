@@ -10,22 +10,30 @@ import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
 import { addToHistory, clearHistory, loadHistory, playableKey } from './src/data/history';
 import { askToRemind, startReminders } from './src/data/reminders';
+import { useEvent } from './src/hooks/useEvent';
 import { addTransfer, loadTransfers, playableFrom } from './src/data/transfers';
+import { showToast } from './src/data/toasts';
+import { checkForUpdate, type Update } from './src/api/updates';
 import { setupTransferNotices } from './src/data/transferNotices';
 import type { CatalogMovie } from './src/api/catalog';
 import type { MovieboxSubject } from './src/api/moviebox';
+import type { StreamioItem } from './src/api/streamiobox';
 import type { TorrentOption } from './src/api/torrents';
 import { FatalErrorScreen } from './src/screens/FatalErrorScreen';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
 import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
+import { StreamioBoxDetailScreen } from './src/screens/StreamioBoxDetailScreen';
 import { MovieboxPlayerScreen } from './src/screens/MovieboxPlayerScreen';
 import { MovieScreen } from './src/screens/MovieScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
+import { StreamPlayerScreen } from './src/screens/StreamPlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
 import { TransferBar } from './src/components/TransferBar';
+import { ToastHost } from './src/components/ToastHost';
 import { TransferToast } from './src/components/TransferToast';
+import { UpdatePrompt } from './src/components/UpdatePrompt';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TorboxSetupScreen } from './src/screens/TorboxSetupScreen';
 import { colors, isTV } from './src/theme';
@@ -70,6 +78,9 @@ export default function App() {
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
   // The film open from MovieBox, in the same way.
   const [moviebox, setMoviebox] = useState<MovieboxSubject | null>(null);
+  const [streamioSeries, setStreamioSeries] = useState<StreamioItem | null>(null);
+  // The prompt shown on launch (and from Settings) when an update is found.
+  const [updatePrompt, setUpdatePrompt] = useState<Update | null>(null);
   // Transfers now run in the background, so there is no full-screen sender.
   // An error that nothing else caught. The app stays open and shows it.
   const [crash, setCrash] = useState<Error | null>(null);
@@ -78,6 +89,9 @@ export default function App() {
     loadHistory().then(setHistory);
     loadTransfers();
     setupTransferNotices();
+    checkForUpdate().then((u) => {
+      if (u) setUpdatePrompt(u);
+    });
   }, []);
 
   useEffect(() => {
@@ -99,13 +113,13 @@ export default function App() {
   // Anything fatal is shown on screen rather than ending the app.
   useEffect(() => subscribeErrors((error, isFatal) => isFatal && setCrash(error)), []);
 
-  const play = (item: Playable) => {
+  const play = useEvent((item: Playable) => {
     setHistory((h) => addToHistory(h, item));
     setPlaying(item);
     setMini(false);
     // Phones only: the first play asks to allow "Continue watching" reminders.
     if (!isTV) askToRemind();
-  };
+  });
 
   // Phones: a reminder of the last thing watched, a few hours after leaving.
   const latest = useRef<{ history: Playable[]; playing: Playable | null; play: typeof play }>({ history, playing, play });
@@ -126,10 +140,18 @@ export default function App() {
     setMini(false);
   };
 
-  const openTorbox = () => {
+  const openTorbox = useEvent(() => {
     if (screen !== 'torbox') setTorboxFrom(screen);
     setScreen('torbox');
-  };
+  });
+  // The home screen is memoized, so what it's handed keeps one identity.
+  const openSearch = useEvent((scope: SearchScope) => {
+    setSearchScope(scope);
+    setScreen('search');
+  });
+  const sendRelease = useEvent((option: TorrentOption) => addTransfer(option));
+  const openHistory = useEvent(() => setScreen('history'));
+  const openSettings = useEvent(() => setScreen('settings'));
 
   const closeTorbox = useCallback(() => {
     setTorboxVersion((v) => v + 1);
@@ -139,7 +161,8 @@ export default function App() {
   // Back works like YouTube's: a full player shrinks first, then screens close.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (moviebox) setMoviebox(null);
+      if (streamioSeries) setStreamioSeries(null);
+      else if (moviebox) setMoviebox(null);
       else if (movie) setMovie(null);
       else if (playing && !mini) {
         if (isTV) closePlayer();
@@ -154,10 +177,10 @@ export default function App() {
       return true;
     });
     return () => sub.remove();
-  }, [playing, mini, screen, torboxFrom, movie, moviebox, closeTorbox]);
+  }, [playing, mini, screen, torboxFrom, movie, moviebox, streamioSeries, closeTorbox]);
 
   // On TV nothing behind a player may keep remote focus, so it's hidden.
-  const hideBackground = isTV && (!!playing || !!movie || !!moviebox);
+  const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!streamioSeries);
   const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox;
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
 
@@ -173,15 +196,13 @@ export default function App() {
             torboxVersion={torboxVersion}
             onPlay={play}
             onOpenTorbox={openTorbox}
-            onOpenSearch={(scope) => {
-              setSearchScope(scope);
-              setScreen('search');
-            }}
+            onOpenSearch={openSearch}
             onOpenMovie={setMovie}
             onOpenMoviebox={setMoviebox}
-            onSendRelease={(option) => addTransfer(option)}
-            onOpenHistory={() => setScreen('history')}
-            onOpenSettings={() => setScreen('settings')}
+            onOpenStreamioSeries={setStreamioSeries}
+            onSendRelease={sendRelease}
+            onOpenHistory={openHistory}
+            onOpenSettings={openSettings}
             ref={home}
           />
         </View>
@@ -210,6 +231,12 @@ export default function App() {
               torboxVersion={torboxVersion}
               onOpenTorbox={openTorbox}
               onClearHistory={() => setHistory(clearHistory())}
+              onCheckForUpdates={() => {
+                checkForUpdate(true).then((u) => {
+                  if (u) setUpdatePrompt(u);
+                  else showToast({ text: 'You are on the latest version.' });
+                });
+              }}
             />
           </View>
         )}
@@ -227,6 +254,10 @@ export default function App() {
           }}
           onOpenTorbox={openTorbox}
         />
+
+        <ToastHost />
+
+        <UpdatePrompt update={updatePrompt} onClose={() => setUpdatePrompt(null)} />
 
         {showNav && (
           <TransferBar
@@ -280,6 +311,21 @@ export default function App() {
           </View>
         )}
 
+        {streamioSeries && (
+          <View style={StyleSheet.absoluteFill}>
+            <StreamioBoxDetailScreen
+              key={streamioSeries.id}
+              item={streamioSeries}
+              onClose={() => setStreamioSeries(null)}
+              onPlay={play}
+              onSendRelease={(option) => {
+                setStreamioSeries(null);
+                addTransfer(option);
+              }}
+            />
+          </View>
+        )}
+
         {playing && (
           <PlayerShell
             mini={mini}
@@ -292,6 +338,8 @@ export default function App() {
                 <FilePlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               ) : playing.kind === 'moviebox' ? (
                 <MovieboxPlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
+              ) : playing.kind === 'stream' ? (
+                <StreamPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
               ) : (
                 <PlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               )

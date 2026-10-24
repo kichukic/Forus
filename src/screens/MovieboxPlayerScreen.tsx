@@ -11,13 +11,14 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useEvent } from 'expo';
+import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { captions, directStream, playableRows, type MovieboxCaption } from '../api/moviebox';
+import { captions, directStream, playableRows, seasonList, type MovieboxCaption, type MovieboxSeason } from '../api/moviebox';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { VideoOverlay } from '../components/VideoOverlay';
 import { useRemoteSeek } from '../hooks/useRemoteSeek';
+import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import type { ShellControls } from '../components/PlayerShell';
 import { colors, isTV, sz } from '../theme';
 import type { MovieboxPlayable, Playable } from '../types';
@@ -42,6 +43,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const player = useVideoPlayer(null, (p) => {
     p.staysActiveInBackground = false;
   });
+  const fullscreenOrientation = useFullscreenOrientation();
   const { status, error } = useEvent(player, 'statusChange', { status: player.status });
   const { currentTime } = useEvent(player, 'timeUpdate', {
     currentTime: 0,
@@ -53,6 +55,8 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const [loading, setLoading] = useState(true);
   // How many times a stale link has been fetched again.
   const attempts = useRef(0);
+  // Stops the next episode from being started twice.
+  const playedNext = useRef(false);
   // The subtitles the file has, and the one being shown.
   const [captionOptions, setCaptionOptions] = useState<MovieboxCaption[]>([]);
   const [chosen, setChosen] = useState<string | null>(null);
@@ -100,6 +104,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   }, [item.episode, item.season, item.subjectId, player]);
 
   useEffect(() => {
+    playedNext.current = false;
     let cancelled = false;
     (async () => {
       if (cancelled) return;
@@ -132,6 +137,28 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
     };
   }, [chosen, captionOptions]);
 
+  // When an episode ends, the next one starts on its own. Films have no
+  // "next", so they are left alone.
+  useEventListener(player, 'playToEnd', async () => {
+    if (item.season === 0 || playedNext.current) return;
+    playedNext.current = true;
+    try {
+      const seasons = await seasonList(item.subjectId);
+      const current = seasons.find((s: MovieboxSeason) => s.season === item.season);
+      const baseTitle = item.title.replace(/ · Episode \d+$/, '');
+      if (current && item.episode < current.episodes) {
+        onPlay({ kind: 'moviebox', subjectId: item.subjectId, season: item.season, episode: item.episode + 1, title: `${baseTitle} · Episode ${item.episode + 1}`, poster: item.poster });
+        return;
+      }
+      const nextSeason = seasons.find((s: MovieboxSeason) => s.season === item.season + 1);
+      if (nextSeason) {
+        onPlay({ kind: 'moviebox', subjectId: item.subjectId, season: nextSeason.season, episode: 1, title: `${baseTitle} · Episode 1`, poster: item.poster });
+      }
+    } catch {
+      // No next episode; leave the player where it is.
+    }
+  });
+
   const failure = linkError ?? (status === 'error' ? error?.message ?? 'This file could not be played.' : null);
   const spoken =
     loaded && loaded.id === chosen && loaded.list.length > 0
@@ -146,7 +173,13 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         // In the corner window a tap opens the player instead.
         nativeControls={!mini && !isTV}
         contentFit="contain"
-        fullscreenOptions={{ enable: !isTV }}
+        fullscreenOptions={{
+          enable: !isTV,
+          orientation: 'landscape',
+          autoExitOnRotate: true,
+        }}
+        onFullscreenEnter={fullscreenOrientation.onFullscreenEnter}
+        onFullscreenExit={fullscreenOrientation.onFullscreenExit}
       />
 
       {isTV && !mini && (
@@ -179,7 +212,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
       {failure && (
         <View style={styles.overlay}>
-          <Text style={styles.errorTitle}>{"Couldn't play this episode"}</Text>
+          <Text style={styles.errorTitle}>{"Couldn&apos;t play this episode"}</Text>
           <Text style={styles.overlayText}>{failure}</Text>
           <Pressable onPress={resolve} style={styles.retry}>
             <Text style={styles.retryText}>Try again</Text>
@@ -193,7 +226,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         // player into the corner.
         <RelatedPanel item={item} onPlay={onPlay} dragHandlers={shell?.dragHandlers}>
           <Text style={styles.infoTitle}>{item.title}</Text>
-          <Text style={styles.infoNote}>From MovieBox by Kishor</Text>
+          <Text style={styles.infoNote}>From MovieBox</Text>
           {captionOptions.length > 0 && (
             <ScrollView
               horizontal

@@ -1,9 +1,9 @@
-// Rows added to the bottom of the Movies, Shows and For Disha Chotu tabs as they
+// Rows added to the bottom of the Movies, Shows and Hindi tabs as they
 // are scrolled. Each one is a YouTube search kept to the trusted official channels,
 // so it only ever shows their uploads. Add, remove or reorder freely.
 
 // 'movie' themes go on the Movies tab, 'show' themes on the Shows tab and
-// 'hindi' themes on the For Disha Chotu tab.
+// 'hindi' themes on the Hindi tab.
 export type Theme = { title: string; query: string; kind: 'movie' | 'show' | 'hindi' };
 
 export const THEMES: Theme[] = [

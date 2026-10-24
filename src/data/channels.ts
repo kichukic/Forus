@@ -60,7 +60,7 @@ export const MOVIES: VideoSource[] = [
   { name: 'Central Talkies', channelId: 'UC-y6ddbfjQiKV43LVfOKiMw', titleFilter: FULL_MOVIE },
 ];
 
-// For the "For Disha Chotu" tab: Hindi films from the big studios' own channels.
+// For the Hindi tab: Hindi films from the big studios' own channels.
 export const HINDI_MOVIES: VideoSource[] = [
   { name: 'Ultra Movie Parlour', channelId: 'UCYauDsl-rswjQGpA0_-Z9Pw', titleFilter: FULL_MOVIE },
   { name: 'Shemaroo Movies', channelId: 'UCBOmfqgTZi7yDp4-3Lr_3lA', titleFilter: FULL_MOVIE },
@@ -105,12 +105,12 @@ export const TRUSTED_CHANNELS = byId([
 ]);
 
 // Search follows the tab it was opened from: each tab only searches its own channels.
-export type SearchScope = 'all' | 'movies' | 'shows' | 'disha' | 'news' | 'torbox';
+export type SearchScope = 'all' | 'movies' | 'shows' | 'hindi' | 'news' | 'torbox';
 
 export const SCOPE_CHANNELS: Record<Exclude<SearchScope, 'torbox'>, Map<string, string>> = {
   all: TRUSTED_CHANNELS,
   movies: byId([...MOVIES, ...SEARCH_ONLY_FILMS]),
   shows: byId([...SHOWS, ...SEARCH_ONLY_SHOWS]),
-  disha: byId([...HINDI_MOVIES, ...HINDI_DRAMAS]),
+  hindi: byId([...HINDI_MOVIES, ...HINDI_DRAMAS]),
   news: byId(LIVE_NEWS),
 };

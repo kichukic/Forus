@@ -56,8 +56,8 @@ const SCOPE_TEXT: Record<SearchScope, { heading: string; placeholder: string; no
     note: 'Episodes from the official TV channels.',
     empty: 'Nothing found on the show channels.',
   },
-  disha: {
-    heading: 'Search for Disha',
+  hindi: {
+    heading: 'Search Hindi',
     placeholder: 'Search Hindi movies and dramas…',
     note: 'Hindi movies and dramas from the official channels.',
     empty: 'Nothing found on the Hindi channels.',
@@ -139,11 +139,11 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                 // The film tabs only show complete films, not scenes and
                 // trailers, so their searches ask YouTube for films and read a
                 // few more pages.
-                const filmsOnly = scope === 'movies' || scope === 'disha';
+                const filmsOnly = scope === 'movies' || scope === 'hindi';
                 const asked =
                   !filmsOnly || /movie|film/i.test(q)
                     ? q
-                    : `${q} ${scope === 'disha' ? 'hindi ' : ''}full movie`;
+                    : `${q} ${scope === 'hindi' ? 'hindi ' : ''}full movie`;
                 const found = await searchVideos(asked, SCOPE_CHANNELS[scope], filmsOnly ? 5 : undefined);
                 return filmsOnly ? found.filter((v) => FULL_MOVIE.test(v.title)) : found;
               })()
@@ -206,7 +206,7 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
 
   // The grid reflows when the phone rotates.
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / ((sz(200, 300)) + CARD_GAP)));
+  const columns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / ((sz(200, 230)) + CARD_GAP)));
   const cardWidth = (width - GUTTER * 2 - CARD_GAP * (columns - 1)) / columns;
 
   return (

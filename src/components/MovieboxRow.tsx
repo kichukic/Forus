@@ -7,7 +7,8 @@ import { FocusCard } from './FocusCard';
 import { FocusRow } from './FocusRow';
 import { MovieboxPoster, POSTER_ROW_HEIGHT, POSTER_ROW_PROPS, POSTER_WIDTH } from './MovieboxPoster';
 import { SectionHeader } from './Section';
-import { GUTTER, sz } from '../theme';
+import { SkeletonLoader } from './SkeletonLoader';
+import { GUTTER, isTV, sz } from '../theme';
 
 type Props = {
   onOpen: (subject: MovieboxSubject) => void;
@@ -38,7 +39,16 @@ export function MovieboxRow({ onOpen, tabId = 1, version = 0 }: Props) {
     };
   }, [tabId, version]);
 
-  if (!shelves || shelves.length === 0) return null;
+  if (shelves === null) {
+    return (
+      <View style={styles.row}>
+        <SectionHeader title="Trending Movies" subtitle="From MovieBox" />
+        <SkeletonLoader columns={isTV ? 7 : 3} cardWidth={POSTER_WIDTH} rows={1} style={styles.loading} />
+      </View>
+    );
+  }
+
+  if (shelves.length === 0) return null;
 
   return (
     <View style={styles.row}>
@@ -70,4 +80,5 @@ export function MovieboxRow({ onOpen, tabId = 1, version = 0 }: Props) {
 const styles = StyleSheet.create({
   row: { marginBottom: sz(22, 28) },
   list: { paddingHorizontal: GUTTER, paddingVertical: sz(2, 8) },
+  loading: { paddingLeft: GUTTER, paddingVertical: sz(2, 8), overflow: 'hidden' },
 });

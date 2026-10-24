@@ -154,3 +154,36 @@ To build an APK you can copy onto the TV yourself:
 cd android && ./gradlew assembleRelease
 # app/build/outputs/apk/release/app-release.apk
 ```
+
+## Release signing
+
+Release builds are signed with the app's own key: `signing/forus-release.jks`,
+with its settings (key file, alias, passwords) in `signing/release.properties`.
+Both live outside git; losing the key means losing the ability to ship updates
+under the same app identity, so keep it backed up somewhere safe.
+
+The passwords are read from the environment first, so they don't have to sit in
+plaintext in `release.properties`:
+
+```sh
+export FORUS_KEYSTORE_PASSWORD=…   # Keystore password
+export FORUS_KEY_PASSWORD=…        # Key password (same key in "release.properties")
+```
+
+Whatever is unset falls back to the values in `signing/release.properties`, so
+machines that keep them there keep working unchanged. To move the passwords out
+of the file, copy the two values into environment variables (for example in
+`~/.profile`) and empty them out of the file.
+
+## Hardening in the builds
+
+- **R8 obfuscation and shrinking** runs on release builds
+  (`android.enableMinifyInReleaseBuilds` etc. in gradle.properties; a clean
+  prebuild regenerates that file, and `build-apk.sh` rewrites the flags after
+  every prebuild). `build-apk.sh` also copies the resulting
+  `mapping.txt` next to the APK, so a future crash stack trace can be
+  translated back into readable class names.
+- **The updater checks the APK** against the `sha256` in the version manifest
+  that `scripts/publish.sh` publishes next to it; a truncated or tampered
+  download is deleted and refused before it reaches the installer. Releases
+  published with an old manifest (no checksum) skip the check.

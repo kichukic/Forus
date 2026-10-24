@@ -26,6 +26,8 @@ type Props = {
   onToggle: () => void;
   onSeekBy: (seconds: number) => void;
   onSeekTo: (seconds: number) => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 };
 
 const HIDE_AFTER_MS = 3000;
@@ -41,7 +43,17 @@ export function formatTime(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-export function PlayerControls({ paused, buffering, time, live, onToggle, onSeekBy, onSeekTo }: Props) {
+export function PlayerControls({
+  paused,
+  buffering,
+  time,
+  live,
+  onToggle,
+  onSeekBy,
+  onSeekTo,
+  isFullscreen,
+  onToggleFullscreen,
+}: Props) {
   const [visible, setVisible] = useState(true);
   const [skipFlash, setSkipFlash] = useState<{ side: 'left' | 'right'; key: number } | null>(null);
   const opacity = useRef(new Animated.Value(1)).current;
@@ -111,16 +123,21 @@ export function PlayerControls({ paused, buffering, time, live, onToggle, onSeek
         </View>
 
         <View style={styles.bottom} pointerEvents="box-none">
-          {live ? (
-            <LiveBadge />
-          ) : (
-            <>
+          <View style={styles.bottomBar}>
+            {live ? (
+              <LiveBadge />
+            ) : (
               <Text style={styles.time}>
                 {formatTime(time.t)} <Text style={styles.timeTotal}>/ {formatTime(time.d)}</Text>
               </Text>
-              <SeekBar time={time} onSeekTo={onSeekTo} />
-            </>
-          )}
+            )}
+            {onToggleFullscreen && (
+              <Pressable onPress={onToggleFullscreen} hitSlop={12} style={styles.fullscreenBtn}>
+                <Ionicons name={isFullscreen ? 'contract' : 'scan'} size={sz(18, 22)} color="#fff" />
+              </Pressable>
+            )}
+          </View>
+          {!live && <SeekBar time={time} onSeekTo={onSeekTo} />}
         </View>
       </Animated.View>
     </View>
@@ -256,6 +273,8 @@ const styles = StyleSheet.create({
   roundPrimary: { backgroundColor: 'rgba(155,92,255,0.92)' },
   roundLabel: { position: 'absolute', bottom: 3, color: '#fff', fontSize: 9, fontWeight: '800' },
   bottom: { position: 'absolute', left: 14, right: 14, bottom: 8 },
+  bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  fullscreenBtn: { padding: 4 },
   time: { color: '#fff', fontSize: sz(12.5, 16), fontWeight: '700', marginBottom: 2 },
   timeTotal: { color: 'rgba(255,255,255,0.65)', fontSize: sz(12.5, 16), fontWeight: '600' },
   seekHit: { height: 22, justifyContent: 'center' },

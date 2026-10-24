@@ -16,13 +16,14 @@ export const colors = {
   live: '#ff3b5c',
 };
 
-// Sizes in the app are designed for a 400dp-wide phone and a 1280dp-wide TV,
+// Sizes in the app are designed for a 400dp-wide phone and a 1600dp-wide TV,
 // and scaled to the actual screen: small or low-density phones shrink a little,
-// and a 1080p TV (usually 960dp wide) shrinks to about three quarters.
+// and a 1080p TV (usually 960dp wide) draws at 0.6, which fits about six cards
+// across a row while the smallest text stays readable from across the room.
 const window = Dimensions.get('window');
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 export const UI_SCALE = isTV
-  ? clamp(Math.max(window.width, window.height) / 1280, 0.6, 1.1)
+  ? clamp(Math.max(window.width, window.height) / 1600, 0.5, 1.1)
   : clamp(Math.min(window.width, window.height) / 400, 0.8, 1.05);
 
 /** A size given for phone and TV, scaled to this screen. */
@@ -31,7 +32,7 @@ export const sz = (phone: number, tv: number) => Math.round((isTV ? tv : phone) 
 // TVs are viewed from across the room; phones need tighter spacing. TVs also
 // crop their edges (overscan), so the TV margin never shrinks below 48.
 export const GUTTER = isTV ? 48 : sz(18, 48);
-export const CARD_WIDTH = sz(230, 280);
+export const CARD_WIDTH = sz(230, 230);
 export const CARD_HEIGHT = Math.round((CARD_WIDTH * 9) / 16);
 export const CARD_GAP = sz(14, 20);
 export const RADIUS = sz(14, 16);

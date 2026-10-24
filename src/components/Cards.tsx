@@ -5,8 +5,9 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { resolveLiveVideoId } from '../api/youtubeLive';
+import { resolveLiveVideoIdForTile, savedLiveVideoId } from '../api/youtubeLive';
 import { LIVE_NEWS } from '../data/channels';
+import { Shimmer } from './Shimmer';
 import { CARD_HEIGHT, RADIUS, colors, sz } from '../theme';
 
 type VideoCardProps = {
@@ -21,6 +22,24 @@ type VideoCardProps = {
   height?: number;
 };
 
+// Pictures that have been on screen already. One fades in the first time it
+// loads; when its card is built again (scrolled back to) it is simply there,
+// instead of the whole row flickering back in.
+const shownPictures = new Set<string>();
+
+/** The fade for a picture: `ms` the first time, none after. */
+export function pictureFade(uri: string, ms: number): number {
+  return shownPictures.has(uri) ? 0 : ms;
+}
+
+export function pictureShown(uri: string) {
+  shownPictures.add(uri);
+}
+
+export function pictureWasShown(uri: string): boolean {
+  return shownPictures.has(uri);
+}
+
 export const VideoCardContent = memo(function VideoCardContent({
   image,
   title,
@@ -30,15 +49,24 @@ export const VideoCardContent = memo(function VideoCardContent({
   placeholder,
   height,
 }: VideoCardProps) {
+  // Until its picture is in (or has failed), the card shimmers.
+  const [settled, setSettled] = useState<string | null>(null);
+  const waiting = !!image && image !== settled && !shownPictures.has(image);
   return (
     <View>
       <View style={[styles.picture, height ? { height } : null]}>
+        {waiting ? <Shimmer /> : null}
         {image ? (
           <Image
             source={image}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
-            transition={150}
+            transition={pictureFade(image, 150)}
+            onLoad={() => {
+              pictureShown(image);
+              setSettled(image);
+            }}
+            onError={() => setSettled(image)}
             cachePolicy="memory-disk"
             // Lists reuse card views; this stops a reused card flashing the old picture.
             recyclingKey={image}
@@ -74,19 +102,30 @@ export const VideoCardContent = memo(function VideoCardContent({
 // colour, with a pulsing LIVE badge. Until the frame arrives (or if the channel
 // isn't live) it is the colour as a gradient.
 export const LiveTileContent = memo(function LiveTileContent({ name, color }: { name: string; color: string }) {
-  const frame = useLiveFrame(LIVE_NEWS.find((c) => c.name === name)?.channelId);
+  const { frame, looking } = useLiveFrame(LIVE_NEWS.find((c) => c.name === name)?.channelId);
+  // It shimmers while the stream is looked up and its picture comes in.
+  const [settled, setSettled] = useState<string | null>(null);
+  const waiting = looking || (!!frame && frame.uri !== settled && !shownPictures.has(frame.uri));
   return (
     <View>
       <LinearGradient colors={[color, shade(color, 0.55)]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.picture}>
+        {waiting ? <Shimmer /> : null}
         {frame && (
           <>
             <Image
               source={frame.uri}
               style={frame.cropBars ? styles.liveFrameCropped : StyleSheet.absoluteFill}
               contentFit="cover"
-              transition={200}
+              transition={pictureFade(frame.uri, 200)}
+              onLoad={() => {
+                pictureShown(frame.uri);
+                setSettled(frame.uri);
+              }}
               cachePolicy="memory-disk"
-              onError={frame.onError}
+              onError={() => {
+                if (frame.lastTry) setSettled(frame.uri);
+                frame.onError();
+              }}
             />
             <LinearGradient
               colors={[`${color}00`, `${color}66`, `${color}ee`]}
@@ -120,23 +159,44 @@ function useLiveFrame(channelId?: string) {
   // The live video, and which few-minute window its picture was fetched in.
   const [live, setLive] = useState<{ videoId: string; bucket: number } | null>(null);
   const [small, setSmall] = useState(false);
+  // Whether the fresh lookup has answered, live or not.
+  const [looked, setLooked] = useState(false);
 
   useEffect(() => {
     if (!channelId) return;
     let cancelled = false;
-    resolveLiveVideoId(channelId)
-      .then((id) => !cancelled && id && setLive({ videoId: id, bucket: Math.floor(Date.now() / FRAME_REFRESH_MS) }))
+    const show = (id: string | null) =>
+      !cancelled && id && setLive({ videoId: id, bucket: Math.floor(Date.now() / FRAME_REFRESH_MS) });
+    // The stream found last time shows at once, unless the fresh lookup is
+    // already back; the fresh one replaces it either way.
+    let fresh = false;
+    savedLiveVideoId(channelId)
+      .then((id) => !fresh && show(id))
       .catch(() => {});
+    resolveLiveVideoIdForTile(channelId)
+      .then((id) => {
+        fresh = true;
+        show(id);
+      })
+      .catch(() => {})
+      .finally(() => !cancelled && setLooked(true));
     return () => {
       cancelled = true;
     };
   }, [channelId]);
 
-  if (!live) return null;
+  const looking = !!channelId && !looked;
+  if (!live) return { frame: null, looking };
   return {
-    uri: `https://i.ytimg.com/vi/${live.videoId}/${small ? 'mqdefault_live' : 'sddefault_live'}.jpg?t=${live.bucket}`,
-    cropBars: !small,
-    onError: () => setSmall(true),
+    frame: {
+      uri: `https://i.ytimg.com/vi/${live.videoId}/${small ? 'mqdefault_live' : 'sddefault_live'}.jpg?t=${live.bucket}`,
+      cropBars: !small,
+      // The sharp picture failing falls back to the small one; that failing too
+      // is the end of it.
+      onError: () => setSmall(true),
+      lastTry: small,
+    },
+    looking,
   };
 }
 
@@ -148,6 +208,11 @@ export function Chip({ text }: { text: string }) {
   );
 }
 
+// The badge's dot pulses a few times when it appears and then holds steady. A
+// pulse that never stops keeps the phone redrawing the whole screen every
+// frame for as long as a live tile is anywhere on it.
+const LIVE_PULSES = 3;
+
 export function LiveBadge() {
   // The value is made once, and not read out of a ref while drawing.
   const pulse = useMemo(() => new Animated.Value(1), []);
@@ -157,6 +222,7 @@ export function LiveBadge() {
         Animated.timing(pulse, { toValue: 0.25, duration: 700, useNativeDriver: true }),
         Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
       ]),
+      { iterations: LIVE_PULSES },
     );
     loop.start();
     return () => loop.stop();

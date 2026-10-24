@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { HWEvent } from 'react-native';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { PlayerControls, ProgressLine, type PlaybackTime } from '../components/PlayerControls';
 import type { ShellControls } from '../components/PlayerShell';
+import { StoreValue, useValueStore } from '../hooks/useValueStore';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { SourcePicker } from '../components/SourcePicker';
 import {
@@ -87,9 +89,8 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const readyId = useRef<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [buffering, setBuffering] = useState(false);
-  const [time, setTime] = useState<PlaybackTime>({ t: 0, d: 0 });
-  const timeRef = useRef(time);
-  timeRef.current = time;
+  // The clock arrives twice a second; only the controls that show it redraw.
+  const time = useValueStore<PlaybackTime>({ t: 0, d: 0 });
   // Skips are gathered: each press moves the target, and the player jumps once
   // the presses stop. A burst of separate jumps (or a held key) can leave the
   // TV's player stuck loading.
@@ -111,7 +112,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
     );
 
   const seekBy = (seconds: number) => {
-    const { t, d } = timeRef.current;
+    const { t, d } = time.get();
     const from = pendingSeek.current?.target ?? t;
     // Recorded videos can't go past their end; live streams keep growing.
     const target = Math.max(0, item.kind === 'live' || d <= 0 ? from + seconds : Math.min(d - 1, from + seconds));
@@ -145,7 +146,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
   // A new source starts its own clock.
   useEffect(() => {
-    setTime({ t: 0, d: 0 });
+    time.set({ t: 0, d: 0 });
     setBuffering(false);
   }, [current?.id]);
 
@@ -245,7 +246,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
       setExternal(msg.data === 'external');
     } else if (msg.type === 'time') {
       const data = msg.data as PlaybackTime;
-      if (data && typeof data.t === 'number') setTime({ t: data.t, d: data.d || 0 });
+      if (data && typeof data.t === 'number') time.set({ t: data.t, d: data.d || 0 });
     } else if (msg.type === 'state') {
       // YouTube's states: 1 playing, 2 paused, 3 buffering.
       setPaused(msg.data === 2);
@@ -296,6 +297,21 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
   // A phone held upright shows the video at the top with its title below.
   const portraitPhone = !isTV && height > width;
+  const isLandscape = !isTV && width > height;
+
+  const toggleFullscreen = useCallback(() => {
+    if (isLandscape) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+    }
+  }, [isLandscape]);
+
+  useEffect(() => {
+    return () => {
+      ScreenOrientation.unlockAsync().catch(() => {});
+    };
+  }, []);
 
   return (
     <View style={styles.screen}>
@@ -328,15 +344,21 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
             onMessage={onMessage}
           />
           {!isTV && !external && !mini && (
-            <PlayerControls
-              paused={paused}
-              buffering={buffering}
-              time={time}
-              live={item.kind === 'live'}
-              onToggle={() => send(paused ? 'play' : 'pause')}
-              onSeekBy={seekBy}
-              onSeekTo={(sec) => send('seekTo', sec)}
-            />
+            <StoreValue store={time}>
+              {(now) => (
+                <PlayerControls
+                  paused={paused}
+                  buffering={buffering}
+                  time={now}
+                  live={item.kind === 'live'}
+                  onToggle={() => send(paused ? 'play' : 'pause')}
+                  onSeekBy={seekBy}
+                  onSeekTo={(sec) => send('seekTo', sec)}
+                  isFullscreen={isLandscape}
+                  onToggleFullscreen={!isTV ? toggleFullscreen : undefined}
+                />
+              )}
+            </StoreValue>
           )}
         </View>
       )}
@@ -444,7 +466,11 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
                   ? 'OK: pause / play    Back: home'
                   : 'OK: pause / play    ◀ ▶: 10 seconds    Back: home'}
           </Text>
-          {!external && <ProgressLine time={time} live={item.kind === 'live'} target={seekTarget} />}
+          {!external && (
+            <StoreValue store={time}>
+              {(now) => <ProgressLine time={now} live={item.kind === 'live'} target={seekTarget} />}
+            </StoreValue>
+          )}
         </View>
       )}
 

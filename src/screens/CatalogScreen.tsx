@@ -70,6 +70,9 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [exhausted, setExhausted] = useState(false);
+  const [nearBottom, setNearBottom] = useState(false);
+  const viewportH = useRef(0);
+  const contentH = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const latest = useRef('');
 
@@ -164,6 +167,8 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
   const growFilms = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!movies) return;
     const left = e.contentSize.height - (e.contentOffset.y + e.layoutMeasurement.height);
+    const fits = e.contentSize.height <= e.layoutMeasurement.height;
+    setNearBottom(left < e.layoutMeasurement.height || fits);
     if (left < e.layoutMeasurement.height) {
       setReveal((current) =>
         current.count >= movies.length
@@ -298,6 +303,14 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
         contentContainerStyle={styles.grid}
         refreshControl={refreshControl}
         {...LIST_PERF}
+        onLayout={(e) => {
+          viewportH.current = e.nativeEvent.layout.height;
+          setNearBottom((prev) => prev || contentH.current <= viewportH.current);
+        }}
+        onContentSizeChange={(_, h) => {
+          contentH.current = h;
+          setNearBottom((prev) => prev || h <= viewportH.current);
+        }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.6}
         onScroll={growFilms}

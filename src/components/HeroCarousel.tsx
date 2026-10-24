@@ -1,7 +1,8 @@
 // The big featured card at the top of a tab: the newest uploads from its
 // channels, one at a time, with a Watch Now button and page dots.
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   FlatList,
   Pressable,
   StyleSheet,
@@ -15,7 +16,10 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { loadVideos, type Video } from '../api/youtube';
+import { pictureFade, pictureShown, pictureWasShown } from './Cards';
+import { Shimmer } from './Shimmer';
 import { FocusRow } from './FocusRow';
+import { recallRow, rememberRow } from '../data/rowMemory';
 import type { VideoSource } from '../data/channels';
 import { GUTTER, RADIUS, SCRIM, colors, isTV, sz } from '../theme';
 
@@ -35,27 +39,35 @@ const SLIDES = 6;
 const HERO_SIZES = ['maxresdefault', 'hq720', 'mqdefault'];
 const ROTATE_MS = 6000;
 
-export function HeroCarousel({ sources, label, onPlay, takeFocus = false }: Props) {
+export const HeroCarousel = memo(function HeroCarousel({ sources, label, onPlay, takeFocus = false }: Props) {
   const { width, height } = useWindowDimensions();
-  const [slides, setSlides] = useState<Featured[]>([]);
+  // Built again after being scrolled far away, it shows the same slides at once.
+  const memoryKey = `hero:${label}`;
+  const [slides, setSlides] = useState<Featured[]>(() => recallRow<Featured>(memoryKey)?.videos ?? []);
   const [index, setIndex] = useState(0);
   const list = useRef<FlatList<Featured>>(null);
   const touched = useRef(0);
 
   const cardWidth = width - GUTTER * 2;
-  const cardHeight = isTV ? Math.round(height * 0.5) : Math.round(cardWidth * 1.02);
+  // On TV it leaves room below for the first row of cards.
+  const cardHeight = isTV ? Math.round(height * 0.4) : Math.round(cardWidth * 1.02);
 
   useEffect(() => {
+    if (slides.length) return;
     let cancelled = false;
-    Promise.all(sources.map((s) => loadVideos(s).catch(() => [] as Video[]))).then((lists) => {
+    const activeSources = sources.length > 8 ? sources.slice(0, 8) : sources;
+    Promise.all(activeSources.map((s) => loadVideos(s).catch(() => [] as Video[]))).then((lists) => {
       if (cancelled) return;
       const all = lists
-        .flatMap((l, i) => l.map((v) => ({ ...v, channel: sources[i].name })))
-        .sort((a, b) => b.published.localeCompare(a.published));
+        .flatMap((l, i) => (Array.isArray(l) ? l.map((v) => ({ ...v, channel: activeSources[i]?.name ?? '' })) : []))
+        .filter((v) => v && v.id)
+        .sort((a, b) => (b.published || '').localeCompare(a.published || ''));
       // One slide per channel first, so the carousel isn't all from one place.
       const firstPerChannel = all.filter((v, i) => all.findIndex((o) => o.channel === v.channel) === i);
       const rest = all.filter((v) => !firstPerChannel.includes(v));
-      setSlides([...firstPerChannel, ...rest].slice(0, SLIDES));
+      const picked = [...firstPerChannel, ...rest].slice(0, SLIDES);
+      rememberRow(memoryKey, { videos: picked });
+      setSlides(picked);
     });
     return () => {
       cancelled = true;
@@ -67,6 +79,8 @@ export function HeroCarousel({ sources, label, onPlay, takeFocus = false }: Prop
   useEffect(() => {
     if (isTV || slides.length < 2) return;
     const timer = setInterval(() => {
+      // Nothing to turn for while the app is out of sight.
+      if (AppState.currentState !== 'active') return;
       if (Date.now() - touched.current < ROTATE_MS) return;
       const next = (index + 1) % slides.length;
       list.current?.scrollToIndex({ index: next, animated: true });
@@ -78,7 +92,13 @@ export function HeroCarousel({ sources, label, onPlay, takeFocus = false }: Prop
   const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) =>
     setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
 
-  if (slides.length === 0) return <View style={[styles.skeleton, { height: cardHeight }]} />;
+  if (slides.length === 0) {
+    return (
+      <View style={[styles.skeleton, { height: cardHeight }]}>
+        <Shimmer width={cardWidth} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
@@ -115,7 +135,7 @@ export function HeroCarousel({ sources, label, onPlay, takeFocus = false }: Prop
       </View>
     </View>
   );
-}
+});
 
 function Slide({
   video,
@@ -135,16 +155,24 @@ function Slide({
   // Not every upload has a full-resolution thumbnail, so step down through the
   // 16:9 sizes. (hqdefault is 4:3 with black bars baked in, so it's skipped.)
   const [size, setSize] = useState(0);
+  const [loadedUri, setLoadedUri] = useState<string | null>(null);
+  const slideWidth = useWindowDimensions().width - GUTTER * 2;
   const uri = `https://i.ytimg.com/vi/${video.id}/${HERO_SIZES[size]}.jpg`;
   const [focused, setFocused] = useState(false);
 
   return (
     <Pressable onPress={onPlay} focusable={false} style={[styles.slide, { height }]}>
+      {/* Shimmers until the big picture is in. */}
+      {loadedUri !== uri && !pictureWasShown(uri) ? <Shimmer width={slideWidth} /> : null}
       <Image
         source={uri}
         style={StyleSheet.absoluteFill}
         contentFit="cover"
-        transition={200}
+        transition={pictureFade(uri, 200)}
+        onLoad={() => {
+          pictureShown(uri);
+          setLoadedUri(uri);
+        }}
         cachePolicy="memory-disk"
         onError={() => setSize((n) => Math.min(n + 1, HERO_SIZES.length - 1))}
       />
@@ -180,7 +208,13 @@ function Slide({
 
 const styles = StyleSheet.create({
   wrap: { marginTop: 4, marginBottom: sz(6, 12) },
-  skeleton: { marginHorizontal: GUTTER, borderRadius: RADIUS + 8, backgroundColor: colors.surface, marginBottom: 26 },
+  skeleton: {
+    marginHorizontal: GUTTER,
+    borderRadius: RADIUS + 8,
+    backgroundColor: colors.surface,
+    marginBottom: 26,
+    overflow: 'hidden',
+  },
   slide: { borderRadius: RADIUS + 8, overflow: 'hidden', backgroundColor: colors.surface, justifyContent: 'flex-end' },
   info: { padding: sz(20, 32) },
   label: { color: 'rgba(246,244,250,0.75)', fontSize: sz(13, 16), fontWeight: '600', marginBottom: 6 },

@@ -275,7 +275,7 @@ export function AnimatedSplash({ ready, progress, status, posters, onDone }: Pro
             </Animated.View>
           </View>
           <Text style={styles.credit}>
-            Made with <Text style={styles.heart}>♥</Text> by Kishor
+            Made with <Text style={styles.heart}>♥</Text>
           </Text>
         </Animated.View>
       </View>
