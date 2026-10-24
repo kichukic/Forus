@@ -36,6 +36,7 @@ import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
 import { CatalogScreen } from './CatalogScreen';
 import { StreamioBoxScreen } from './StreamioBoxScreen';
 import { MovieboxScreen } from './MovieboxScreen';
+import { CineboxScreen } from './CineboxScreen';
 import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
 import { THEMES, type Theme } from '../data/themes';
@@ -58,6 +59,8 @@ const TABS = [
   { id: 'all', label: 'All' },
   { id: 'moviebox', label: 'MovieBox' },
   { id: 'streamiobox', label: 'StreamioBox' },
+  { id: 'cinebox', label: 'Cinebox' },
+  { id: 'cinebox', label: 'Cinebox' },
   { id: 'movies', label: 'Malayalam Movies' },
   { id: 'shows', label: 'Shows' },
   { id: 'hindi', label: 'Hindi' },
@@ -305,7 +308,7 @@ function HomeScreenView({
             </Text>
           </View>
           {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
-          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' ? 'all' : tab)} />
+          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' || tab === 'cinebox' ? 'all' : tab)} />
           {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
           {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
         </View>
@@ -470,6 +473,18 @@ function HomeScreenView({
           onOpenSeries={onOpenStreamioSeries}
           refreshControl={refreshControl}
           history={history}
+          onPlay={onPlay}
+        />,
+      )}
+
+      {panel(
+        'cinebox',
+        <CineboxScreen
+          key={`cinebox-${refreshKey}`}
+          embedded
+          refreshControl={refreshControl}
+          onOpenMovie={onOpenMovie}
+          onOpenSeries={onOpenStreamioSeries}
           onPlay={onPlay}
         />,
       )}

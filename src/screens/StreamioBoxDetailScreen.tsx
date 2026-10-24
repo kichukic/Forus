@@ -4,16 +4,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { loadMeta, type StreamioItem } from '../api/streamiobox';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
+import { resolveDirectSeriesEpisode } from '../api/directStreams';
 import { showToast } from '../data/toasts';
 import { GUTTER, RADIUS, colors, isTV } from '../theme';
+import type { Playable } from '../types';
 
 type Props = {
   item: StreamioItem;
   onClose: () => void;
   onSendRelease: (option: TorrentOption) => void;
+  onPlay?: (item: Playable) => void;
 };
 
-export function StreamioBoxDetailScreen({ item, onClose, onSendRelease }: Props) {
+export function StreamioBoxDetailScreen({ item, onClose, onSendRelease, onPlay }: Props) {
   const insets = useSafeAreaInsets();
   const [meta, setMeta] = useState<{ item: StreamioItem; videos: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,10 +37,21 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease }: Props)
     return () => { alive = false; };
   }, [item.id]);
 
-  const sendEpisode = async (v: any) => {
+  const playOrSendEpisode = async (v: any) => {
     const key = v.id ?? `${v.season}:${v.episode}`;
     setSending(key);
     try {
+      // 1. Try playing direct stream straight in the player:
+      if (onPlay && v.season != null && v.episode != null) {
+        const direct = await resolveDirectSeriesEpisode(item.title, v.season, v.episode);
+        if (direct?.playable) {
+          showToast({ text: `Playing ${item.title} S${v.season}E${v.episode}` });
+          onPlay(direct.playable);
+          return;
+        }
+      }
+
+      // 2. Fallback to torrent releases:
       const q = `${item.title} S${String(v.season).padStart(2, '0')}E${String(v.episode).padStart(2, '0')}`;
       const list = await searchTorrents(q);
       if (list.length === 0) {
@@ -45,9 +59,9 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease }: Props)
         return;
       }
       onSendRelease(list[0]);
-      showToast({ text: `Sent ${list[0].name}` });
+      showToast({ text: `Sent ${list[0].name} to TorBox` });
     } catch {
-      showToast({ text: "Couldn't look up releases." });
+      showToast({ text: "Couldn't load stream for episode." });
     } finally {
       setSending(null);
     }
@@ -86,14 +100,23 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease }: Props)
                 return (
                   <Pressable
                     key={key}
-                    onPress={() => sendEpisode(v)}
+                    onPress={() => playOrSendEpisode(v)}
                     disabled={sending === key}
                     style={({ focused, pressed }) => [styles.episode, (focused || pressed) && styles.episodeActive]}
                   >
-                    <Text style={styles.episodeTitle} numberOfLines={1}>
-                      {v.episode}. {v.name ?? `Episode ${v.episode}`}
-                    </Text>
-                    <Text style={styles.episodeMeta}>{sending === key ? 'Sending…' : 'Send to TorBox'}</Text>
+                    <View style={styles.episodeMain}>
+                      <Text style={styles.episodeTitle} numberOfLines={1}>
+                        {v.episode}. {v.name ?? `Episode ${v.episode}`}
+                      </Text>
+                      <Text style={styles.episodeMeta}>
+                        {sending === key ? 'Starting…' : 'Play in Player'}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="play-circle"
+                      size={22}
+                      color={colors.accent}
+                    />
                   </Pressable>
                 );
               })}
@@ -107,7 +130,7 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease }: Props)
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, height: isTV ? 420 : 300 },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, height: isTV ? 380 : 260 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: GUTTER, paddingBottom: 8 },
   back: { width: isTV ? 44 : 38, height: isTV ? 44 : 38, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   topTitle: { flex: 1, color: colors.text, fontSize: isTV ? 20 : 17, fontWeight: '800' },
@@ -119,10 +142,22 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, fontSize: isTV ? 15 : 13, marginTop: 6 },
   description: { color: colors.muted, fontSize: isTV ? 16 : 14, lineHeight: isTV ? 24 : 20, marginBottom: 18 },
   sectionTitle: { color: colors.text, fontSize: isTV ? 20 : 17, fontWeight: '800', marginTop: 14, marginBottom: 10 },
-  note: { color: colors.muted, fontSize: isTV ? 15 : 13, marginTop: 10 },
-  seasonBlock: { marginBottom: 8 },
-  episode: { paddingVertical: isTV ? 12 : 10, paddingHorizontal: 14, marginBottom: 8, borderRadius: RADIUS, backgroundColor: colors.surface, borderWidth: 2, borderColor: 'transparent' },
+  episode: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: isTV ? 14 : 11,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    borderRadius: RADIUS,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
   episodeActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  episodeMain: { flex: 1 },
   episodeTitle: { color: colors.text, fontSize: isTV ? 16 : 14, fontWeight: '700' },
   episodeMeta: { color: colors.muted, fontSize: isTV ? 13 : 12, marginTop: 3 },
+  seasonBlock: { marginBottom: 12 },
+  note: { color: colors.muted, fontSize: isTV ? 15 : 13, marginTop: 10 },
 });

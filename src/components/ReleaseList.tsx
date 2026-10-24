@@ -39,13 +39,13 @@ export function ReleaseList({ releases, onSend, error, emptyText }: Props) {
               {item.name}
             </Text>
             <Text style={styles.releaseMeta}>
-              {[item.quality, item.size, item.seeders !== undefined ? `${item.seeders} seeds` : null]
+              {[item.quality, item.size, item.seeders !== undefined ? `${item.seeders} seeds` : null, 'Play in Player']
                 .filter(Boolean)
                 .join(' · ')}
             </Text>
           </View>
           {item.tracker ? <Text style={styles.tracker}>{item.tracker}</Text> : null}
-          <Ionicons name="cloud-download-outline" size={20} color={colors.faint} />
+          <Ionicons name="play-circle-outline" size={22} color={colors.accent} />
         </Pressable>
       ))}
     </View>

@@ -177,7 +177,7 @@ export default function App() {
       return true;
     });
     return () => sub.remove();
-  }, [playing, mini, screen, torboxFrom, movie, moviebox, closeTorbox]);
+  }, [playing, mini, screen, torboxFrom, movie, moviebox, streamioSeries, closeTorbox]);
 
   // On TV nothing behind a player may keep remote focus, so it's hidden.
   const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!streamioSeries);
@@ -317,6 +317,7 @@ export default function App() {
               key={streamioSeries.id}
               item={streamioSeries}
               onClose={() => setStreamioSeries(null)}
+              onPlay={play}
               onSendRelease={(option) => {
                 setStreamioSeries(null);
                 addTransfer(option);
