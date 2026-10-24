@@ -140,6 +140,8 @@ function toSubject(raw: RawSubject): MovieboxSubject | null {
   if (!raw?.subjectId || !raw.title) return null;
   // Films for adults are left out, so they turn up nowhere in the app.
   if (isAdult(raw)) return null;
+  // Skip cam rips.
+  if (/\bcam\b/i.test(raw.title ?? '')) return null;
   return {
     id: String(raw.subjectId),
     // The service puts emoji in its titles too, so they are taken out.

@@ -2,7 +2,7 @@
   "expo": {
     "name": "ForUs",
     "slug": "MytvstreamApp",
-    "version": "1.0.113",
+    "version": "1.0.127",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
@@ -43,7 +43,8 @@
           "icon": "./assets/images/notification-icon.png",
           "color": "#9b5cff"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "android": {
       "package": "com.forus.app",
@@ -51,7 +52,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundImage": "./assets/images/adaptive-background.png"
       },
-      "versionCode": 114,
+      "versionCode": 128,
       "permissions": [
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ]
