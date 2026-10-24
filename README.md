@@ -72,10 +72,46 @@ The **JACKBOX** engine acts as the primary global discovery layer for internatio
 * **Metadata Normalization:** Automatically extracts and links canonical identifiers (`imdb_id`, `tmdb_id`, external IDs, genres, runtimes, and certifications) to prepare titles for direct stream resolution.
 
 ### 3.2. MovieBox Cryptographic CDN Engine (`src/api/moviebox.ts`, `src/api/directStreams.ts`)
-A zero-login reverse-engineered client for the MovieBox enterprise content delivery network:
-* **Cryptographic Request Signing:** Emulates native client request signing using deterministic MD5 HMAC hashing (`src/api/md5.ts`) with visitor session negotiation on `api6.aoneroom.com`.
-* **Direct MP4 Extraction:** Interrogates subject hierarchies (`searchSubjects` ➔ `playableRows` ➔ `directStream`) to resolve direct, clean, full-length **1080p, 720p, and 480p CDN MP4 video streams**.
-* **Zero-Buffer Playback:** Streams raw `.mp4` URLs directly into the native video player without web wrappers, iframe sandboxes, or advertisement injections.
+
+#### 3.2.1. Multi-Host Pool & Automatic Failover
+The client communicates with MovieBox's distributed Backend-for-Frontend (BFF) architecture. To guard against DNS poisoning, regional IP blocking, or server degradation, requests cascade automatically across an active multi-region host pool:
+* `https://api6.aoneroom.com` (Primary production gateway)
+* `https://api5.aoneroom.com` (Failover cluster A)
+* `https://api4.aoneroom.com` (Failover cluster B)
+* `https://api6sg.aoneroom.com` (Southeast Asia CDN relay)
+* `https://api.inmoviebox.com` (Global ingress backup)
+
+If any host returns an HTTP 5xx error, network timeout (20s budget), or dropped connection, the client seamlessly shifts traffic to the next healthy host without presenting error dialogues to the user.
+
+#### 3.2.2. Synthetic Device Emulation & Session Negotiation
+MovieBox's API expects verified requests from its official Android client (`com.community.oneroom`). The client synthesizes and preserves a persistent device identity in `AsyncStorage`:
+* **Device Tokens:** Generates a 32-character hexadecimal `deviceId` and randomized Google Advertising ID (`gaid`).
+* **Client Fingerprint (`x-client-info`):** Serializes hardware parameters (brand, model, architecture, network type, display dimensions) simulating an Android 13 Cronet environment.
+* **Network Masking (`x-forwarded-for`):** Dispatches requests with randomized subnets to prevent centralized IP rate-limiting.
+* **Visitor Authentication (`getToken`):** Automatically requests and refreshes ephemeral visitor JWT bearer tokens via `POST /wefeed-mobile-bff/user-api/visitor-login` whenever an HTTP 401 or 407 response occurs.
+
+#### 3.2.3. Cryptographic Request Signing Pipeline
+Every outbound HTTP request must be cryptographically signed using deterministic HMAC-MD5 hashing (`src/api/md5.ts`). Requests with invalid or missing signatures are rejected by the server:
+1. **Canonicalization:** Formats an RFC-style canonical string combining HTTP method, MIME type, payload byte count, epoch timestamp, MD5 hash of the request body, and alphabetically sorted query parameters:
+   $$\text{Canonical} = \text{Method} + "\backslash\text{n}" + \text{ContentType} + "\backslash\text{n}" + \text{ContentLength} + "\backslash\text{n}" + \text{Timestamp} + "\backslash\text{n}" + \text{MD5(Payload)} + "\backslash\text{n}" + \text{CanonicalQuery}$$
+2. **Signature Generation:** Hashes the canonical string against the enterprise secret key (`efa891974eecd3148df...`) using pure JavaScript HMAC-MD5 to produce the `x-tr-signature` header:
+   $$\text{x-tr-signature} = \text{Timestamp} + "|2|" + \text{HMAC-MD5}_{\text{Base64}}(\text{Secret}, \text{Canonical})$$
+3. **Timestamp Token:** Appends `x-client-token` derived from reversed epoch timestamp digits to validate clock synchronization.
+
+#### 3.2.4. End-to-End Movie Ingestion & Stream Resolution
+When a user selects any film in the app (e.g. from the JACKBOX catalog, Search, or Watch History), the ingestion pipeline in `src/api/directStreams.ts` resolves playable direct media streams through a multi-stage flow:
+
+1. **Title Normalization:** Cleans the search query by stripping bracketed release tags (e.g., `[Hindi]`, `[CAM]`, `[Dual Audio]`).
+2. **Catalog Discovery (`searchSubjects`):** Dispatches a signed query to `/subject-api/search/v2`.
+3. **4-Tier Waterfall Title Matching:**
+   * **Tier 1 (Exact Match):** Matches normalized title and release year precisely.
+   * **Tier 2 (Title Exact):** Matches normalized title regardless of year variance.
+   * **Tier 3 (Substring Match):** Resolves titles containing localized suffixes or alternate subtitles.
+   * **Tier 4 (Relevance Fallback):** Selects the top search candidate if confidence scores exceed thresholds.
+4. **Playable Resource Interrogation (`playableRows`):** Interrogates `/subject-api/resource/v2` with `subjectId` and `isVip=true`. Handles dual-filing idiosyncrasies where standalone feature films may be filed under Season 0/Episode 0 or Season 1/Episode 1.
+5. **Full-Length CDN Stream Extraction (`directStream`):** Queries `/subject-api/resource-position/v2` to extract authenticated CDN URLs. A byte-length heuristic (`size > episode.size * 4`) distinguishes true full-length feature files from short marketing teasers/previews.
+6. **Subtitles & Multi-Audio Extraction (`captions`):** Ingests multi-language SRT subtitle tracks and audio dubs (e.g. English, Hindi, Malayalam) and synchronizes them directly with the player.
+7. **Direct Hardware Playback:** The extracted direct `.mp4` CDN link is loaded into `expo-video` (ExoPlayer). The player issues standard HTTP byte-range requests (`bytes=0-`) directly to edge servers, delivering zero-buffer, hardware-decoded 1080p and 720p playback.
 
 #### MovieBox Request Signing & CDN Stream Sequence
 
@@ -84,27 +120,35 @@ sequenceDiagram
     autonumber
     actor User as User
     participant UI as Application UI
-    participant API as MovieBox Client (moviebox.ts)
-    participant Auth as Auth and Signing (md5.ts)
-    participant Remote as api6.aoneroom.com
-    participant CDN as CDN Edge Server
-    participant Player as Native ExoPlayer
+    participant Resolver as Direct Stream Resolver (directStreams.ts)
+    participant Client as MovieBox Client (moviebox.ts)
+    participant Crypto as Request Signer (md5.ts)
+    participant BFF as Backend API (api6.aoneroom.com)
+    participant CDN as Edge Video CDN
+    participant Exo as Native ExoPlayer
 
-    User->>UI: Select Title or Episode
-    UI->>API: resolveDirectMovieStreams(title, year)
-    API->>Auth: Compute MD5 signature and timestamp
-    Auth-->>API: Signed payload + Visitor Token
-    API->>Remote: POST /api/v1/search (query, signature)
-    Remote-->>API: Match subject metadata and subjectId
-    API->>Remote: GET /api/v1/detail (subjectId, season, ep)
-    Remote-->>API: Stream row definitions (resolutions, file sizes)
-    API->>Remote: GET /api/v1/download (rowId, visitorToken)
-    Remote-->>API: Signed CDN video URL (.mp4)
-    API-->>UI: DirectStreamOption (1080p, 720p)
-    UI->>Player: Mount VideoView with direct CDN stream
-    Player->>CDN: Range request (Byte streaming)
-    CDN-->>Player: Video stream buffer
-    Player-->>User: Instant Hardware-Accelerated Playback
+    User->>UI: Select Title (e.g. Inception 2010)
+    UI->>Resolver: resolveDirectMovieStreams(title, year)
+    Resolver->>Client: searchSubjects(cleanTitle, page)
+    Client->>Crypto: Sign canonical payload with secret key
+    Crypto-->>Client: Generate x-tr-signature and x-client-token
+    Client->>BFF: POST /subject-api/search/v2 (Signed Headers)
+    BFF-->>Client: Subject list (subjectId, title, year, dubs)
+    Resolver->>Resolver: 4-Tier Waterfall Title and Year Match
+    Resolver->>Client: playableRows(subjectId, season=0, ep=0)
+    Client->>BFF: GET /subject-api/resource/v2 (isVip=true)
+    BFF-->>Client: Playable rows (resolutions: 1080p, 720p, resourceIds)
+    loop For Each Playable Row
+        Resolver->>Client: directStream(subjectId, resourceId)
+        Client->>BFF: GET /subject-api/resource-position/v2 (Signed)
+        BFF-->>Client: Authenticated direct CDN MP4 URL
+        Resolver->>Resolver: Discriminate Full-Length vs Preview (size check)
+    end
+    Resolver-->>UI: Return DirectStreamOption list (1080p, 720p)
+    UI->>Exo: Mount VideoView with direct CDN MP4 URL
+    Exo->>CDN: HTTP GET Range: bytes=0- (Hardware Decode)
+    CDN-->>Exo: High-Speed MP4 Data Stream
+    Exo-->>User: Instant Bufferless Hardware Playback
 ```
 
 ### 3.3. StreamioBox Addon Protocol Engine (`src/api/streamiobox.ts`, `src/screens/StreamioBoxScreen.tsx`)
