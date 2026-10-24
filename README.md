@@ -22,34 +22,34 @@ The application synthesizes live broadcast feeds, decentralized metadata registr
 ```mermaid
 flowchart TD
     subgraph UI ["Presentation Layer (Dual-Mode Responsive)"]
-        TV["Android TV Leanback UI\n(FocusEngine, D-Pad Remote)"]
-        Mobile["Mobile / Tablet Touch UI\n(Gesture Navigation, Auto-Orientation)"]
-        Shell["PlayerShell\n(Mini-Player / Picture-in-Picture)"]
+        TV["Android TV Leanback UI<br/>(FocusEngine, D-Pad Remote)"]
+        Mobile["Mobile / Tablet Touch UI<br/>(Gesture Navigation, Auto-Orientation)"]
+        Shell["PlayerShell<br/>(Mini-Player / Picture-in-Picture)"]
     end
 
-    subgraph State ["Application State & Memory"]
-        History["LRU Watch History\n(AsyncStorage)"]
-        HealthMat["Source Health Matrix\n(Circuit Breaker)"]
-        Transfers["TorBox Transfer Queue\n(Active Daemon)"]
+    subgraph State ["Application State and Memory"]
+        History["LRU Watch History<br/>(AsyncStorage)"]
+        HealthMat["Source Health Matrix<br/>(Circuit Breaker)"]
+        Transfers["TorBox Transfer Queue<br/>(Active Daemon)"]
     end
 
     subgraph Engines ["Content Aggregation Engines"]
-        JACKBOX["JACKBOX Engine\n(TMDB API Proxy)"]
-        MovieBox["MovieBox Engine\n(Signed CDN Resolver)"]
-        Streamio["StreamioBox Engine\n(Stremio Addon Protocol)"]
-        TorBoxEng["TorBox Cloud Engine\n(Debrid / Torrent Cache)"]
-        LiveEng["Live & Official Broadcast\n(YouTube Scraper Mesh)"]
+        JACKBOX["JACKBOX Engine<br/>(TMDB API Proxy)"]
+        MovieBox["MovieBox Engine<br/>(Signed CDN Resolver)"]
+        Streamio["StreamioBox Engine<br/>(Stremio Addon Protocol)"]
+        TorBoxEng["TorBox Cloud Engine<br/>(Debrid / Torrent Cache)"]
+        LiveEng["Live and Official Broadcast<br/>(YouTube Scraper Mesh)"]
     end
 
-    subgraph Transport ["Transport & Stream Resolution"]
-        DirectCDN["Direct CDN Resolver\n(1080p / 720p MP4)"]
-        DebridStream["TorBox Debrid Stream\n(HLS / WebDL / Direct File)"]
-        YTBridge["YouTube / Extractor Bridge\n(Piped, Invidious, Cobalt)"]
+    subgraph Transport ["Transport and Stream Resolution"]
+        DirectCDN["Direct CDN Resolver<br/>(1080p / 720p MP4)"]
+        DebridStream["TorBox Debrid Stream<br/>(HLS / WebDL / Direct File)"]
+        YTBridge["YouTube / Extractor Bridge<br/>(Piped, Invidious, Cobalt)"]
     end
 
     subgraph CorePlayer ["Native Playback Subsystem"]
-        Exo["expo-video Engine\n(Hardware-Accelerated ExoPlayer)"]
-        Subtitles["Subtitle Engine\n(OpenSubtitles REST / SRT Parser)"]
+        Exo["expo-video Engine<br/>(Hardware-Accelerated ExoPlayer)"]
+        Subtitles["Subtitle Engine<br/>(OpenSubtitles REST / SRT Parser)"]
     end
 
     TV --> Shell
@@ -85,17 +85,17 @@ sequenceDiagram
     actor User as User
     participant UI as Application UI
     participant API as MovieBox Client (moviebox.ts)
-    participant Auth as Auth & Signing (md5.ts)
+    participant Auth as Auth and Signing (md5.ts)
     participant Remote as api6.aoneroom.com
     participant CDN as CDN Edge Server
     participant Player as Native ExoPlayer
 
     User->>UI: Select Title or Episode
     UI->>API: resolveDirectMovieStreams(title, year)
-    API->>Auth: Compute MD5 signature & timestamp
+    API->>Auth: Compute MD5 signature and timestamp
     Auth-->>API: Signed payload + Visitor Token
     API->>Remote: POST /api/v1/search (query, signature)
-    Remote-->>API: Match subject metadata & subjectId
+    Remote-->>API: Match subject metadata and subjectId
     API->>Remote: GET /api/v1/detail (subjectId, season, ep)
     Remote-->>API: Stream row definitions (resolutions, file sizes)
     API->>Remote: GET /api/v1/download (rowId, visitorToken)
@@ -162,59 +162,60 @@ Aggregates official Malayalam news channels and entertainment distributors:
 
 ```mermaid
 flowchart TD
-    Start(["User Requests Title Playback"]) --> CheckDirect{"Direct CDN Stream\nAvailable? (MovieBox)"}
+    Start(["User Requests Title Playback"]) --> CheckDirect{"Direct CDN Stream<br/>Available? (MovieBox)"}
     
-    CheckDirect -- "Yes" --> PlayDirect["Launch expo-video (ExoPlayer)\nStream 1080p/720p CDN MP4 directly"]
+    CheckDirect -->|Yes| PlayDirect["Launch expo-video (ExoPlayer)<br/>Stream 1080p/720p CDN MP4 directly"]
+    CheckDirect -->|No| CheckDebrid{"TorBox Key Present<br/>and Cached?"}
     
-    CheckDirect -- "No" --> CheckDebrid{"TorBox Key Present & Cached?"}
+    CheckDebrid -->|Yes| GetDebridLink["Request authenticated HLS/File URL<br/>from TorBox API"]
+    GetDebridLink --> PlayDebrid["Stream from TorBox High-Speed Cloud<br/>(Instant Debrid Playback)"]
     
-    CheckDebrid -- "Yes" --> GetDebridLink["Request authenticated HLS/File URL\nfrom TorBox API"]
-    GetDebridLink --> PlayDebrid["Stream from TorBox High-Speed Cloud\n(Instant Debrid Playback)"]
+    CheckDebrid -->|No| CheckSwarm{"Search Torrentio / DHT<br/>(PirateBay and Nyaa)"}
     
-    CheckDebrid -- "No" --> CheckSwarm{"Search Torrentio / DHT\n(PirateBay & Nyaa)"}
-    
-    CheckSwarm -- "Seeds Found" --> SendTransfer["Add to Cloud Transfer Daemon\n(addTransfer)"]
-    SendTransfer --> MonitorTransfer["Poll Cloud Download Progress\nShow In-App Notification"]
+    CheckSwarm -->|Seeds Found| SendTransfer["Add to Cloud Transfer Daemon<br/>(addTransfer)"]
+    SendTransfer --> MonitorTransfer["Poll Cloud Download Progress<br/>Show In-App Notification"]
     MonitorTransfer --> Ready{"Download Complete?"}
-    Ready -- "Yes" --> PlayDebrid
-    Ready -- "No / Pending" --> ToastWait["Background Download Active\nNotify User via Toast"]
+    Ready -->|Yes| PlayDebrid
+    Ready -->|Pending| ToastWait["Background Download Active<br/>Notify User via Toast"]
     
-    CheckSwarm -- "No Torrents" --> FallbackMesh{"YouTube / Web VOD?"}
-    FallbackMesh -- "Live / Channel" --> ResolveLive["Resolve Live Stream ID\nvia Channel /live Page"]
-    ResolveLive --> PlayYT["Mount WebView Bridge Player\n(Fallback: Piped / Cobalt / Invidious)"]
-    FallbackMesh -- "None" --> ErrorState["Display 'No Streams Found' Toast"]
+    CheckSwarm -->|No Torrents| FallbackMesh{"YouTube / Web VOD?"}
+    FallbackMesh -->|Live Feed| ResolveLive["Resolve Live Stream ID<br/>via Channel /live Page"]
+    ResolveLive --> PlayYT["Mount Extractor Bridge Player<br/>(Fallback: Piped / Cobalt / Invidious)"]
+    FallbackMesh -->|None| ErrorState["Display No Streams Found Toast"]
 ```
 
 #### Dual-Mode UI Navigation & Player State Machine
 
 ```mermaid
-stateDiagram-v2
-    [*] --> HomeScreen: App Launch / Preload Complete
+flowchart TD
+    AppLaunch(["App Launch / Preload Complete"]) --> HomeNav
 
-    state HomeScreen {
-        [*] --> TabBrowsing
-        TabBrowsing --> FocusRow: Remote Up / Tab Switch
-        FocusRow --> TabBrowsing: D-Pad Down / Select Content
-    }
+    subgraph HomeNav ["HomeScreen Navigation Flow"]
+        TabBrowsing["TabBrowsing (Channels, JACKBOX, Movies, Series)"]
+        FocusRow["FocusRow (D-Pad Remote Up / Category Switch)"]
+        TabBrowsing <-->|Remote Up / Down| FocusRow
+    end
 
-    HomeScreen --> DetailScreen: Select Movie / Series Card
-    DetailScreen --> FullscreenPlayer: Tap 'Watch Now' / Select Stream
-    HomeScreen --> FullscreenPlayer: Select Quick Play / History Item
+    HomeNav -->|Select Movie or Series Card| DetailScreen["DetailScreen (Metadata, Cast, Streams)"]
+    HomeNav -->|Select Quick Play or History| FullscreenPlayer
+    DetailScreen -->|Tap Watch Now or Select Stream| FullscreenPlayer
 
-    state FullscreenPlayer {
-        [*] --> NativeBuffering
-        NativeBuffering --> ActivePlaying: ExoPlayer Ready
-        ActivePlaying --> Seeking: D-Pad Left/Right (10s Seek)
-        Seeking --> ActivePlaying: Settle (550ms Debounce)
-        ActivePlaying --> Paused: D-Pad OK / Touch Tap
-        Paused --> ActivePlaying: D-Pad OK / Resume
-    }
+    subgraph PlayerModes ["Player Lifecycle and Controls"]
+        Buffering["Native Buffering (ExoPlayer Engine)"]
+        ActivePlaying["Active Playing (Hardware Accelerated)"]
+        Seeking["Seeking (D-Pad Left/Right 10s Debounce)"]
+        Paused["Paused (Touch Tap or D-Pad Center)"]
 
-    FullscreenPlayer --> MiniPlayer: Mobile Back Press (Phone)
-    FullscreenPlayer --> DetailScreen: TV Remote Back Press
-    MiniPlayer --> FullscreenPlayer: Tap Floating Mini Bar
-    MiniPlayer --> HomeScreen: Swipe Dismiss / Close (✕)
-    DetailScreen --> HomeScreen: Back Button / Remote Back
+        Buffering -->|Ready| ActivePlaying
+        ActivePlaying <-->|10s Seek / Settle| Seeking
+        ActivePlaying <-->|Play / Pause Toggle| Paused
+    end
+
+    FullscreenPlayer -->|Mobile Back Press| MiniPlayer["MiniPlayer (Floating Bottom Bar)"]
+    FullscreenPlayer -->|TV Remote Back Press| DetailScreen
+    MiniPlayer -->|Tap Mini Bar| FullscreenPlayer
+    MiniPlayer -->|Swipe Dismiss or Close| HomeNav
+    DetailScreen -->|Back Navigation| HomeNav
 ```
 
 ---
@@ -231,27 +232,27 @@ stateDiagram-v2
 #### Adaptive Circuit Breaker State Transition
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Closed: Initial State (Normal Operation)
-    
-    state Closed {
-        [*] --> ServingTraffic: Requests routed to primary extractors
-    }
+flowchart LR
+    Init(["Start"]) --> Closed
 
-    Closed --> Open: Failures >= Error Threshold (Consecutive Errors)
-    
-    state Open {
-        [*] --> Quarantine: Provider blacklisted for cooldown window (10-30 min)
-    }
+    subgraph S_Closed ["Closed State (Normal Operation)"]
+        Closed["Serving Traffic<br/>All requests routed to primary extractors"]
+    end
 
-    Open --> HalfOpen: Cooldown Window Expires
-    
-    state HalfOpen {
-        [*] --> ProbeRequest: Single test request dispatched
-    }
+    Closed -->|Consecutive Failures reach Threshold| Open
 
-    HalfOpen --> Closed: Probe Request Succeeds (Reset Error Counters)
-    HalfOpen --> Open: Probe Request Fails (Renew Quarantine Cooldown)
+    subgraph S_Open ["Open State (Quarantined)"]
+        Open["Quarantine Cooldown<br/>Provider blacklisted for 10-30 minutes"]
+    end
+
+    Open -->|Cooldown Window Expires| HalfOpen
+
+    subgraph S_HalfOpen ["Half-Open State (Probing)"]
+        HalfOpen["Probe Request<br/>Single test request dispatched"]
+    end
+
+    HalfOpen -->|Probe Request Succeeds| Closed
+    HalfOpen -->|Probe Request Fails| Open
 ```
 
 ---
