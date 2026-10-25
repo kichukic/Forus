@@ -16,6 +16,8 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { PlayerControls, ProgressLine, type PlaybackTime } from '../components/PlayerControls';
 import type { ShellControls } from '../components/PlayerShell';
 import { StoreValue, useValueStore } from '../hooks/useValueStore';
+import type { SharedTitle } from '../chat/api';
+import { SendToFriend } from '../chat/SendToFriend';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { SourcePicker } from '../components/SourcePicker';
 import {
@@ -101,6 +103,8 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const [external, setExternal] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The film being sent to a friend, while the friend list is open.
+  const [sharing, setSharing] = useState<SharedTitle | null>(null);
   const [trying, setTrying] = useState<string | null>(null);
 
   const blockedKey =
@@ -394,13 +398,25 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
             {item.kind === 'live' ? '● LIVE  ' : ''}
             {item.title}
           </Text>
-          <Pressable onPress={() => setPickerOpen(true)} style={styles.link}>
-            <Text style={styles.linkText}>
-              {trying ? `Trying ${trying}…` : `Source: ${current?.label ?? '…'}`}
-            </Text>
-          </Pressable>
+          <View style={styles.infoActions}>
+            <Pressable onPress={() => setPickerOpen(true)} style={styles.link}>
+              <Text style={styles.linkText}>
+                {trying ? `Trying ${trying}…` : `Source: ${current?.label ?? '…'}`}
+              </Text>
+            </Pressable>
+            {item.kind === 'video' && (
+              <Pressable
+                onPress={() => setSharing({ kind: 'video', videoId: item.videoId, title: item.title })}
+                style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+              >
+                <Ionicons name="paper-plane-outline" size={15} color={colors.text} />
+                <Text style={styles.shareText}>Send to a friend</Text>
+              </Pressable>
+            )}
+          </View>
         </RelatedPanel>
       )}
+      <SendToFriend title={sharing} onClose={() => setSharing(null)} />
 
       {!isTV && !mini && (
         <Pressable
@@ -493,6 +509,19 @@ const styles = StyleSheet.create({
   webview: { flex: 1, backgroundColor: '#000' },
   infoTitle: { color: colors.text, fontSize: 17, fontWeight: '700', lineHeight: 24 },
   link: { marginTop: 8 },
+  infoActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' },
+  share: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceRaised,
+  },
+  sharePressed: { opacity: 0.6 },
+  shareText: { color: colors.text, fontSize: 13, fontWeight: '700' },
   linkText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
   close: {
     position: 'absolute',

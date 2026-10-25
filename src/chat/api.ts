@@ -1,0 +1,145 @@
+// The ForUs chat server (MytvstreamAppBackend): accounts, friends and
+// messages. The sign-in token is kept in the device's secure storage. The
+// server is hosted on Render; its address can be changed on the sign-in
+// screen, e.g. to test against one run on a computer at home.
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { fetchWithTimeout } from '../api/http';
+
+export type ChatUser = { id: string; name: string; email: string };
+export type Me = ChatUser & { phone?: string };
+
+// A ForUs film or episode shared in a chat.
+export type SharedTitle = { kind: 'video'; videoId: string; title: string };
+
+export type ChatMessage = {
+  id: string;
+  sender: string;
+  recipient: string;
+  text?: string;
+  title?: SharedTitle;
+  createdAt: string;
+  readAt?: string;
+};
+
+export type Conversation = { user: ChatUser; last: ChatMessage; unread: number };
+export type FriendEntry = { requestId: string; user: ChatUser };
+export type FriendLists = { friends: FriendEntry[]; incoming: FriendEntry[]; outgoing: FriendEntry[] };
+export type Relation = 'none' | 'friends' | 'requested' | 'incoming';
+
+const TOKEN_KEY = 'chat-token';
+const SERVER_KEY = 'chat-server';
+// The hosted server on Render. EXPO_PUBLIC_CHAT_SERVER overrides it at build
+// time, e.g. http://<computer's Wi-Fi IP>:4000 for a server run at home.
+export const DEFAULT_SERVER = process.env.EXPO_PUBLIC_CHAT_SERVER ?? 'https://mytvstreamappbackend.onrender.com';
+
+let server = DEFAULT_SERVER;
+let token: string | null = null;
+
+/** Reads the saved server address and sign-in. True if signed in. */
+export async function loadSession(): Promise<boolean> {
+  server = (await AsyncStorage.getItem(SERVER_KEY).catch(() => null)) ?? DEFAULT_SERVER;
+  token = await SecureStore.getItemAsync(TOKEN_KEY).catch(() => null);
+  return !!token;
+}
+
+export function serverAddress() {
+  return server;
+}
+
+export function sessionToken() {
+  return token;
+}
+
+export async function setServerAddress(address: string) {
+  server = address.trim().replace(/\/+$/, '') || DEFAULT_SERVER;
+  await AsyncStorage.setItem(SERVER_KEY, server);
+}
+
+async function saveToken(value: string | null) {
+  token = value;
+  if (value) await SecureStore.setItemAsync(TOKEN_KEY, value);
+  else await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
+}
+
+/** A problem the server explained, with its message for the person. */
+export class ChatError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(
+      server + path,
+      {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      10000,
+    );
+  } catch {
+    throw new ChatError(0, "Can't reach the chat server. Check the connection.");
+  }
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new ChatError(res.status, data?.error ?? 'Something went wrong.');
+  return data as T;
+}
+
+export async function register(input: { email: string; password: string; name: string; phone?: string }) {
+  const out = await call<{ token: string; user: Me }>('POST', '/auth/register', input);
+  await saveToken(out.token);
+  return out.user;
+}
+
+export async function signIn(email: string, password: string) {
+  const out = await call<{ token: string; user: Me }>('POST', '/auth/login', { email, password });
+  await saveToken(out.token);
+  return out.user;
+}
+
+export async function signOut() {
+  await saveToken(null);
+}
+
+export const getMe = () => call<{ user: Me }>('GET', '/me').then((r) => r.user);
+export const updateMe = (patch: { name?: string; phone?: string }) =>
+  call<{ user: Me }>('PATCH', '/me', patch).then((r) => r.user);
+
+/** Someone by exact email or phone number. */
+export function lookUp(query: string) {
+  const q = query.trim();
+  const param = q.includes('@') ? `email=${encodeURIComponent(q)}` : `phone=${encodeURIComponent(q)}`;
+  return call<{ user: ChatUser; status: Relation }>('GET', `/users/lookup?${param}`);
+}
+
+export const getFriends = () => call<FriendLists>('GET', '/friends');
+export const sendRequest = (userId: string) =>
+  call<{ status: Relation; requestId?: string }>('POST', '/friends/requests', { userId });
+export const acceptRequest = (requestId: string) => call<unknown>('POST', `/friends/requests/${requestId}/accept`);
+export const dropRequest = (requestId: string) => call<unknown>('DELETE', `/friends/requests/${requestId}`);
+export const unfriend = (userId: string) => call<unknown>('DELETE', `/friends/${userId}`);
+
+export const getConversations = () =>
+  call<{ conversations: Conversation[] }>('GET', '/conversations').then((r) => r.conversations);
+
+export const getMessages = (userId: string, before?: string) =>
+  call<{ messages: ChatMessage[]; more: boolean }>(
+    'GET',
+    `/conversations/${userId}/messages${before ? `?before=${encodeURIComponent(before)}` : ''}`,
+  );
+
+export const sendMessage = (userId: string, content: { text?: string; title?: SharedTitle }) =>
+  call<{ message: ChatMessage }>('POST', `/conversations/${userId}/messages`, content).then((r) => r.message);
+
+export const markRead = (userId: string) => call<unknown>('POST', `/conversations/${userId}/read`);

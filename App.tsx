@@ -23,6 +23,8 @@ import { FatalErrorScreen } from './src/screens/FatalErrorScreen';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
+import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
+import { startChat } from './src/chat/store';
 import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
 import { StreamioBoxDetailScreen } from './src/screens/StreamioBoxDetailScreen';
 import { MovieboxPlayerScreen } from './src/screens/MovieboxPlayerScreen';
@@ -55,6 +57,9 @@ const MIN_FRESH_POSTERS = 16;
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const home = useRef<HomeHandle>(null);
+  const chat = useRef<ChatHandle>(null);
+  // An open conversation fills the screen, without the bottom bar.
+  const [chatFull, setChatFull] = useState(false);
   // The opening animation. It stays until the home screen's data has loaded
   // (or loading gave up), so the home screen opens already filled in.
   const [splash, setSplash] = useState(true);
@@ -89,6 +94,8 @@ export default function App() {
     loadHistory().then(setHistory);
     loadTransfers();
     setupTransferNotices();
+    // Chat is for phones; the TV has no bottom bar to reach it.
+    if (!isTV) startChat();
     checkForUpdate().then((u) => {
       if (u) setUpdatePrompt(u);
     });
@@ -168,6 +175,7 @@ export default function App() {
         if (isTV) closePlayer();
         else setMini(true);
       } else if (screen === 'torbox') closeTorbox();
+      else if (screen === 'chat' && chat.current?.goBack()) return true;
       else if (screen !== 'home') setScreen('home');
       else if (playing) closePlayer();
       // TV: Back first goes to the top of the page and the tabs, then to the
@@ -181,7 +189,7 @@ export default function App() {
 
   // On TV nothing behind a player may keep remote focus, so it's hidden.
   const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!streamioSeries);
-  const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox;
+  const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox && !(screen === 'chat' && chatFull);
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
 
   return (
@@ -215,6 +223,16 @@ export default function App() {
               onPlay={play}
               onOpenMoviebox={setMoviebox}
               onSendRelease={(option) => addTransfer(option)}
+            />
+          </View>
+        )}
+
+        {screen === 'chat' && (
+          <View style={layer('chat')}>
+            <ChatScreen
+              ref={chat}
+              onFullScreen={setChatFull}
+              onPlay={(title) => play({ kind: 'video', videoId: title.videoId, title: title.title })}
             />
           </View>
         )}
