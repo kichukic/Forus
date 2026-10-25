@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +17,7 @@ import { formatSize, getApiKey, listVideoFiles, type TorboxFile } from '../api/t
 import { searchSubjects, type MovieboxSubject } from '../api/moviebox';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { searchVideos, type SearchResult } from '../api/youtube';
+import { aiVibeSearch, ChatError, type AiVibeResult } from '../chat/api';
 import { FileCardContent } from '../components/FileCardContent';
 import { VideoCardContent } from '../components/Cards';
 import { FocusCard } from '../components/FocusCard';
@@ -77,6 +79,17 @@ const SCOPE_TEXT: Record<SearchScope, { heading: string; placeholder: string; no
   },
 };
 
+const VIBE_SUGGESTIONS = [
+  '🌧️ Rainy Noir Detective',
+  '🚀 Gritty Space Survival',
+  '🧠 Mind-bending Sci-Fi Plot Twist',
+  '🛋️ Wholesome Cozy Comfort',
+  '🩸 Intense Psychological Thriller',
+  '🏎️ High Octane Adrenaline Heist',
+  '🌌 Ethereal Cyberpunk Aesthetic',
+  '🏰 Epic Medieval Dark Fantasy',
+];
+
 // Typing on a TV remote is slow, so a search runs once typing pauses.
 const DEBOUNCE_MS = 700;
 // Two letters are half a word, and a search on half a word finds nothing but
@@ -100,6 +113,9 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
   const searchesEverywhere = scope === 'all' || scope === 'torbox';
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
+  const [vibeMode, setVibeMode] = useState(false);
+  const [aiResults, setAiResults] = useState<{ query: string; list: AiVibeResult[] } | null>(null);
+  const [resolvingAi, setResolvingAi] = useState<string | null>(null);
   const [files, setFiles] = useState<{ query: string; list: TorboxFile[] } | null>(null);
   const [videos, setVideos] = useState<{ query: string; list: SearchResult[] } | null>(null);
   // The films and the releases the name matched.
@@ -125,6 +141,30 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
     if (q.length < MIN_SEARCH) return;
     const timer = setTimeout(async () => {
       setLoading(true);
+      setError(null);
+      if (vibeMode) {
+        try {
+          const results = await aiVibeSearch(q);
+          if (latest.current !== q) return;
+          setAiResults({ query: q, list: results });
+        } catch (e) {
+          if (latest.current === q) {
+            // status 0 means the request never reached the server; anything
+            // else is a server-side problem, so show what it actually said.
+            const err = e as ChatError;
+            setError({
+              query: q,
+              message: err.status
+                ? `AI search failed: ${err.message}`
+                : "Couldn't get AI recommendations. Check your connection.",
+            });
+          }
+        } finally {
+          if (latest.current === q) setLoading(false);
+        }
+        return;
+      }
+
       try {
         const words = q.toLowerCase().split(/\s+/);
         const files = searchesTorbox
@@ -170,13 +210,50 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
       }
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query, scope, searchesTorbox, searchesEverywhere]);
+  }, [query, scope, searchesTorbox, searchesEverywhere, vibeMode]);
+
+  const toggleVibeMode = () => {
+    setVibeMode((prev) => {
+      const next = !prev;
+      if (next) {
+        setFilms(null);
+        setReleases(null);
+        setFiles(null);
+        setVideos(null);
+      } else {
+        setAiResults(null);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAiResult = async (rec: AiVibeResult) => {
+    setResolvingAi(rec.title);
+    try {
+      const res = await searchSubjects(rec.title, 1);
+      if (res.subjects && res.subjects.length > 0) {
+        onOpenMoviebox(res.subjects[0]);
+      } else {
+        setVibeMode(false);
+        setQuery(rec.title);
+      }
+    } catch {
+      setVibeMode(false);
+      setQuery(rec.title);
+    } finally {
+      setResolvingAi(null);
+    }
+  };
 
   // Only what was found for the name in the box is shown.
   const fileList = files && files.query === query.trim() ? files.list : [];
   const videoList = videos && videos.query === query.trim() ? videos.list : [];
   const filmList = films && films.query === query.trim() ? films.list : [];
   const releaseList = releases && releases.query === query.trim() ? releases.list : [];
+  const aiResultList =
+    vibeMode && aiResults && aiResults.query === query.trim() && query.trim().length >= MIN_SEARCH
+      ? aiResults.list
+      : [];
 
   const playVideo = (video: SearchResult) => onPlay({ kind: 'video', videoId: video.id, title: video.title });
 
@@ -215,12 +292,16 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
       <Animated.Text style={[styles.heading, headingIn]}>{text.heading}</Animated.Text>
       <Animated.View style={[styles.inputWrap, focused && styles.inputWrapFocused, barIn]}>
         <Animated.View style={iconIn}>
-          <Ionicons name="search" size={sz(19, 22)} color={focused ? colors.accent : colors.muted} />
+          <Ionicons
+            name={vibeMode ? 'sparkles' : 'search'}
+            size={sz(19, 22)}
+            color={vibeMode ? colors.accent : focused ? colors.accent : colors.muted}
+          />
         </Animated.View>
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder={text.placeholder}
+          placeholder={vibeMode ? 'Describe a mood, plot, or vibe…' : text.placeholder}
           placeholderTextColor={colors.muted}
           autoFocus
           autoCorrect={false}
@@ -230,29 +311,114 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
+        <Pressable
+          onPress={toggleVibeMode}
+          style={({ pressed }) => [
+            styles.vibePill,
+            vibeMode && styles.vibePillActive,
+            pressed && { opacity: 0.8 },
+          ]}
+        >
+          <Ionicons
+            name="sparkles"
+            size={sz(13, 15)}
+            color={vibeMode ? '#0c0a12' : colors.accent}
+          />
+          <Text style={[styles.vibePillText, vibeMode && styles.vibePillTextActive]}>
+            AI Vibe
+          </Text>
+        </Pressable>
       </Animated.View>
-      <Animated.Text style={[styles.note, { opacity: noteIn }]}>{text.note}</Animated.Text>
+      <Animated.Text style={[styles.note, { opacity: noteIn }]}>
+        {vibeMode
+          ? 'AI Mood Search powered by Gemini. Finds exact movie recommendations based on aesthetic, emotion, or story premise.'
+          : text.note}
+      </Animated.Text>
+
+      {vibeMode && query.trim().length === 0 && (
+        <View style={styles.vibeSuggestions}>
+          <Text style={styles.vibeSuggestionsTitle}>Try these moods & vibes:</Text>
+          <View style={styles.vibeChipsWrap}>
+            {VIBE_SUGGESTIONS.map((s) => (
+              <Pressable
+                key={s}
+                onPress={() => setQuery(s.replace(/^[^\s]+\s*/, ''))}
+                style={({ pressed }) => [styles.vibeChip, pressed && { opacity: 0.75 }]}
+              >
+                <Text style={styles.vibeChipText}>{s}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
 
       {loading && (
         <SkeletonLoader
           columns={columns}
           cardWidth={cardWidth}
-          label={scope === 'torbox' ? 'Searching your TorBox' : 'Searching the channels'}
+          label={
+            vibeMode
+              ? 'Asking Gemini for recommendations…'
+              : scope === 'torbox'
+              ? 'Searching your TorBox'
+              : 'Searching the channels'
+          }
           style={styles.loader}
         />
       )}
       {error && error.query === query.trim() && <Text style={styles.note}>{error.message}</Text>}
 
-      {filmList.length === 0 &&
+      {vibeMode && aiResultList.length > 0 && (
+        <ScrollView contentContainerStyle={styles.aiScroll} showsVerticalScrollIndicator={false}>
+          <Text style={styles.blockTitle}>Recommended for &ldquo;{aiResults?.query}&rdquo;</Text>
+          {aiResultList.map((rec, i) => (
+            <Pressable
+              key={`${rec.title}-${rec.year ?? i}`}
+              onPress={() => handleSelectAiResult(rec)}
+              style={({ pressed }) => [
+                styles.aiCard,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+              ]}
+            >
+              <View style={styles.aiCardHeader}>
+                <View style={styles.aiTitleWrap}>
+                  <Text style={styles.aiCardTitle}>{rec.title}</Text>
+                  {rec.year ? <Text style={styles.aiCardYear}>({rec.year})</Text> : null}
+                </View>
+                <View style={styles.aiActionBadge}>
+                  <Ionicons
+                    name={resolvingAi === rec.title ? 'hourglass' : 'play-circle'}
+                    size={sz(15, 17)}
+                    color={colors.accent}
+                  />
+                  <Text style={styles.aiActionText}>
+                    {resolvingAi === rec.title ? 'Opening…' : 'Watch'}
+                  </Text>
+                </View>
+              </View>
+              {rec.reason ? <Text style={styles.aiCardReason}>{rec.reason}</Text> : null}
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+
+      {vibeMode && !loading && query.trim().length >= MIN_SEARCH && aiResultList.length === 0 && !error && (
+        <Text style={styles.note}>No recommendations found for that vibe. Try phrasing differently.</Text>
+      )}
+
+      {!vibeMode &&
+        filmList.length === 0 &&
         releaseList.length === 0 &&
         fileList.length === 0 &&
         videoList.length === 0 &&
-        !loading && <Text style={styles.note}>{text.empty}</Text>}
+        !loading &&
+        query.trim().length >= MIN_SEARCH && <Text style={styles.note}>{text.empty}</Text>}
 
-      {(videoList.length > 0 ||
-        filmList.length > 0 ||
-        releaseList.length > 0 ||
-        fileList.length > 0) && (
+      {!vibeMode &&
+        (videoList.length > 0 ||
+          filmList.length > 0 ||
+          releaseList.length > 0 ||
+          fileList.length > 0) && (
         <FlatList
           key={columns}
           data={videoList}
@@ -427,4 +593,112 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   films: { gap: CARD_GAP, paddingRight: GUTTER },
+  vibePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: sz(10, 14),
+    paddingVertical: sz(6, 8),
+    borderRadius: 16,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  vibePillActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  vibePillText: {
+    color: colors.accent,
+    fontSize: sz(12, 14),
+    fontWeight: '800',
+  },
+  vibePillTextActive: {
+    color: '#0c0a12',
+  },
+  vibeSuggestions: {
+    marginTop: 18,
+    marginHorizontal: GUTTER,
+  },
+  vibeSuggestionsTitle: {
+    color: colors.muted,
+    fontSize: sz(13, 15),
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  vibeChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  vibeChip: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: sz(12, 14),
+    paddingVertical: sz(8, 10),
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  vibeChipText: {
+    color: colors.text,
+    fontSize: sz(13, 15),
+    fontWeight: '600',
+  },
+  aiScroll: {
+    paddingHorizontal: GUTTER,
+    paddingTop: 18,
+    paddingBottom: 120,
+    gap: 12,
+  },
+  aiCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: sz(14, 18),
+    gap: 8,
+  },
+  aiCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  aiTitleWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  aiCardTitle: {
+    color: colors.text,
+    fontSize: sz(16, 20),
+    fontWeight: '800',
+  },
+  aiCardYear: {
+    color: colors.muted,
+    fontSize: sz(13, 16),
+    fontWeight: '600',
+  },
+  aiActionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.surfaceRaised,
+    paddingHorizontal: sz(10, 14),
+    paddingVertical: sz(5, 7),
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  aiActionText: {
+    color: colors.accent,
+    fontSize: sz(12, 14),
+    fontWeight: '700',
+  },
+  aiCardReason: {
+    color: colors.muted,
+    fontSize: sz(13, 15),
+    lineHeight: sz(18, 22),
+  },
 });

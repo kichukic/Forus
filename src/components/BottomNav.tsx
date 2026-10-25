@@ -1,17 +1,24 @@
-// The phone's bottom navigation bar. TVs use the tabs at the top instead.
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+// The phone's bottom navigation bar: a floating pill of frosted glass that
+// blurs the screen behind it. The other tabs are just icons; the selected one
+// opens into a purple pill with its icon and name, and springs across when
+// another is chosen. TVs use the tabs at the top instead.
+import { useState, type RefObject } from 'react';
+import { Animated, LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnreadCount } from '../chat/store';
+import { useDownloads } from '../data/downloads';
 import { Badge } from '../chat/ui';
 import { colors } from '../theme';
 
-export type NavId = 'home' | 'search' | 'history' | 'chat' | 'settings';
+export type NavId = 'home' | 'search' | 'downloads' | 'history' | 'chat' | 'settings';
 
 const ITEMS: { id: NavId; label: string; icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap }[] = [
   { id: 'home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
   { id: 'search', label: 'Search', icon: 'search-outline', activeIcon: 'search' },
+  { id: 'downloads', label: 'Downloads', icon: 'arrow-down-circle-outline', activeIcon: 'arrow-down-circle' },
   { id: 'history', label: 'History', icon: 'time-outline', activeIcon: 'time' },
   { id: 'chat', label: 'Chat', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles' },
   { id: 'settings', label: 'Settings', icon: 'settings-outline', activeIcon: 'settings' },
@@ -19,48 +26,158 @@ const ITEMS: { id: NavId; label: string; icon: keyof typeof Ionicons.glyphMap; a
 
 export const BOTTOM_NAV_HEIGHT = 64;
 
-export function BottomNav({ active, onSelect }: { active: NavId; onSelect: (id: NavId) => void }) {
+// The selected tab's pill opening and the others making room, as one spring.
+const SWITCH = {
+  duration: 380,
+  create: { type: LayoutAnimation.Types.spring, property: LayoutAnimation.Properties.scaleXY, springDamping: 0.75 },
+  update: { type: LayoutAnimation.Types.spring, springDamping: 0.75 },
+  delete: { type: LayoutAnimation.Types.easeOut, property: LayoutAnimation.Properties.opacity, duration: 120 },
+};
+
+type Props = {
+  active: NavId;
+  onSelect: (id: NavId) => void;
+  // The screens behind the bar, which its glass blurs (Android).
+  blurTarget?: RefObject<View | null>;
+};
+
+export function BottomNav({ active, onSelect, blurTarget }: Props) {
   const insets = useSafeAreaInsets();
   const unread = useUnreadCount();
+  const downloads = useDownloads();
+  const activeDownloads = downloads.filter((d) => d.status === 'downloading').length;
+
+  const select = (id: NavId) => {
+    if (id !== active) LayoutAnimation.configureNext(SWITCH);
+    onSelect(id);
+  };
+
   return (
-    <LinearGradient
-      colors={['rgba(12,10,18,0)', 'rgba(12,10,18,0.96)', colors.background]}
-      locations={[0, 0.35, 1]}
-      style={[styles.bar, { paddingBottom: insets.bottom + 6 }]}
-    >
-      <View style={styles.inner}>
-        {ITEMS.map((item) => {
-          const on = item.id === active;
-          return (
-            <Pressable key={item.id} onPress={() => onSelect(item.id)} style={styles.item} hitSlop={6}>
-              <View style={[styles.iconWrap, on && styles.iconWrapOn]}>
-                <Ionicons name={on ? item.activeIcon : item.icon} size={22} color={on ? colors.accent : colors.muted} />
-                {item.id === 'chat' && unread > 0 && <Badge count={unread} style={styles.badge} />}
-              </View>
-              <Text style={[styles.label, on && styles.labelOn]}>{item.label}</Text>
-            </Pressable>
-          );
-        })}
+    <View style={[styles.bar, { paddingBottom: insets.bottom + 10 }]} pointerEvents="box-none">
+      <View style={styles.shadow}>
+        <BlurView
+          intensity={60}
+          tint="dark"
+          blurTarget={blurTarget}
+          // GPU blur on Android 12 and newer; older phones get tinted glass.
+          blurMethod="dimezisBlurViewSdk31Plus"
+          style={styles.glass}
+        >
+          <LinearGradient
+            // A light sheen along the top edge of the glass.
+            colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0)']}
+            locations={[0, 0.5]}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          {ITEMS.map((item) => (
+            <Tab
+              key={item.id}
+              item={item}
+              on={item.id === active}
+              badge={item.id === 'chat' ? unread : item.id === 'downloads' ? activeDownloads : 0}
+              onPress={() => select(item.id)}
+            />
+          ))}
+        </BlurView>
       </View>
-    </LinearGradient>
+    </View>
+  );
+}
+
+function Tab({
+  item,
+  on,
+  badge,
+  onPress,
+}: {
+  item: (typeof ITEMS)[number];
+  on: boolean;
+  badge: number;
+  onPress: () => void;
+}) {
+  const [press] = useState(() => new Animated.Value(1));
+  const squeeze = (to: number) =>
+    Animated.spring(press, { toValue: to, useNativeDriver: true, speed: 40, bounciness: 8 }).start();
+
+  const icon = (
+    <View>
+      <Ionicons name={on ? item.activeIcon : item.icon} size={22} color={on ? '#fff' : colors.muted} />
+      {badge > 0 && <Badge count={badge} style={styles.badge} />}
+    </View>
+  );
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => squeeze(0.9)}
+      onPressOut={() => squeeze(1)}
+      style={[styles.item, on && styles.itemOn]}
+      hitSlop={4}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: on }}
+      accessibilityLabel={item.label}
+    >
+      <Animated.View style={{ transform: [{ scale: press }] }}>
+        {on ? (
+          <LinearGradient
+            colors={['#b07cff', colors.accent, colors.accentDeep]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.pill}
+          >
+            {icon}
+            <Text style={styles.pillLabel} numberOfLines={1}>
+              {item.label}
+            </Text>
+          </LinearGradient>
+        ) : (
+          <View style={styles.plain}>{icon}</View>
+        )}
+      </Animated.View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 18 },
-  inner: {
-    flexDirection: 'row',
-    height: BOTTOM_NAV_HEIGHT,
-    marginHorizontal: 14,
-    borderRadius: 22,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+  bar: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  shadow: {
+    marginHorizontal: 16,
+    borderRadius: 32,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 16,
   },
-  item: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  iconWrap: { paddingHorizontal: 14, paddingVertical: 3, borderRadius: 14 },
-  iconWrapOn: { backgroundColor: colors.accentSoft },
-  badge: { position: 'absolute', top: -4, right: 4 },
-  label: { color: colors.muted, fontSize: 11, fontWeight: '600', marginTop: 2 },
-  labelOn: { color: colors.accent, fontWeight: '800' },
+  glass: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: BOTTOM_NAV_HEIGHT,
+    paddingHorizontal: 6,
+    borderRadius: 32,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    // Tints the glass, and is the whole look where blur isn't available.
+    backgroundColor: 'rgba(22,18,32,0.62)',
+  },
+  item: { flex: 1, alignItems: 'center', justifyContent: 'center', height: '100%' },
+  itemOn: { flex: 2.1 },
+  plain: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    height: 44,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    shadowColor: colors.accent,
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  pillLabel: { color: '#fff', fontSize: 13.5, fontWeight: '800', letterSpacing: 0.2 },
+  badge: { position: 'absolute', top: -7, right: -12, borderWidth: 2, borderColor: '#1a1626' },
 });

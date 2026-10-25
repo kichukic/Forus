@@ -9,6 +9,10 @@ import { shareTitle } from '../chat/share';
 import { cueAt, type SubtitleCue } from '../api/subtitles';
 import type { ShellControls } from '../components/PlayerShell';
 import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
+import { useAudioTracks, audioTrackLabel } from '../hooks/useAudioTracks';
+import { useTraktScrobble } from '../hooks/useTraktScrobble';
+import { AudioTrackPicker } from '../components/AudioTrackPicker';
+import { showToast } from '../data/toasts';
 import { Loader } from '../components/Loader';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { VideoOverlay } from '../components/VideoOverlay';
@@ -49,6 +53,20 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const [captionOptions, setCaptionOptions] = useState<{ id: string; name: string; language: string; rating: string; downloads: number; url: string }[]>([]);
   const [chosen, setChosen] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<{ id: string; list: SubtitleCue[] } | null>(null);
+  const audio = useAudioTracks(player);
+  const [audioPickerOpen, setAudioPickerOpen] = useState(false);
+  useTraktScrobble(item.title, currentTime ?? 0, player.duration ?? 0, player.playing);
+
+  const cycleAudio = () => {
+    if (!audio.tracks.length) return;
+    const currentIdx = audio.tracks.findIndex(
+      (t) => (t.id && t.id === audio.selected?.id) || (t.language && t.language === audio.selected?.language),
+    );
+    const nextIdx = (currentIdx + 1) % audio.tracks.length;
+    const nextTrack = audio.tracks[nextIdx];
+    audio.select(nextTrack);
+    showToast({ text: `Audio: ${audioTrackLabel(nextTrack, nextIdx)}` });
+  };
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLang, setSearchLang] = useState('eng');
@@ -149,15 +167,22 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
       )}
 
       {!isTV && !mini && (
-        <Pressable
-          onPress={() => {
-            setSearchQuery(cleanName(item.title));
-            setSearchOpen(true);
-          }}
-          style={styles.ccButton}
-        >
-          <Text style={styles.ccText}>CC</Text>
-        </Pressable>
+        <>
+          {audio.hasMultiple ? (
+            <Pressable onPress={() => setAudioPickerOpen(true)} style={[styles.ccButton, { right: 58 }]}>
+              <Ionicons name="volume-high" size={14} color={colors.accent} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => {
+              setSearchQuery(cleanName(item.title));
+              setSearchOpen(true);
+            }}
+            style={styles.ccButton}
+          >
+            <Text style={styles.ccText}>CC</Text>
+          </Pressable>
+        </>
       )}
 
       {searchOpen && (
@@ -219,6 +244,17 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
           <Text style={styles.infoTitle}>{item.title}</Text>
           <View style={styles.infoActions}>
             <Text style={styles.infoNote}>From your TorBox</Text>
+            {audio.hasMultiple ? (
+              <Pressable
+                onPress={() => setAudioPickerOpen(true)}
+                style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+              >
+                <Ionicons name="volume-high-outline" size={15} color={colors.accent} />
+                <Text style={[styles.shareText, { color: colors.accent }]}>
+                  {audio.selected ? audioTrackLabel(audio.selected) : 'Audio'}
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => shareTitle({
                 kind: 'file',
@@ -245,6 +281,8 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
           show={showOverlay}
           onToggle={() => (player.playing ? player.pause() : player.play())}
           onSeekBy={(seconds) => player.seekBy(seconds)}
+          hasMultipleAudio={audio.hasMultiple}
+          onCycleAudio={cycleAudio}
         />
       )}
 
@@ -263,6 +301,14 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
           <Ionicons name="chevron-down" size={22} color="#fff" />
         </Pressable>
       )}
+
+      <AudioTrackPicker
+        visible={audioPickerOpen}
+        tracks={audio.tracks}
+        selected={audio.selected}
+        onSelect={audio.select}
+        onClose={() => setAudioPickerOpen(false)}
+      />
     </View>
   );
 }

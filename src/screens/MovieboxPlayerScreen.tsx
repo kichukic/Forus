@@ -19,6 +19,10 @@ import { shareMoviebox } from '../chat/share';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { VideoOverlay } from '../components/VideoOverlay';
+import { AudioTrackPicker } from '../components/AudioTrackPicker';
+import { useAudioTracks, audioTrackLabel } from '../hooks/useAudioTracks';
+import { useTraktScrobble } from '../hooks/useTraktScrobble';
+import { showToast } from '../data/toasts';
 import { useRemoteSeek } from '../hooks/useRemoteSeek';
 import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import type { ShellControls } from '../components/PlayerShell';
@@ -65,6 +69,20 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   // The words of the subtitle being shown, kept with the language they are
   // for, so the right ones are shown while a new one is on its way.
   const [loaded, setLoaded] = useState<{ id: string; list: SubtitleCue[] } | null>(null);
+  const audio = useAudioTracks(player);
+  const [audioPickerOpen, setAudioPickerOpen] = useState(false);
+  useTraktScrobble(item.title, currentTime ?? 0, player.duration ?? 0, player.playing);
+
+  const cycleAudio = () => {
+    if (!audio.tracks.length) return;
+    const currentIdx = audio.tracks.findIndex(
+      (t) => (t.id && t.id === audio.selected?.id) || (t.language && t.language === audio.selected?.language),
+    );
+    const nextIdx = (currentIdx + 1) % audio.tracks.length;
+    const nextTrack = audio.tracks[nextIdx];
+    audio.select(nextTrack);
+    showToast({ text: `Audio: ${audioTrackLabel(nextTrack, nextIdx)}` });
+  };
 
   // On a TV the remote's seek and play/pause keys drive the player, and the
   // native controls are switched off (they eat the D-pad). The overlay below
@@ -193,6 +211,8 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
           show={showOverlay}
           onToggle={() => (player.playing ? player.pause() : player.play())}
           onSeekBy={(seconds) => player.seekBy(seconds)}
+          hasMultipleAudio={audio.hasMultiple}
+          onCycleAudio={cycleAudio}
         />
       )}
 
@@ -230,6 +250,17 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
           <Text style={styles.infoTitle}>{item.title}</Text>
           <View style={styles.infoActions}>
             <Text style={styles.infoNote}>From MovieBox</Text>
+            {audio.hasMultiple ? (
+              <Pressable
+                onPress={() => setAudioPickerOpen(true)}
+                style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+              >
+                <Ionicons name="volume-high-outline" size={15} color={colors.accent} />
+                <Text style={[styles.shareText, { color: colors.accent }]}>
+                  {audio.selected ? audioTrackLabel(audio.selected) : 'Audio'}
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => shareMoviebox({ id: item.subjectId, title: item.title, poster: item.poster })}
               style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
@@ -279,6 +310,14 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
           <Text style={styles.minimizeText}>⌄</Text>
         </Pressable>
       )}
+
+      <AudioTrackPicker
+        visible={audioPickerOpen}
+        tracks={audio.tracks}
+        selected={audio.selected}
+        onSelect={audio.select}
+        onClose={() => setAudioPickerOpen(false)}
+      />
     </View>
   );
 }

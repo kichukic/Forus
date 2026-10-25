@@ -14,6 +14,7 @@ import { GUTTER, colors } from '../theme';
 import type { ChatMessage, ChatUser, SharedTitle } from './api';
 import { closeConversation, loadOlder, openConversation, send, useChat } from './store';
 import { Avatar, Header, chatStyles } from './ui';
+import { MicButton, RecordingBar, VoiceBubble, useVoiceRecorder } from './VoiceNote';
 
 type Props = {
   user: ChatUser;
@@ -27,6 +28,7 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
   const thread = threads[user.id];
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const voice = useVoiceRecorder(user.id);
   // Unfriended (by either side): the history stays, but nothing more can be sent.
   const stillFriends = friends === null || friends.friends.some((f) => f.user.id === user.id);
 
@@ -98,23 +100,32 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
       />
       {stillFriends ? (
         <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Message"
-            placeholderTextColor={colors.faint}
-            multiline
-            maxLength={4000}
-            style={styles.input}
-          />
-          <Pressable
-            onPress={submit}
-            disabled={!draft.trim() || sending}
-            accessibilityLabel="Send"
-            style={({ pressed }) => [styles.send, (!draft.trim() || pressed) && styles.sendIdle]}
-          >
-            <Ionicons name="send" size={18} color="#fff" />
-          </Pressable>
+          {voice.recording ? (
+            <RecordingBar elapsedMs={voice.elapsedMs} />
+          ) : (
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Message"
+              placeholderTextColor={colors.faint}
+              multiline
+              maxLength={4000}
+              style={styles.input}
+            />
+          )}
+          {/* With nothing typed, the button records a voice message instead. */}
+          {draft.trim() ? (
+            <Pressable
+              onPress={submit}
+              disabled={sending}
+              accessibilityLabel="Send"
+              style={({ pressed }) => [styles.send, pressed && styles.sendIdle]}
+            >
+              <Ionicons name="send" size={18} color="#fff" />
+            </Pressable>
+          ) : (
+            <MicButton recording={voice.recording} onStart={voice.start} onFinish={() => voice.finish(true)} />
+          )}
         </View>
       ) : (
         <Text style={[chatStyles.note, styles.ended, { paddingBottom: insets.bottom + 16 }]}>
@@ -142,7 +153,9 @@ function Bubble({
   const title = message.title;
   return (
     <View style={[styles.bubbleRow, mine ? styles.right : styles.left, !grouped && styles.gap]}>
-      {title ? (
+      {message.voice ? (
+        <VoiceBubble message={message} mine={mine} time={time} />
+      ) : title ? (
         <Pressable
           onPress={() => onPlay(title)}
           style={({ pressed }) => [styles.card, mine ? styles.cardMine : styles.cardTheirs, pressed && styles.pressed]}

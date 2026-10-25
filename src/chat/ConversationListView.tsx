@@ -11,6 +11,7 @@ import { GUTTER, colors } from '../theme';
 import type { ChatUser, Conversation } from './api';
 import { refresh, useChat } from './store';
 import { Avatar, Badge, Button, Header, IconButton, chatStyles, shortTime } from './ui';
+import { formatDuration } from './voice';
 
 type Props = {
   onOpen: (user: ChatUser) => void;
@@ -76,7 +77,11 @@ export function ConversationListView({ onOpen, onFriends, onProfile }: Props) {
 
 function Row({ item, meId, onPress }: { item: Conversation; meId?: string; onPress: () => void }) {
   const mine = item.last.sender === meId;
-  const preview = item.last.title ? `Sent a film: ${item.last.title.title}` : (item.last.text ?? '');
+  const preview = item.last.voice
+    ? `Voice message ${formatDuration(item.last.voice.durationMs)}`
+    : item.last.title
+      ? `Sent a film: ${item.last.title.title}`
+      : (item.last.text ?? '');
   const unread = item.unread > 0;
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>

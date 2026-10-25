@@ -28,6 +28,8 @@ export type ChatMessage = {
   recipient: string;
   text?: string;
   title?: SharedTitle;
+  // A voice message; its recording is kept on the phone (see voice.ts).
+  voice?: { durationMs: number };
   createdAt: string;
   readAt?: string;
 };
@@ -82,7 +84,7 @@ export class ChatError extends Error {
   }
 }
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function call<T>(method: string, path: string, body?: unknown, timeoutMs = 10000): Promise<T> {
   let res: Response;
   try {
     res = await fetchWithTimeout(
@@ -95,7 +97,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       },
-      10000,
+      timeoutMs,
     );
   } catch {
     throw new ChatError(0, "Can't reach the chat server. Check the connection.");
@@ -193,3 +195,9 @@ export type RemoteHistoryEntry = { item: Playable; watchedAt: string };
 export const mergeHistory = (entries: RemoteHistoryEntry[]) =>
   call<{ entries: RemoteHistoryEntry[] }>('POST', '/history', { entries }).then((r) => r.entries);
 export const clearRemoteHistory = () => call<unknown>('DELETE', '/history');
+
+// AI Vibe & Mood Search via backend Gemini proxy
+export type AiVibeResult = { title: string; year?: number; reason?: string };
+// A Gemini call is slower than the chat endpoints, so it gets its own budget.
+export const aiVibeSearch = (prompt: string) =>
+  call<{ results: AiVibeResult[] }>('POST', '/ai/search', { prompt }, 30000).then((r) => r.results);

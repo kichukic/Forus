@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  directStream,
   playableRows,
   searchSubjects,
   seasonEpisodes,
@@ -27,6 +28,8 @@ import {
 } from '../api/moviebox';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { shareMoviebox } from '../chat/share';
+import { startDownload } from '../data/downloads';
+import { showToast } from '../data/toasts';
 import { ReleaseList } from '../components/ReleaseList';
 import { GUTTER, RADIUS, SCRIM, colors, isTV } from '../theme';
 import type { Playable } from '../types';
@@ -178,6 +181,49 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
       title: `${details?.title ?? subject.title} · Episode ${episode.episode}`,
       poster: details?.poster ?? subject.poster,
     });
+  };
+
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadFilm = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const rows = await playableRows(currentId, 0, 0);
+      if (rows.length === 0) throw new Error('No stream available to download.');
+      const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
+      const stream = await directStream(currentId, best);
+      await startDownload({
+        id: `mb_${currentId}`,
+        title: details?.title ?? subject.title,
+        poster: details?.poster ?? subject.poster,
+        url: stream.url,
+        kind: 'moviebox',
+      });
+    } catch (e) {
+      showToast({ text: (e as Error).message || 'Could not download film.' });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const downloadEpisode = async (episode: MovieboxEpisode) => {
+    try {
+      showToast({ text: `Resolving Episode ${episode.episode} for download…` });
+      const rows = await playableRows(currentId, episode.season, episode.episode);
+      if (rows.length === 0) throw new Error(`No file found for Episode ${episode.episode}.`);
+      const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
+      const stream = await directStream(currentId, best);
+      await startDownload({
+        id: `mb_${currentId}_s${episode.season}_e${episode.episode}`,
+        title: `${details?.title ?? subject.title} S${episode.season}E${episode.episode}`,
+        poster: details?.poster ?? subject.poster,
+        url: stream.url,
+        kind: 'moviebox',
+      });
+    } catch (e) {
+      showToast({ text: (e as Error).message || 'Could not download episode.' });
+    }
   };
 
   // The language versions of this film, as the service lists them.
@@ -353,6 +399,21 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
               <Text style={styles.shareBtnText}>Send to a friend</Text>
             </Pressable>
           )}
+
+          {!isTV && hasSeasons && !isSeries && (
+            <Pressable
+              onPress={downloadFilm}
+              disabled={downloading}
+              style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
+            >
+              {downloading ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Ionicons name="cloud-download-outline" size={18} color={colors.text} />
+              )}
+              <Text style={styles.shareBtnText}>{downloading ? 'Preparing…' : 'Download'}</Text>
+            </Pressable>
+          )}
         </View>
 
         {cast.length > 0 && (
@@ -421,7 +482,20 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
                           .join(' · ')}
                       </Text>
                     </View>
-                    <Ionicons name="play-circle-outline" size={24} color={colors.accent} />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                      {!isTV && (
+                        <Pressable
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            downloadEpisode(item);
+                          }}
+                          hitSlop={10}
+                        >
+                          <Ionicons name="cloud-download-outline" size={22} color={colors.muted} />
+                        </Pressable>
+                      )}
+                      <Ionicons name="play-circle-outline" size={24} color={colors.accent} />
+                    </View>
                   </Pressable>
                 )}
               />

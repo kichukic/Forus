@@ -9,6 +9,7 @@ import { AppState } from 'react-native';
 import { io, type Socket } from 'socket.io-client';
 import { setupMessageNotifications, notifyIncomingMessage } from './push';
 import * as api from './api';
+import { uploadVoice } from './voice';
 import type { ChatMessage, ChatUser, Conversation, FriendLists, Me } from './api';
 
 type Thread = { messages: ChatMessage[]; more: boolean; loading: boolean };
@@ -275,6 +276,11 @@ export async function loadOlder(userId: string) {
 
 export async function send(userId: string, content: { text?: string; title?: api.SharedTitle }) {
   received(await api.sendMessage(userId, content));
+}
+
+/** Sends a voice recording (a file on the phone) to a friend. */
+export async function sendVoice(userId: string, fileUri: string, durationMs: number) {
+  received(await uploadVoice(userId, fileUri, durationMs));
 }
 
 // ---- Friends ----

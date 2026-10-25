@@ -1,11 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Linking } from 'react-native';
 import { getApiKey } from '../api/torbox';
-import { getAddonUrls, addAddon, removeAddon, fetchManifest, type AddonManifest } from '../api/addons';
+import { getAddonUrls, addAddon, removeAddon } from '../api/addons';
+import { useDownloads } from '../data/downloads';
+import { getTraktSession, subscribeTrakt, type TraktSession } from '../api/trakt';
+import { TraktSetupScreen } from './TraktSetupScreen';
 import { LIVE_NEWS, MOVIES, SHOWS } from '../data/channels';
 import { GLOW, GUTTER, RADIUS, colors, isTV, sz } from '../theme';
 
@@ -16,14 +18,31 @@ type Props = {
   onClearHistory: () => void;
   // Checks GitHub Releases for a newer build.
   onCheckForUpdates: () => void;
+  onOpenDownloads?: () => void;
 };
 
-export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory, onCheckForUpdates }: Props) {
+export function SettingsScreen({
+  torboxVersion,
+  onOpenTorbox,
+  onClearHistory,
+  onCheckForUpdates,
+  onOpenDownloads,
+}: Props) {
   const insets = useSafeAreaInsets();
   const [connected, setConnected] = useState<boolean | null>(null);
   const [addons, setAddons] = useState<string[]>([]);
   const [newUrl, setNewUrl] = useState('');
   const [cleared, setCleared] = useState(false);
+  const [traktOpen, setTraktOpen] = useState(false);
+  const [traktSession, setTraktSession] = useState<TraktSession | null>(null);
+  const downloads = useDownloads();
+
+  useEffect(() => {
+    getTraktSession().then(setTraktSession);
+    return subscribeTrakt(() => {
+      getTraktSession().then(setTraktSession);
+    });
+  }, []);
 
   useEffect(() => {
     getApiKey().then((k) => setConnected(!!k));
@@ -48,9 +67,24 @@ export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory, on
             onPress={onOpenTorbox}
             first
           />
+          <Row
+            icon="film-outline"
+            title="Trakt.tv"
+            detail={traktSession ? `@${traktSession.username}` : 'Not connected'}
+            onPress={() => setTraktOpen(true)}
+          />
         </Group>
 
         <Group title="Watching">
+          {!isTV && onOpenDownloads && (
+            <Row
+              icon="cloud-download-outline"
+              title="Offline Downloads"
+              detail={downloads.length > 0 ? `${downloads.length} ${downloads.length === 1 ? 'item' : 'items'}` : 'None'}
+              onPress={onOpenDownloads}
+              first
+            />
+          )}
           <Row
             icon="trash-outline"
             title="Clear watch history"
@@ -59,6 +93,7 @@ export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory, on
               onClearHistory();
               setCleared(true);
             }}
+            first={isTV || !onOpenDownloads}
           />
         </Group>
 
@@ -75,7 +110,7 @@ export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory, on
           <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
             <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 8, lineHeight: 18 }}>
               Configure the addon on its own site first (paste your TorBox key there), then copy the
-              "Install" URL it gives you and paste it below. The URL already carries your key.
+              &ldquo;Install&rdquo; URL it gives you and paste it below. The URL already carries your key.
             </Text>
             <Pressable
               onPress={() => Linking.openURL('https://torrentio.strem.fun/configure')}
@@ -148,6 +183,8 @@ export function SettingsScreen({ torboxVersion, onOpenTorbox, onClearHistory, on
           </Text>
         </View>
       </ScrollView>
+
+      <TraktSetupScreen visible={traktOpen} onClose={() => setTraktOpen(false)} />
     </View>
   );
 }
