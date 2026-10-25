@@ -5,6 +5,7 @@ import { FlatList, StyleSheet, View } from 'react-native';
 import { browseShelves, type MovieboxSubject } from '../api/moviebox';
 import { FocusCard } from './FocusCard';
 import { FocusRow } from './FocusRow';
+import { shareOnLongPress } from '../chat/share';
 import { MovieboxPoster, POSTER_ROW_HEIGHT, POSTER_ROW_PROPS, POSTER_WIDTH } from './MovieboxPoster';
 import { SectionHeader } from './Section';
 import { SkeletonLoader } from './SkeletonLoader';
@@ -65,7 +66,16 @@ export function MovieboxRow({ onOpen, tabId = 1, version = 0 }: Props) {
               style={{ height: POSTER_ROW_HEIGHT }}
               {...POSTER_ROW_PROPS}
               renderItem={({ item }) => (
-                <FocusCard onPress={() => onOpen(item)} width={POSTER_WIDTH}>
+                <FocusCard
+                  onPress={() => onOpen(item)}
+                  onLongPress={shareOnLongPress({
+                    kind: 'moviebox',
+                    subjectId: item.id,
+                    title: item.title,
+                    poster: item.poster,
+                  })}
+                  width={POSTER_WIDTH}
+                >
                   <MovieboxPoster subject={item} />
                 </FocusCard>
               )}

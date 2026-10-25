@@ -152,7 +152,7 @@ function Bubble({
               source={
                 title.kind === 'video'
                   ? thumbnailUrl(title.videoId)
-                  : title.poster
+                  : 'poster' in title && title.poster
                     ? { uri: title.poster }
                     : undefined
               }

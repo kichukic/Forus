@@ -13,7 +13,9 @@ import {
 } from 'react-native';
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { Ionicons } from '@expo/vector-icons';
 import { captions, directStream, playableRows, seasonList, type MovieboxCaption, type MovieboxSeason } from '../api/moviebox';
+import { shareMoviebox } from '../chat/share';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { VideoOverlay } from '../components/VideoOverlay';
@@ -226,7 +228,16 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         // player into the corner.
         <RelatedPanel item={item} onPlay={onPlay} dragHandlers={shell?.dragHandlers}>
           <Text style={styles.infoTitle}>{item.title}</Text>
-          <Text style={styles.infoNote}>From MovieBox</Text>
+          <View style={styles.infoActions}>
+            <Text style={styles.infoNote}>From MovieBox</Text>
+            <Pressable
+              onPress={() => shareMoviebox({ id: item.subjectId, title: item.title, poster: item.poster })}
+              style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+            >
+              <Ionicons name="paper-plane-outline" size={15} color={colors.text} />
+              <Text style={styles.shareText}>Send to a friend</Text>
+            </Pressable>
+          </View>
           {captionOptions.length > 0 && (
             <ScrollView
               horizontal
@@ -277,7 +288,19 @@ const styles = StyleSheet.create({
   video: { flex: 1 },
   videoPortrait: { width: '100%', aspectRatio: 16 / 9 },
   infoTitle: { color: colors.text, fontSize: 17, fontWeight: '700', lineHeight: 24 },
-  infoNote: { color: colors.muted, fontSize: 13, marginTop: 6 },
+  infoNote: { color: colors.muted, fontSize: 13 },
+  infoActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 10, flexWrap: 'wrap' },
+  share: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceRaised,
+  },
+  sharePressed: { opacity: 0.6 },
+  shareText: { color: colors.text, fontSize: 13, fontWeight: '700' },
   captionRow: { gap: 8, paddingTop: 12, paddingRight: 40 },
   caption: {
     paddingHorizontal: 12,

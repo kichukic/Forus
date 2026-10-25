@@ -26,6 +26,7 @@ import type { StreamioItem } from '../api/streamiobox';
 import { FocusCard } from '../components/FocusCard';
 import { Loader } from '../components/Loader';
 import { SectionHeader } from '../components/Section';
+import { shareOnLongPress } from '../chat/share';
 import { showToast } from '../data/toasts';
 import { GUTTER, RADIUS, colors, isTV } from '../theme';
 import type { Playable } from '../types';
@@ -277,6 +278,13 @@ export function JackBoxScreen({
           <View style={[styles.cell, { width: cardWidth }]}>
             <FocusCard
               onPress={() => openItem(item)}
+              onLongPress={shareOnLongPress({
+                kind: 'movie',
+                id: String(item.id),
+                title: item.title,
+                poster: item.poster,
+                year: item.year,
+              })}
               width={cardWidth - 8}
               style={styles.card}
             >

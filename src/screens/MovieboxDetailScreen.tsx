@@ -26,6 +26,7 @@ import {
   type MovieboxSubject,
 } from '../api/moviebox';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
+import { shareMoviebox } from '../chat/share';
 import { ReleaseList } from '../components/ReleaseList';
 import { GUTTER, RADIUS, SCRIM, colors, isTV } from '../theme';
 import type { Playable } from '../types';
@@ -234,6 +235,15 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
         <Text style={styles.topTitle} numberOfLines={1}>
           {shown.title}
         </Text>
+        {!isTV && (
+          <Pressable
+            onPress={() => shareMoviebox({ id: currentId, title: shown.title, poster: shown.poster })}
+            style={styles.topShare}
+            hitSlop={12}
+          >
+            <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+          </Pressable>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -314,24 +324,36 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {hasSeasons && !isSeries && (
-          <Pressable
-            onPress={playFilm}
-            disabled={preparing}
-            style={({ focused, pressed }) => [
-              styles.play,
-              (focused || pressed) && styles.playActive,
-              preparing && styles.playBusy,
-            ]}
-          >
-            {preparing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Ionicons name="play-circle" size={isTV ? 30 : 24} color="#fff" />
-            )}
-            <Text style={styles.playText}>Play now</Text>
-          </Pressable>
-        )}
+        <View style={styles.actionRow}>
+          {hasSeasons && !isSeries && (
+            <Pressable
+              onPress={playFilm}
+              disabled={preparing}
+              style={({ focused, pressed }) => [
+                styles.play,
+                (focused || pressed) && styles.playActive,
+                preparing && styles.playBusy,
+              ]}
+            >
+              {preparing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Ionicons name="play-circle" size={isTV ? 30 : 24} color="#fff" />
+              )}
+              <Text style={styles.playText}>Play now</Text>
+            </Pressable>
+          )}
+
+          {!isTV && (
+            <Pressable
+              onPress={() => shareMoviebox({ id: currentId, title: shown.title, poster: shown.poster })}
+              style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
+            >
+              <Ionicons name="paper-plane-outline" size={18} color={colors.text} />
+              <Text style={styles.shareBtnText}>Send to a friend</Text>
+            </Pressable>
+          )}
+        </View>
 
         {cast.length > 0 && (
           <View style={styles.block}>
@@ -447,6 +469,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   topTitle: { flex: 1, color: colors.text, fontSize: isTV ? 20 : 17, fontWeight: '800' },
+  topShare: {
+    width: isTV ? 44 : 38,
+    height: isTV ? 44 : 38,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
   content: { paddingHorizontal: GUTTER, paddingBottom: 120 },
   head: { flexDirection: 'row', gap: 18, marginTop: 10, marginBottom: 14 },
   poster: {
@@ -460,7 +490,16 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, fontSize: isTV ? 15 : 13, marginTop: 6 },
   description: { color: colors.muted, fontSize: isTV ? 16 : 14, lineHeight: isTV ? 24 : 20, marginBottom: 16 },
   error: { color: colors.live, fontSize: isTV ? 15 : 13, fontWeight: '600', marginBottom: 12 },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 18,
+  },
   play: {
+    flex: 1,
+    minWidth: 140,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -468,11 +507,31 @@ const styles = StyleSheet.create({
     paddingVertical: isTV ? 15 : 12,
     borderRadius: RADIUS,
     backgroundColor: colors.accent,
-    marginBottom: 18,
   },
   playActive: { backgroundColor: colors.accentDeep },
   playBusy: { opacity: 0.7 },
   playText: { color: '#fff', fontSize: isTV ? 18 : 15, fontWeight: '800' },
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: isTV ? 15 : 12,
+    paddingHorizontal: 16,
+    borderRadius: RADIUS,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  shareBtnPressed: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderColor: colors.text,
+  },
+  shareBtnText: {
+    color: colors.text,
+    fontSize: isTV ? 16 : 14,
+    fontWeight: '700',
+  },
   block: { marginBottom: 22 },
   sectionTitle: {
     color: colors.text,

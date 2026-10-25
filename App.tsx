@@ -263,6 +263,23 @@ export default function App() {
                 if (title.kind === 'video') play({ kind: 'video', videoId: title.videoId, title: title.title });
                 else if (title.kind === 'web') play({ kind: 'web', url: title.url, title: title.title, poster: title.poster });
                 else if (title.kind === 'stream') play({ kind: 'stream', url: title.url, title: title.title, poster: title.poster });
+                else if (title.kind === 'moviebox') play({ kind: 'moviebox', subjectId: title.subjectId, season: title.season ?? 0, episode: title.episode ?? 0, title: title.title, poster: title.poster });
+                else if (title.kind === 'movie') {
+                  setMovie({
+                    id: title.id,
+                    title: title.title,
+                    poster: title.poster,
+                    year: title.year,
+                  });
+                } else if (title.kind === 'file') {
+                  play({
+                    kind: 'file',
+                    source: title.source as any,
+                    itemId: title.itemId,
+                    fileId: title.fileId,
+                    title: title.title,
+                  });
+                }
               }}
             />
           </View>

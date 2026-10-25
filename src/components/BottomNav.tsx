@@ -14,7 +14,7 @@ const ITEMS: { id: NavId; label: string; icon: keyof typeof Ionicons.glyphMap; a
   { id: 'search', label: 'Search', icon: 'search-outline', activeIcon: 'search' },
   { id: 'history', label: 'History', icon: 'time-outline', activeIcon: 'time' },
   { id: 'chat', label: 'Chat', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles' },
-  { id: 'settings', label: 'Settings', icon: 'person-circle-outline', activeIcon: 'person-circle' },
+  { id: 'settings', label: 'Settings', icon: 'settings-outline', activeIcon: 'settings' },
 ];
 
 export const BOTTOM_NAV_HEIGHT = 64;

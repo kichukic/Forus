@@ -13,9 +13,10 @@ import { Avatar, Button, Field, Header, chatStyles } from './ui';
 type Props = {
   onBack: () => void;
   onOpen: (user: ChatUser) => void;
+  onContacts: () => void;
 };
 
-export function FriendsView({ onBack, onOpen }: Props) {
+export function FriendsView({ onBack, onOpen, onContacts }: Props) {
   const insets = useSafeAreaInsets();
   const { friends } = useChat();
   const [query, setQuery] = useState('');
@@ -56,6 +57,17 @@ export function FriendsView({ onBack, onOpen }: Props) {
     <KeyboardAvoidingView behavior="padding" style={[chatStyles.screen, { paddingTop: insets.top + 10 }]}>
       <Header title="Friends" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Pressable onPress={onContacts} style={({ pressed }) => [styles.contacts, pressed && styles.personPressed]}>
+          <View style={styles.contactsIcon}>
+            <Ionicons name="people" size={20} color={colors.accent} />
+          </View>
+          <View style={styles.personText}>
+            <Text style={styles.name}>Find friends from contacts</Text>
+            <Text style={styles.email}>See who in your phone is on ForUs</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.faint} />
+        </Pressable>
+
         <Text style={styles.section}>Add a friend</Text>
         <View style={styles.searchRow}>
           <Field
@@ -181,6 +193,25 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 22,
     marginBottom: 10,
+  },
+  contacts: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accentSoft,
+  },
+  contactsIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accentSoft,
   },
   searchRow: { flexDirection: 'row', gap: 10 },
   searchField: { flex: 1 },

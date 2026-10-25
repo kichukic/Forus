@@ -5,6 +5,7 @@ import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { getApiKey, getStreamUrl } from '../api/torbox';
 import { searchByName as searchSubtitles, loadSubtitle } from '../api/opensubtitles';
+import { shareTitle } from '../chat/share';
 import { cueAt, type SubtitleCue } from '../api/subtitles';
 import type { ShellControls } from '../components/PlayerShell';
 import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
@@ -216,7 +217,22 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
         // Dragging the title block down shrinks the player into the corner.
         <RelatedPanel item={item} onPlay={onPlay} dragHandlers={shell?.dragHandlers}>
           <Text style={styles.infoTitle}>{item.title}</Text>
-          <Text style={styles.infoNote}>From your TorBox</Text>
+          <View style={styles.infoActions}>
+            <Text style={styles.infoNote}>From your TorBox</Text>
+            <Pressable
+              onPress={() => shareTitle({
+                kind: 'file',
+                source: item.source,
+                itemId: item.itemId,
+                fileId: item.fileId,
+                title: item.title,
+              })}
+              style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+            >
+              <Ionicons name="paper-plane-outline" size={15} color={colors.text} />
+              <Text style={styles.shareText}>Send to a friend</Text>
+            </Pressable>
+          </View>
         </RelatedPanel>
       )}
 
@@ -256,7 +272,19 @@ const styles = StyleSheet.create({
   video: { flex: 1 },
   videoPortrait: { width: '100%', aspectRatio: 16 / 9 },
   infoTitle: { color: colors.text, fontSize: 17, fontWeight: '700', lineHeight: 24 },
-  infoNote: { color: colors.muted, fontSize: 13, marginTop: 6 },
+  infoNote: { color: colors.muted, fontSize: 13 },
+  infoActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 10, flexWrap: 'wrap' },
+  share: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceRaised,
+  },
+  sharePressed: { opacity: 0.6 },
+  shareText: { color: colors.text, fontSize: 13, fontWeight: '700' },
   minimize: {
     position: 'absolute',
     top: 8,

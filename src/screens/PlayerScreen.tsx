@@ -401,15 +401,16 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
                 {trying ? `Trying ${trying}…` : `Source: ${current?.label ?? '…'}`}
               </Text>
             </Pressable>
-            {item.kind === 'video' && (
-              <Pressable
-                onPress={() => shareTitle({ kind: 'video', videoId: item.videoId, title: item.title })}
-                style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
-              >
-                <Ionicons name="paper-plane-outline" size={15} color={colors.text} />
-                <Text style={styles.shareText}>Send to a friend</Text>
-              </Pressable>
-            )}
+            <Pressable
+              onPress={() => {
+                if (item.kind === 'video') shareTitle({ kind: 'video', videoId: item.videoId, title: item.title });
+                else if (item.kind === 'live') shareTitle({ kind: 'stream', url: item.channelId, title: item.title });
+              }}
+              style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+            >
+              <Ionicons name="paper-plane-outline" size={15} color={colors.text} />
+              <Text style={styles.shareText}>Send to a friend</Text>
+            </Pressable>
           </View>
         </RelatedPanel>
       )}

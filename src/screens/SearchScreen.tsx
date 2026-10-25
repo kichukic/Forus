@@ -272,7 +272,17 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                       contentContainerStyle={styles.films}
                     >
                       {filmList.map((film) => (
-                        <FocusCard key={film.id} onPress={() => onOpenMoviebox(film)} width={POSTER_WIDTH}>
+                        <FocusCard
+                          key={film.id}
+                          onPress={() => onOpenMoviebox(film)}
+                          onLongPress={shareOnLongPress({
+                            kind: 'moviebox',
+                            subjectId: film.id,
+                            title: film.title,
+                            poster: film.poster,
+                          })}
+                          width={POSTER_WIDTH}
+                        >
                           <MovieboxPoster subject={film} />
                         </FocusCard>
                       ))}
@@ -304,6 +314,13 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                         <FocusCard
                           key={`${file.source}:${file.itemId}:${file.fileId}`}
                           onPress={() => playFile(file)}
+                          onLongPress={shareOnLongPress({
+                            kind: 'file',
+                            source: file.source,
+                            itemId: file.itemId,
+                            fileId: file.fileId,
+                            title: file.name,
+                          })}
                           width={FILE_WIDTH}
                         >
                           <FileCardContent

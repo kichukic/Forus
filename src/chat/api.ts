@@ -17,7 +17,10 @@ export type Me = ChatUser & { emailVerified: boolean; phone?: string; hasPasswor
 export type SharedTitle =
   | { kind: 'video'; videoId: string; title: string }
   | { kind: 'web'; url: string; title: string; poster?: string }
-  | { kind: 'stream'; url: string; title: string; poster?: string };
+  | { kind: 'stream'; url: string; title: string; poster?: string }
+  | { kind: 'movie'; id: string; title: string; poster?: string; year?: string }
+  | { kind: 'moviebox'; subjectId: string; season?: number; episode?: number; title: string; poster?: string }
+  | { kind: 'file'; source: string; itemId: number; fileId: number; title: string };
 
 export type ChatMessage = {
   id: string;
@@ -159,6 +162,12 @@ export function lookUp(query: string) {
 }
 
 export const getFriends = () => call<FriendLists>('GET', '/friends');
+
+// Which of the phone's contacts are on ForUs. The numbers and emails are
+// matched against verified ones and not kept by the server.
+export type ContactMatch = { user: ChatUser; status: Relation; matched: string };
+export const matchContacts = (phones: string[], emails: string[]) =>
+  call<{ matches: ContactMatch[] }>('POST', '/contacts/match', { phones, emails }).then((r) => r.matches);
 export const sendRequest = (userId: string) =>
   call<{ status: Relation; requestId?: string }>('POST', '/friends/requests', { userId });
 export const acceptRequest = (requestId: string) => call<unknown>('POST', `/friends/requests/${requestId}/accept`);

@@ -66,7 +66,17 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
                   // TV: the remote starts on the most recent item.
                   preferredFocus={index === 0}
                   onPress={() => onPlay(item)}
-                  onLongPress={item.kind === 'video' ? shareOnLongPress(item.videoId, item.title) : undefined}
+                  onLongPress={
+                    item.kind === 'video'
+                      ? shareOnLongPress(item.videoId, item.title)
+                      : item.kind === 'moviebox'
+                        ? shareOnLongPress({ kind: 'moviebox', subjectId: item.subjectId, title: item.title, poster: item.poster })
+                        : item.kind === 'stream'
+                          ? shareOnLongPress({ kind: 'stream', url: item.url, title: item.title, poster: item.poster })
+                          : item.kind === 'file'
+                            ? shareOnLongPress({ kind: 'file', source: item.source, itemId: item.itemId, fileId: item.fileId, title: item.title })
+                            : undefined
+                  }
                   style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP, marginBottom: 18 }}
                 >
                   <Card item={item} />

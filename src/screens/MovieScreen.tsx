@@ -15,6 +15,7 @@ import { findTorrents, magnetFor, type TorrentOption } from '../api/torrents';
 import { getApiKey, createTorrent, getTorrent, getStreamUrl, mainVideoFile } from '../api/torbox';
 import { getAllStreams, type StreamResult } from '../api/addons';
 import { resolveDirectMovieStreams, type DirectStreamOption } from '../api/directStreams';
+import { shareMovie } from '../chat/share';
 import { ReleaseList } from '../components/ReleaseList';
 import { Loader } from '../components/Loader';
 import { addTransfer } from '../data/transfers';
@@ -134,6 +135,15 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
         <Text style={styles.topTitle} numberOfLines={1}>
           {movie.title}
         </Text>
+        {!isTV && (
+          <Pressable
+            onPress={() => shareMovie({ id: movie.id, title: movie.title, poster: movie.poster, year: movie.year })}
+            style={styles.topShare}
+            hitSlop={12}
+          >
+            <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+          </Pressable>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
@@ -149,20 +159,34 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
                 .join(' · ')}
             </Text>
 
-            {primaryStream && (
-              <Pressable
-                onPress={() => onPlay(primaryStream.playable)}
-                style={({ focused, pressed }) => [
-                  styles.watchBtn,
-                  (focused || pressed) && styles.watchBtnActive,
-                ]}
-              >
-                <Ionicons name="play" size={isTV ? 22 : 18} color="#fff" />
-                <Text style={styles.watchBtnText}>
-                  Watch Now ({primaryStream.quality})
-                </Text>
-              </Pressable>
-            )}
+            <View style={styles.actionsRow}>
+              {primaryStream && (
+                <Pressable
+                  onPress={() => onPlay(primaryStream.playable)}
+                  style={({ focused, pressed }) => [
+                    styles.watchBtn,
+                    (focused || pressed) && styles.watchBtnActive,
+                  ]}
+                >
+                  <Ionicons name="play" size={isTV ? 22 : 18} color="#fff" />
+                  <Text style={styles.watchBtnText}>
+                    Watch Now ({primaryStream.quality})
+                  </Text>
+                </Pressable>
+              )}
+              {!isTV && (
+                <Pressable
+                  onPress={() => shareMovie({ id: movie.id, title: movie.title, poster: movie.poster, year: movie.year })}
+                  style={({ focused, pressed }) => [
+                    styles.shareBtn,
+                    (focused || pressed) && styles.shareBtnActive,
+                  ]}
+                >
+                  <Ionicons name="paper-plane-outline" size={16} color={colors.text} />
+                  <Text style={styles.shareBtnText}>Send to a friend</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         </View>
 
@@ -280,6 +304,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   topTitle: { flex: 1, color: colors.text, fontSize: isTV ? 20 : 17, fontWeight: '800' },
+  topShare: {
+    width: isTV ? 44 : 38,
+    height: isTV ? 44 : 38,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
   list: { paddingHorizontal: GUTTER, paddingBottom: 120 },
   head: { flexDirection: 'row', gap: 18, marginTop: 10, marginBottom: 14 },
   poster: {
@@ -291,12 +323,18 @@ const styles = StyleSheet.create({
   headText: { flex: 1, justifyContent: 'center' },
   title: { color: colors.text, fontSize: isTV ? 28 : 22, fontWeight: '900' },
   meta: { color: colors.muted, fontSize: isTV ? 15 : 13, marginTop: 6 },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 12,
+  },
   watchBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     alignSelf: 'flex-start',
-    marginTop: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 22,
@@ -310,6 +348,27 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: isTV ? 16 : 14,
     fontWeight: '800',
+  },
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignSelf: 'flex-start',
+  },
+  shareBtnActive: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderColor: colors.text,
+  },
+  shareBtnText: {
+    color: colors.text,
+    fontSize: isTV ? 15 : 13.5,
+    fontWeight: '700',
   },
   description: { color: colors.muted, fontSize: isTV ? 16 : 14, lineHeight: isTV ? 24 : 20, marginBottom: 18 },
   sectionTitle: {

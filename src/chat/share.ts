@@ -1,6 +1,5 @@
-// Sharing a ForUs video with a friend from anywhere in the app: a card or the
-// player asks here, and the one "Send to a friend" sheet (in App) opens.
-// Only YouTube videos are shareable: a friend's app can play those as they are.
+// Sharing a ForUs video, movie, or series with a friend from anywhere in the app:
+// a card or the player asks here, and the one "Send to a friend" sheet (in App) opens.
 import { useSyncExternalStore } from 'react';
 import { isTV } from '../theme';
 import type { SharedTitle } from './api';
@@ -15,6 +14,14 @@ function set(next: SharedTitle | null) {
 
 export function shareTitle(title: SharedTitle) {
   set(title);
+}
+
+export function shareMovie(movie: { id: string; title: string; poster?: string; year?: string }) {
+  set({ kind: 'movie', id: movie.id, title: movie.title, poster: movie.poster, year: movie.year });
+}
+
+export function shareMoviebox(subject: { id: string; title: string; poster?: string }) {
+  set({ kind: 'moviebox', subjectId: subject.id, title: subject.title, poster: subject.poster });
 }
 
 export function closeShare() {
@@ -32,10 +39,16 @@ export function useShareRequest(): SharedTitle | null {
 }
 
 /**
- * The long-press handler that shares a YouTube video, for a card's
- * `onLongPress`. Undefined on TV, which has no chat.
+ * The long-press handler that shares any title (YouTube, Movie, MovieBox, Series, etc.),
+ * for a card's `onLongPress`. Undefined on TV, which has no chat.
  */
-export function shareOnLongPress(videoId: string, title: string): (() => void) | undefined {
+export function shareOnLongPress(
+  target: string | SharedTitle,
+  title?: string,
+): (() => void) | undefined {
   if (isTV) return undefined;
-  return () => shareTitle({ kind: 'video', videoId, title });
+  if (typeof target === 'string') {
+    return () => shareTitle({ kind: 'video', videoId: target, title: title ?? '' });
+  }
+  return () => shareTitle(target);
 }
