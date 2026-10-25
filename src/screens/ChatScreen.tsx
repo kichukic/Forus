@@ -1,7 +1,7 @@
 // The Chat tab: sign in, then the conversation list, friends, your profile
 // and single conversations. Back steps out of a conversation (or friends, or
 // the profile) before it leaves the tab.
-import { useImperativeHandle, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useState, type Ref } from 'react';
 import type { ChatUser, SharedTitle } from '../chat/api';
 import { AuthView } from '../chat/AuthView';
 import { ContactsView } from '../chat/ContactsView';
@@ -9,6 +9,7 @@ import { ConversationListView } from '../chat/ConversationListView';
 import { ConversationView } from '../chat/ConversationView';
 import { FriendsView } from '../chat/FriendsView';
 import { ProfileView } from '../chat/ProfileView';
+import { onOpenChatRequest } from '../chat/push';
 import { useChat } from '../chat/store';
 import { Loader } from '../components/Loader';
 
@@ -39,6 +40,16 @@ export function ChatScreen({ onPlay, onFullScreen, ref }: Props) {
     setViewState(next);
     onFullScreen(next.name === 'conversation');
   };
+
+  // A tapped message notification opens its conversation, once signed in.
+  useEffect(() => {
+    if (status !== 'signedIn') return;
+    return onOpenChatRequest((user, take) => {
+      take();
+      setViewState({ name: 'conversation', user });
+      onFullScreen(true);
+    });
+  }, [status, onFullScreen]);
 
   useImperativeHandle(ref, () => ({
     goBack: () => {

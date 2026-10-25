@@ -26,6 +26,7 @@ import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
 import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
 import { startChat, useChatStatus } from './src/chat/store';
 import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
+import { onOpenChatRequest } from './src/chat/push';
 import { SendToFriend } from './src/chat/SendToFriend';
 import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
 import { StreamioBoxDetailScreen } from './src/screens/StreamioBoxDetailScreen';
@@ -142,6 +143,20 @@ export default function App() {
     const sub = AppState.addEventListener('change', (s) => s === 'active' && sync());
     return () => sub.remove();
   }, [chatStatus]);
+
+  // A tapped message notification goes to the Chat tab, which opens the chat;
+  // a full-screen video steps into the corner.
+  const playingNow = useRef(playing);
+  useEffect(() => {
+    playingNow.current = playing;
+  });
+  useEffect(() => {
+    if (isTV) return;
+    return onOpenChatRequest(() => {
+      setScreen('chat');
+      if (playingNow.current) setMini(true);
+    });
+  }, []);
 
   // Anything fatal is shown on screen rather than ending the app.
   useEffect(() => subscribeErrors((error, isFatal) => isFatal && setCrash(error)), []);

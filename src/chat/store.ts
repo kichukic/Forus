@@ -7,6 +7,7 @@
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { io, type Socket } from 'socket.io-client';
+import { setupMessageNotifications, notifyIncomingMessage } from './push';
 import * as api from './api';
 import type { ChatMessage, ChatUser, Conversation, FriendLists, Me } from './api';
 
@@ -60,13 +61,24 @@ let started = false;
 export async function startChat() {
   if (started) return;
   started = true;
+  let bgTimeout: ReturnType<typeof setTimeout> | null = null;
   AppState.addEventListener('change', (s) => {
     if (state.status !== 'signedIn') return;
     if (s === 'active') {
+      if (bgTimeout) {
+        clearTimeout(bgTimeout);
+        bgTimeout = null;
+      }
       connect();
       refresh();
     } else if (s === 'background') {
-      disconnect();
+      // Keep socket alive for 5 minutes in background so multitasking still delivers message notifications
+      if (!bgTimeout) {
+        bgTimeout = setTimeout(() => {
+          disconnect();
+          bgTimeout = null;
+        }, 5 * 60 * 1000);
+      }
     }
   });
   if (!(await api.loadSession())) return set({ status: 'signedOut' });
@@ -74,6 +86,7 @@ export async function startChat() {
     set({ me: await api.getMe(), status: 'signedIn' });
     connect();
     refresh();
+    setupMessageNotifications();
   } catch (e) {
     // An expired sign-in; anything else (offline) keeps the session for later.
     if (e instanceof api.ChatError && e.status === 401) await signOut();
@@ -85,6 +98,7 @@ async function signedIn(me: Me) {
   set({ me, status: 'signedIn', conversations: null, friends: null, threads: {} });
   connect();
   refresh();
+  setupMessageNotifications();
 }
 
 export async function signIn(email: string, password: string) {
@@ -210,6 +224,10 @@ function received(message: ChatMessage, from?: ChatUser) {
   if (!user) return refresh();
   const unread = (existing?.unread ?? 0) + (!mine && !open ? 1 : 0);
   set({ conversations: [{ user, last: message, unread }, ...list.filter((c) => c.user.id !== otherId)] });
+
+  if (!mine && !open) {
+    notifyIncomingMessage(user, message);
+  }
 }
 
 function findFriend(userId: string): ChatUser | undefined {

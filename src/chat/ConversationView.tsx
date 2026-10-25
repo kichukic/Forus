@@ -148,18 +148,25 @@ function Bubble({
           style={({ pressed }) => [styles.card, mine ? styles.cardMine : styles.cardTheirs, pressed && styles.pressed]}
         >
           <View>
-            <Image
-              source={
-                title.kind === 'video'
-                  ? thumbnailUrl(title.videoId)
-                  : 'poster' in title && title.poster
-                    ? { uri: title.poster }
-                    : undefined
-              }
-              style={styles.cardImage}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
+            {title.kind === 'video' ? (
+              <Image
+                source={thumbnailUrl(title.videoId)}
+                style={styles.cardImage}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+            ) : 'poster' in title && title.poster ? (
+              <Image
+                source={{ uri: title.poster }}
+                style={styles.cardImage}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <View style={[styles.cardImage, { backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }]}>
+                <Ionicons name="film-outline" size={32} color={colors.muted} />
+              </View>
+            )}
             <View style={styles.cardPlay}>
               <Ionicons name="play" size={20} color="#fff" style={styles.playIcon} />
             </View>
