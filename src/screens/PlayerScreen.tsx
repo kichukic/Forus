@@ -332,6 +332,9 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
             // Only a third-party site's own player is left touchable.
             focusable={!isTV && external}
             pointerEvents={isTV || !external ? 'none' : 'auto'}
+            // The video gets its own GPU layer instead of sharing the app's,
+            // which plays smoother, on a TV's chip most of all.
+            androidLayerType="hardware"
             javaScriptEnabled
             domStorageEnabled
             allowsFullscreenVideo
