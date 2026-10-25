@@ -163,7 +163,7 @@ function Person({
           {user.name}
         </Text>
         <Text style={styles.email} numberOfLines={1}>
-          {user.email}
+          {user.email ?? 'On ForUs'}
         </Text>
       </View>
       <View style={styles.actions}>{children}</View>

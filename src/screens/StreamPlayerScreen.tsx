@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import { useOpenSubtitles } from '../hooks/useOpenSubtitles';
+import { shareTitle } from '../chat/share';
 import { colors, isTV } from '../theme';
 
 type Props = {
@@ -68,6 +69,9 @@ export function StreamPlayerScreen({ url, title, onClose }: Props) {
             <Ionicons name="text" size={20} color={subs.chosen ? colors.accent : colors.text} />
           </Pressable>
         ) : null}
+        <Pressable onPress={() => shareTitle({ kind: 'stream', url, title })} style={styles.ccBtn} hitSlop={8}>
+          <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+        </Pressable>
       </View>
     </View>
   );

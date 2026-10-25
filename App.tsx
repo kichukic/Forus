@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { AppState, BackHandler, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
@@ -8,7 +8,7 @@ import { BottomNav, BOTTOM_NAV_HEIGHT, type NavId } from './src/components/Botto
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
-import { addToHistory, clearHistory, loadHistory, playableKey } from './src/data/history';
+import { addToHistory, clearHistory, loadHistory, mergeHistories, playableKey, type HistoryEntry } from './src/data/history';
 import { askToRemind, startReminders } from './src/data/reminders';
 import { useEvent } from './src/hooks/useEvent';
 import { addTransfer, loadTransfers, playableFrom } from './src/data/transfers';
@@ -24,13 +24,16 @@ import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
 import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
-import { startChat } from './src/chat/store';
+import { startChat, useChatStatus } from './src/chat/store';
+import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
+import { SendToFriend } from './src/chat/SendToFriend';
 import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
 import { StreamioBoxDetailScreen } from './src/screens/StreamioBoxDetailScreen';
 import { MovieboxPlayerScreen } from './src/screens/MovieboxPlayerScreen';
 import { MovieScreen } from './src/screens/MovieScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { StreamPlayerScreen } from './src/screens/StreamPlayerScreen';
+import { WebPlayerScreen } from './src/screens/WebPlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
 import { TransferBar } from './src/components/TransferBar';
 import { ToastHost } from './src/components/ToastHost';
@@ -75,7 +78,7 @@ export default function App() {
   const [playing, setPlaying] = useState<Playable | null>(null);
   // On a phone the player can shrink into the corner while you keep browsing.
   const [mini, setMini] = useState(false);
-  const [history, setHistory] = useState<Playable[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [torboxVersion, setTorboxVersion] = useState(0);
   // Which tab's channels search looks in.
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
@@ -117,11 +120,35 @@ export default function App() {
     return () => clearTimeout(giveUp);
   }, []);
 
+  const clearAllHistory = () => {
+    setHistory(clearHistory());
+    clearSyncedHistory();
+  };
+
+  // Watch history follows the chat account: merged with the server's on
+  // signing in and whenever the app comes back to the front.
+  const chatStatus = useChatStatus();
+  const latestHistory = useRef(history);
+  useEffect(() => {
+    latestHistory.current = history;
+  });
+  useEffect(() => {
+    if (chatStatus !== 'signedIn') return;
+    const sync = () =>
+      syncHistory(latestHistory.current).then((remote) => {
+        if (remote) setHistory((current) => mergeHistories(current, remote));
+      });
+    sync();
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && sync());
+    return () => sub.remove();
+  }, [chatStatus]);
+
   // Anything fatal is shown on screen rather than ending the app.
   useEffect(() => subscribeErrors((error, isFatal) => isFatal && setCrash(error)), []);
 
   const play = useEvent((item: Playable) => {
     setHistory((h) => addToHistory(h, item));
+    pushWatched(item);
     setPlaying(item);
     setMini(false);
     // Phones only: the first play asks to allow "Continue watching" reminders.
@@ -232,14 +259,18 @@ export default function App() {
             <ChatScreen
               ref={chat}
               onFullScreen={setChatFull}
-              onPlay={(title) => play({ kind: 'video', videoId: title.videoId, title: title.title })}
+              onPlay={(title) => {
+                if (title.kind === 'video') play({ kind: 'video', videoId: title.videoId, title: title.title });
+                else if (title.kind === 'web') play({ kind: 'web', url: title.url, title: title.title, poster: title.poster });
+                else if (title.kind === 'stream') play({ kind: 'stream', url: title.url, title: title.title, poster: title.poster });
+              }}
             />
           </View>
         )}
 
         {screen === 'history' && (
           <View style={layer('history')}>
-            <HistoryScreen history={history} onPlay={play} onClear={() => setHistory(clearHistory())} />
+            <HistoryScreen history={history} onPlay={play} onClear={clearAllHistory} />
           </View>
         )}
 
@@ -248,7 +279,7 @@ export default function App() {
             <SettingsScreen
               torboxVersion={torboxVersion}
               onOpenTorbox={openTorbox}
-              onClearHistory={() => setHistory(clearHistory())}
+              onClearHistory={clearAllHistory}
               onCheckForUpdates={() => {
                 checkForUpdate(true).then((u) => {
                   if (u) setUpdatePrompt(u);
@@ -274,6 +305,7 @@ export default function App() {
         />
 
         <ToastHost />
+        {!isTV && <SendToFriend />}
 
         <UpdatePrompt update={updatePrompt} onClose={() => setUpdatePrompt(null)} />
 
@@ -358,6 +390,8 @@ export default function App() {
                 <MovieboxPlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               ) : playing.kind === 'stream' ? (
                 <StreamPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
+              ) : playing.kind === 'web' ? (
+                <WebPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
               ) : (
                 <PlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               )

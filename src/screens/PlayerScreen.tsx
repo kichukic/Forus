@@ -16,8 +16,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { PlayerControls, ProgressLine, type PlaybackTime } from '../components/PlayerControls';
 import type { ShellControls } from '../components/PlayerShell';
 import { StoreValue, useValueStore } from '../hooks/useValueStore';
-import type { SharedTitle } from '../chat/api';
-import { SendToFriend } from '../chat/SendToFriend';
+import { shareTitle } from '../chat/share';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { SourcePicker } from '../components/SourcePicker';
 import {
@@ -103,8 +102,6 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const [external, setExternal] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
-  // The film being sent to a friend, while the friend list is open.
-  const [sharing, setSharing] = useState<SharedTitle | null>(null);
   const [trying, setTrying] = useState<string | null>(null);
 
   const blockedKey =
@@ -406,7 +403,7 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
             </Pressable>
             {item.kind === 'video' && (
               <Pressable
-                onPress={() => setSharing({ kind: 'video', videoId: item.videoId, title: item.title })}
+                onPress={() => shareTitle({ kind: 'video', videoId: item.videoId, title: item.title })}
                 style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
               >
                 <Ionicons name="paper-plane-outline" size={15} color={colors.text} />
@@ -416,7 +413,6 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
           </View>
         </RelatedPanel>
       )}
-      <SendToFriend title={sharing} onClose={() => setSharing(null)} />
 
       {!isTV && !mini && (
         <Pressable

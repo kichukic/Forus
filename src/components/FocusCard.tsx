@@ -4,6 +4,8 @@ import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, RADIUS, colors, isTV, sz } from '../
 
 type Props = {
   onPress: () => void;
+  // Press and hold, e.g. to send the video to a friend.
+  onLongPress?: () => void;
   children: ReactNode;
   preferredFocus?: boolean;
   width?: number;
@@ -12,7 +14,7 @@ type Props = {
 
 // A card the TV remote can land on: it grows smoothly and gets a purple ring
 // when focused. On a phone it is tapped, and shrinks slightly while pressed.
-export function FocusCard({ onPress, children, preferredFocus, width = CARD_WIDTH, style }: Props) {
+export function FocusCard({ onPress, onLongPress, children, preferredFocus, width = CARD_WIDTH, style }: Props) {
   const [focused, setFocused] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -22,6 +24,7 @@ export function FocusCard({ onPress, children, preferredFocus, width = CARD_WIDT
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       onFocus={() => {
         setFocused(true);
         animate(1.07);

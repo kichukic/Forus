@@ -15,11 +15,12 @@ export type Playable =
   | { kind: 'live'; channelId: string; title: string }
   | { kind: 'file'; source: TorboxSource; itemId: number; fileId: number; title: string }
   | { kind: 'stream'; url: string; title: string; poster?: string }
+  | { kind: 'web'; url: string; title: string; poster?: string }
   | MovieboxPlayable;
 
 export type YouTubePlayable = Exclude<
   Playable,
-  { kind: 'file' } | { kind: 'moviebox' } | { kind: 'stream' }
+  { kind: 'file' } | { kind: 'moviebox' } | { kind: 'stream' } | { kind: 'web' }
 >;
 export type FilePlayable = Extract<Playable, { kind: 'file' }>;
 export type MovieboxItem = Extract<Playable, { kind: 'moviebox' }>;

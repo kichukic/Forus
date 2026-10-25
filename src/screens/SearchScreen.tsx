@@ -19,6 +19,7 @@ import { searchVideos, type SearchResult } from '../api/youtube';
 import { FileCardContent } from '../components/FileCardContent';
 import { VideoCardContent } from '../components/Cards';
 import { FocusCard } from '../components/FocusCard';
+import { shareOnLongPress } from '../chat/share';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { MovieboxPoster, POSTER_WIDTH } from '../components/MovieboxPoster';
 import { ReleaseList } from '../components/ReleaseList';
@@ -333,6 +334,7 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                 <FocusCard
                   width={cardWidth}
                   onPress={() => playVideo(item)}
+                  onLongPress={shareOnLongPress(item.id, item.title)}
                   style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP }}
                 >
                   <VideoCardContent

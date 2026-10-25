@@ -42,6 +42,11 @@ export function useChat(): ChatState {
   return useSyncExternalStore(subscribe, () => state);
 }
 
+/** Just whether someone is signed in, for screens that care about nothing else. */
+export function useChatStatus(): ChatState['status'] {
+  return useSyncExternalStore(subscribe, () => state.status);
+}
+
 /** Unread messages across every conversation, for the bottom bar. */
 export function useUnreadCount(): number {
   return useSyncExternalStore(subscribe, () => (state.conversations ?? []).reduce((n, c) => n + c.unread, 0));
@@ -82,12 +87,28 @@ async function signedIn(me: Me) {
   refresh();
 }
 
-export async function register(input: Parameters<typeof api.register>[0]) {
-  await signedIn(await api.register(input));
-}
-
 export async function signIn(email: string, password: string) {
   await signedIn(await api.signIn(email, password));
+}
+
+/**
+ * Signs in with a phone number or email Phone.Email just verified. Something
+ * new isn't signed in yet: the ticket comes back, to finish with a name in
+ * `finishSignUp`.
+ */
+async function verifiedSignIn(result: api.VerifiedSignIn): Promise<{ ticket: string; suggestedName?: string } | null> {
+  if (!result.isNew) {
+    await signedIn(result.user);
+    return null;
+  }
+  return { ticket: result.ticket, suggestedName: result.suggestedName };
+}
+
+export const phoneSignIn = async (accessToken: string) => verifiedSignIn(await api.phoneLogin(accessToken));
+export const emailSignIn = async (resultUrl: string) => verifiedSignIn(await api.emailLogin(resultUrl));
+
+export async function finishSignUp(ticket: string, name: string) {
+  await signedIn(await api.signUp(ticket, name));
 }
 
 export async function signOut() {
@@ -96,8 +117,24 @@ export async function signOut() {
   set({ status: 'signedOut', me: null, conversations: null, friends: null, threads: {} });
 }
 
-export async function updateProfile(patch: { name?: string; phone?: string }) {
-  set({ me: await api.updateMe(patch) });
+export async function updateName(name: string) {
+  set({ me: await api.updateName(name) });
+}
+
+export async function verifyPhone(accessToken: string) {
+  set({ me: await api.verifyPhone(accessToken) });
+}
+
+export async function removePhone() {
+  set({ me: await api.removePhone() });
+}
+
+export async function verifyEmail(resultUrl: string) {
+  set({ me: await api.verifyEmail(resultUrl) });
+}
+
+export async function removeEmail() {
+  set({ me: await api.removeEmail() });
 }
 
 /** Reloads the conversation list and friends. */

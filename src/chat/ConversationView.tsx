@@ -75,7 +75,9 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
         ListEmptyComponent={
           thread && !thread.loading ? (
             <View style={styles.empty}>
-              <Text style={chatStyles.note}>Say hello to {user.name}, or send them a film from the player.</Text>
+              <Text style={chatStyles.note}>
+                Say hello to {user.name}, or send them a video: press and hold any video in ForUs.
+              </Text>
             </View>
           ) : null
         }
@@ -146,7 +148,18 @@ function Bubble({
           style={({ pressed }) => [styles.card, mine ? styles.cardMine : styles.cardTheirs, pressed && styles.pressed]}
         >
           <View>
-            <Image source={thumbnailUrl(title.videoId)} style={styles.cardImage} contentFit="cover" cachePolicy="memory-disk" />
+            <Image
+              source={
+                title.kind === 'video'
+                  ? thumbnailUrl(title.videoId)
+                  : title.poster
+                    ? { uri: title.poster }
+                    : undefined
+              }
+              style={styles.cardImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
             <View style={styles.cardPlay}>
               <Ionicons name="play" size={20} color="#fff" style={styles.playIcon} />
             </View>

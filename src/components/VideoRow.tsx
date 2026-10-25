@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { loadVideoPage, loadVideos, searchVideoPage, stripEmoji, type Video } from '../api/youtube';
 import { FULL_MOVIE, MOVIES, SHOWS, TRUSTED_CHANNELS, type VideoSource } from '../data/channels';
+import { shareOnLongPress } from '../chat/share';
 import { recallRow, rememberRow } from '../data/rowMemory';
 import type { Theme } from '../data/themes';
 import { CARD_GAP, CARD_WIDTH, GUTTER, ROW_PAD, colors, isTV, sz } from '../theme';
@@ -272,7 +273,7 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
               loadingMore ? <SkeletonLoader columns={2} cardWidth={CARD_WIDTH} rows={1} style={styles.more} /> : null
             }
             renderItem={({ item }) => (
-              <FocusCard onPress={() => onPlay(item)}>
+              <FocusCard onPress={() => onPlay(item)} onLongPress={shareOnLongPress(item.id, item.title)}>
                 <VideoCardContent
                   image={item.thumbnail}
                   title={cleanTitle(item.title)}

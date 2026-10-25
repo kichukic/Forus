@@ -1,21 +1,21 @@
-// "Send to a friend" from the player: a sheet listing your friends; picking
-// one sends them the film as a card they can tap to watch.
+// "Send to a friend": a sheet listing your friends; picking one sends them the
+// video as a card they can tap to watch. Opened from the player, or by
+// pressing and holding a video card anywhere (see share.ts).
 import { useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showToast } from '../data/toasts';
 import { GUTTER, colors } from '../theme';
-import type { ChatUser, SharedTitle } from './api';
+import type { ChatUser } from './api';
+import { closeShare, useShareRequest } from './share';
 import { send, useChat } from './store';
 import { Avatar, chatStyles } from './ui';
 
-type Props = {
-  title: SharedTitle | null;
-  onClose: () => void;
-};
-
-export function SendToFriend({ title, onClose }: Props) {
+// Shown once, in App; it opens whenever something asks to share.
+export function SendToFriend() {
+  const title = useShareRequest();
+  const onClose = closeShare;
   const insets = useSafeAreaInsets();
   const { status, friends } = useChat();
   const [sendingTo, setSendingTo] = useState<string | null>(null);

@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { loadVideos, type Video } from '../api/youtube';
 import { pictureFade, pictureShown, pictureWasShown } from './Cards';
 import { Shimmer } from './Shimmer';
+import { shareOnLongPress } from '../chat/share';
 import { FocusRow } from './FocusRow';
 import { recallRow, rememberRow } from '../data/rowMemory';
 import type { VideoSource } from '../data/channels';
@@ -161,7 +162,12 @@ function Slide({
   const [focused, setFocused] = useState(false);
 
   return (
-    <Pressable onPress={onPlay} focusable={false} style={[styles.slide, { height }]}>
+    <Pressable
+      onPress={onPlay}
+      onLongPress={shareOnLongPress(video.id, video.title)}
+      focusable={false}
+      style={[styles.slide, { height }]}
+    >
       {/* Shimmers until the big picture is in. */}
       {loadedUri !== uri && !pictureWasShown(uri) ? <Shimmer width={slideWidth} /> : null}
       <Image

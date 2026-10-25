@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { thumbnailUrl } from '../api/youtube';
 import { LiveTileContent, VideoCardContent } from '../components/Cards';
 import { FileCardContent } from '../components/FileCardContent';
+import { shareOnLongPress } from '../chat/share';
 import { FocusCard } from '../components/FocusCard';
 import { ListFrame } from '../components/ListFrame';
 import { cleanTitle } from '../components/VideoRow';
@@ -65,6 +66,7 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
                   // TV: the remote starts on the most recent item.
                   preferredFocus={index === 0}
                   onPress={() => onPlay(item)}
+                  onLongPress={item.kind === 'video' ? shareOnLongPress(item.videoId, item.title) : undefined}
                   style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP, marginBottom: 18 }}
                 >
                   <Card item={item} />
@@ -87,8 +89,8 @@ function Card({ item }: { item: Playable }) {
   if (item.kind === 'moviebox') {
     return <VideoCardContent image={item.poster} title={item.title} subtitle="MovieBox" />;
   }
-  if (item.kind === 'stream') {
-    return <VideoCardContent image={item.poster} title={item.title} subtitle="Stream" />;
+  if (item.kind === 'stream' || item.kind === 'web') {
+    return <VideoCardContent image={item.poster} title={item.title} subtitle={item.kind === 'web' ? 'Web Stream' : 'Stream'} />;
   }
   return <VideoCardContent image={thumbnailUrl(item.videoId)} title={cleanTitle(item.title)} />;
 }

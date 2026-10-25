@@ -5,12 +5,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { fetchWithTimeout } from '../api/http';
+import type { Playable } from '../types';
 
-export type ChatUser = { id: string; name: string; email: string };
-export type Me = ChatUser & { phone?: string };
+// Accounts made with a phone number alone have no email.
+export type ChatUser = { id: string; name: string; email?: string };
+// `phone` is always a number Phone.Email verified; `hasPassword` is false for
+// phone-only accounts.
+export type Me = ChatUser & { emailVerified: boolean; phone?: string; hasPassword: boolean };
 
 // A ForUs film or episode shared in a chat.
-export type SharedTitle = { kind: 'video'; videoId: string; title: string };
+export type SharedTitle =
+  | { kind: 'video'; videoId: string; title: string }
+  | { kind: 'web'; url: string; title: string; poster?: string }
+  | { kind: 'stream'; url: string; title: string; poster?: string };
 
 export type ChatMessage = {
   id: string;
@@ -96,12 +103,6 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T;
 }
 
-export async function register(input: { email: string; password: string; name: string; phone?: string }) {
-  const out = await call<{ token: string; user: Me }>('POST', '/auth/register', input);
-  await saveToken(out.token);
-  return out.user;
-}
-
 export async function signIn(email: string, password: string) {
   const out = await call<{ token: string; user: Me }>('POST', '/auth/login', { email, password });
   await saveToken(out.token);
@@ -112,9 +113,43 @@ export async function signOut() {
   await saveToken(null);
 }
 
+export type VerifiedSignIn = { isNew: false; user: Me } | { isNew: true; ticket: string; suggestedName?: string };
+
+/**
+ * Signs in with what Phone.Email's verification page returned: an access
+ * token for a phone, a result link for an email. Something new comes back
+ * with a ticket for `signUp`, to make the account.
+ */
+async function verifiedLogin(path: string, body: object): Promise<VerifiedSignIn> {
+  const out = await call<
+    { isNew: false; token: string; user: Me } | { isNew: true; ticket: string; suggestedName?: string }
+  >('POST', path, body);
+  if (!out.isNew) {
+    await saveToken(out.token);
+    return { isNew: false, user: out.user };
+  }
+  return out;
+}
+
+export const phoneLogin = (accessToken: string) => verifiedLogin('/auth/phone', { accessToken });
+export const emailLogin = (resultUrl: string) => verifiedLogin('/auth/email', { resultUrl });
+
+export async function signUp(ticket: string, name: string) {
+  const out = await call<{ token: string; user: Me }>('POST', '/auth/signup', { ticket, name });
+  await saveToken(out.token);
+  return out.user;
+}
+
 export const getMe = () => call<{ user: Me }>('GET', '/me').then((r) => r.user);
-export const updateMe = (patch: { name?: string; phone?: string }) =>
-  call<{ user: Me }>('PATCH', '/me', patch).then((r) => r.user);
+export const updateName = (name: string) => call<{ user: Me }>('PATCH', '/me', { name }).then((r) => r.user);
+/** Adds or changes your number, with the token from Phone.Email's page. */
+export const verifyPhone = (accessToken: string) =>
+  call<{ user: Me }>('POST', '/me/phone', { accessToken }).then((r) => r.user);
+export const removePhone = () => call<{ user: Me }>('DELETE', '/me/phone').then((r) => r.user);
+/** Adds, changes or confirms your email, with the result link from Phone.Email's page. */
+export const verifyEmail = (resultUrl: string) =>
+  call<{ user: Me }>('POST', '/me/email', { resultUrl }).then((r) => r.user);
+export const removeEmail = () => call<{ user: Me }>('DELETE', '/me/email').then((r) => r.user);
 
 /** Someone by exact email or phone number. */
 export function lookUp(query: string) {
@@ -143,3 +178,9 @@ export const sendMessage = (userId: string, content: { text?: string; title?: Sh
   call<{ message: ChatMessage }>('POST', `/conversations/${userId}/messages`, content).then((r) => r.message);
 
 export const markRead = (userId: string) => call<unknown>('POST', `/conversations/${userId}/read`);
+
+// Watch history kept with the account. Times are ISO strings on the wire.
+export type RemoteHistoryEntry = { item: Playable; watchedAt: string };
+export const mergeHistory = (entries: RemoteHistoryEntry[]) =>
+  call<{ entries: RemoteHistoryEntry[] }>('POST', '/history', { entries }).then((r) => r.entries);
+export const clearRemoteHistory = () => call<unknown>('DELETE', '/history');

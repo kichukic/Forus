@@ -44,6 +44,7 @@ import { CARD_WIDTH, GLOW, GUTTER, colors, isTV, sz } from '../theme';
 import { TransferList } from '../components/TransferList';
 import type { Playable } from '../types';
 import { useEvent } from '../hooks/useEvent';
+import { shareOnLongPress } from '../chat/share';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 
 // Each themed row is a search of about 0.7 MB. A TV starts with one and reads
@@ -371,7 +372,10 @@ function HomeScreenView({
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.list}
                   renderItem={({ item }) => (
-                    <FocusCard onPress={() => onPlay(item)}>
+                    <FocusCard
+                      onPress={() => onPlay(item)}
+                      onLongPress={item.kind === 'video' ? shareOnLongPress(item.videoId, item.title) : undefined}
+                    >
                       <HistoryCard item={item} />
                     </FocusCard>
                   )}
@@ -500,7 +504,7 @@ function HistoryCard({ item }: { item: Playable }) {
   if (item.kind === 'moviebox') {
     return <VideoCardContent image={item.poster} title={item.title} subtitle="Watch again" />;
   }
-  if (item.kind === 'stream') {
+  if (item.kind === 'stream' || item.kind === 'web') {
     return <VideoCardContent image={item.poster} title={item.title} subtitle="Watch again" />;
   }
   return <VideoCardContent image={thumbnailUrl(item.videoId)} title={cleanTitle(item.title)} subtitle="Watch again" />;
