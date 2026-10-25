@@ -31,7 +31,8 @@ import { shareMoviebox } from '../chat/share';
 import { startDownload } from '../data/downloads';
 import { showToast } from '../data/toasts';
 import { ReleaseList } from '../components/ReleaseList';
-import { GUTTER, RADIUS, SCRIM, colors, isTV } from '../theme';
+import { FavoriteHeart } from '../components/FavoriteHeart';
+import { GUTTER, RADIUS, SCRIM, colors, isTV, sz } from '../theme';
 import type { Playable } from '../types';
 
 type Props = {
@@ -281,15 +282,30 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
         <Text style={styles.topTitle} numberOfLines={1}>
           {shown.title}
         </Text>
-        {!isTV && (
-          <Pressable
-            onPress={() => shareMoviebox({ id: currentId, title: shown.title, poster: shown.poster })}
-            style={styles.topShare}
-            hitSlop={12}
-          >
-            <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
-          </Pressable>
-        )}
+        <View style={styles.topActions}>
+          <FavoriteHeart
+            item={{
+              id: `moviebox:${currentId}`,
+              kind: 'moviebox',
+              title: shown.title,
+              poster: shown.poster,
+              year: shown.year,
+              genre: shown.genre,
+              rating: shown.rating,
+              subjectId: currentId,
+            }}
+            size={isTV ? 22 : 18}
+          />
+          {!isTV && (
+            <Pressable
+              onPress={() => shareMoviebox({ id: currentId, title: shown.title, poster: shown.poster })}
+              style={styles.topShare}
+              hitSlop={12}
+            >
+              <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -543,6 +559,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   topTitle: { flex: 1, color: colors.text, fontSize: isTV ? 20 : 17, fontWeight: '800' },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   topShare: {
     width: isTV ? 44 : 38,
     height: isTV ? 44 : 38,

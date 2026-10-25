@@ -20,6 +20,7 @@ import { shareMovie } from '../chat/share';
 import { startDownload } from '../data/downloads';
 import { ReleaseList } from '../components/ReleaseList';
 import { Loader } from '../components/Loader';
+import { FavoriteHeart } from '../components/FavoriteHeart';
 import { addTransfer } from '../data/transfers';
 import { showToast } from '../data/toasts';
 import { GUTTER, RADIUS, SCRIM, colors, isTV } from '../theme';
@@ -172,15 +173,27 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
         <Text style={styles.topTitle} numberOfLines={1}>
           {movie.title}
         </Text>
-        {!isTV && (
-          <Pressable
-            onPress={() => shareMovie({ id: movie.id, title: movie.title, poster: movie.poster, year: movie.year })}
-            style={styles.topShare}
-            hitSlop={12}
-          >
-            <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
-          </Pressable>
-        )}
+        <View style={styles.topActions}>
+          <FavoriteHeart
+            item={{
+              id: `movie:${movie.id}`,
+              kind: 'movie',
+              title: movie.title,
+              poster: movie.poster,
+              year: movie.year,
+            }}
+            size={isTV ? 22 : 18}
+          />
+          {!isTV && (
+            <Pressable
+              onPress={() => shareMovie({ id: movie.id, title: movie.title, poster: movie.poster, year: movie.year })}
+              style={styles.topShare}
+              hitSlop={12}
+            >
+              <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
@@ -354,6 +367,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   topTitle: { flex: 1, color: colors.text, fontSize: isTV ? 20 : 17, fontWeight: '800' },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   topShare: {
     width: isTV ? 44 : 38,
     height: isTV ? 44 : 38,

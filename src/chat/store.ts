@@ -54,6 +54,18 @@ export function useUnreadCount(): number {
   return useSyncExternalStore(subscribe, () => (state.conversations ?? []).reduce((n, c) => n + c.unread, 0));
 }
 
+/** Whether the signed-in user is an administrator (has isAdmin or isadmin). */
+export function useIsAdmin(): boolean {
+  return useSyncExternalStore(subscribe, () => Boolean(state.me?.isAdmin || (state.me as any)?.isadmin));
+}
+
+/** Sends an active screen time heartbeat over socket.io */
+export function sendScreenTimeHeartbeat(seconds = 30) {
+  if (socket?.connected) {
+    socket.emit('screen-time-heartbeat', { seconds });
+  }
+}
+
 // ---- Session ----
 
 let started = false;

@@ -2,22 +2,31 @@
 // blurs the screen behind it. The other tabs are just icons; the selected one
 // opens into a purple pill with its icon and name, and springs across when
 // another is chosen. TVs use the tabs at the top instead.
-import { useState, type RefObject } from 'react';
+import { useEffect, useMemo, useState, type RefObject } from 'react';
 import { Animated, LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useUnreadCount } from '../chat/store';
+import { useUnreadCount, useIsAdmin } from '../chat/store';
 import { useDownloads } from '../data/downloads';
+import { useNavHidden } from '../data/navChrome';
 import { Badge } from '../chat/ui';
 import { colors } from '../theme';
 
-export type NavId = 'home' | 'search' | 'downloads' | 'history' | 'chat' | 'settings';
+export type NavId = 'home' | 'search' | 'favorites' | 'downloads' | 'history' | 'chat' | 'settings' | 'admin';
 
-const ITEMS: { id: NavId; label: string; icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap }[] = [
+export type NavItem = {
+  id: NavId;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  activeIcon: keyof typeof Ionicons.glyphMap;
+};
+
+const BASE_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
   { id: 'search', label: 'Search', icon: 'search-outline', activeIcon: 'search' },
+  { id: 'favorites', label: 'Favorites', icon: 'heart-outline', activeIcon: 'heart' },
   { id: 'downloads', label: 'Downloads', icon: 'arrow-down-circle-outline', activeIcon: 'arrow-down-circle' },
   { id: 'history', label: 'History', icon: 'time-outline', activeIcon: 'time' },
   { id: 'chat', label: 'Chat', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles' },
@@ -46,6 +55,38 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
   const unread = useUnreadCount();
   const downloads = useDownloads();
   const activeDownloads = downloads.filter((d) => d.status === 'downloading').length;
+  const isAdmin = useIsAdmin();
+
+  const items = useMemo(() => {
+    const list = [...BASE_ITEMS];
+    if (isAdmin) {
+      list.push({
+        id: 'admin',
+        label: 'Analytics',
+        icon: 'stats-chart-outline',
+        activeIcon: 'stats-chart',
+      });
+    }
+    return list;
+  }, [isAdmin]);
+
+  // Tucked below the screen edge while the user scrolls down through a list.
+  const hidden = useNavHidden();
+  const [slide] = useState(() => new Animated.Value(0));
+  // How far the bar travels to clear the edge, its padding and its shadow.
+  const travel = BOTTOM_NAV_HEIGHT + insets.bottom + 34;
+  useEffect(() => {
+    // A spring easing to rest reads as a glide; the slide and the fade both
+    // come from one 0..1 value so they move together.
+    Animated.spring(slide, {
+      toValue: hidden ? 1 : 0,
+      speed: 12,
+      bounciness: 0,
+      useNativeDriver: true,
+    }).start();
+  }, [hidden, slide]);
+  const translateY = slide.interpolate({ inputRange: [0, 1], outputRange: [0, travel] });
+  const opacity = slide.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.55, 0] });
 
   const select = (id: NavId) => {
     if (id !== active) LayoutAnimation.configureNext(SWITCH);
@@ -53,7 +94,10 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
   };
 
   return (
-    <View style={[styles.bar, { paddingBottom: insets.bottom + 10 }]} pointerEvents="box-none">
+    <Animated.View
+      style={[styles.bar, { paddingBottom: insets.bottom + 10, opacity, transform: [{ translateY }] }]}
+      pointerEvents="box-none"
+    >
       <View style={styles.shadow}>
         <BlurView
           intensity={60}
@@ -70,7 +114,7 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
-          {ITEMS.map((item) => (
+          {items.map((item) => (
             <Tab
               key={item.id}
               item={item}
@@ -81,7 +125,7 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
           ))}
         </BlurView>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -91,7 +135,7 @@ function Tab({
   badge,
   onPress,
 }: {
-  item: (typeof ITEMS)[number];
+  item: NavItem;
   on: boolean;
   badge: number;
   onPress: () => void;
@@ -142,7 +186,7 @@ function Tab({
 const styles = StyleSheet.create({
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   shadow: {
-    marginHorizontal: 16,
+    marginHorizontal: 10,
     borderRadius: 32,
     shadowColor: '#000',
     shadowOpacity: 0.5,
@@ -154,7 +198,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: BOTTOM_NAV_HEIGHT,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     borderRadius: 32,
     overflow: 'hidden',
     borderWidth: 1,
@@ -163,21 +207,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(22,18,32,0.62)',
   },
   item: { flex: 1, alignItems: 'center', justifyContent: 'center', height: '100%' },
-  itemOn: { flex: 2.1 },
-  plain: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  itemOn: { flex: 2.0 },
+  plain: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    height: 44,
-    paddingHorizontal: 16,
-    borderRadius: 22,
+    gap: 6,
+    height: 42,
+    paddingHorizontal: 12,
+    borderRadius: 21,
     shadowColor: colors.accent,
     shadowOpacity: 0.6,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
-  pillLabel: { color: '#fff', fontSize: 13.5, fontWeight: '800', letterSpacing: 0.2 },
+  pillLabel: { color: '#fff', fontSize: 12.5, fontWeight: '800', letterSpacing: 0.2 },
   badge: { position: 'absolute', top: -7, right: -12, borderWidth: 2, borderColor: '#1a1626' },
 });

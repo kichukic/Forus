@@ -6,6 +6,7 @@ import { loadMeta, type StreamioItem } from '../api/streamiobox';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { resolveDirectSeriesEpisode } from '../api/directStreams';
 import { shareMovie } from '../chat/share';
+import { FavoriteHeart } from '../components/FavoriteHeart';
 import { showToast } from '../data/toasts';
 import { GUTTER, RADIUS, colors, isTV } from '../theme';
 import type { Playable } from '../types';
@@ -79,15 +80,28 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease, onPlay }
           <Ionicons name="chevron-back" size={isTV ? 28 : 24} color={colors.text} />
         </Pressable>
         <Text style={styles.topTitle} numberOfLines={1}>{item.title}</Text>
-        {!isTV && (
-          <Pressable
-            onPress={() => shareMovie({ id: item.id, title: item.title, poster: item.poster, year: item.year })}
-            style={styles.topShare}
-            hitSlop={12}
-          >
-            <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
-          </Pressable>
-        )}
+        <View style={styles.topActions}>
+          <FavoriteHeart
+            item={{
+              id: `streamio:${item.id}`,
+              kind: 'movie',
+              title: item.title,
+              poster: item.poster,
+              year: item.year,
+              genre: item.genres?.[0],
+            }}
+            size={isTV ? 22 : 18}
+          />
+          {!isTV && (
+            <Pressable
+              onPress={() => shareMovie({ id: item.id, title: item.title, poster: item.poster, year: item.year })}
+              style={styles.topShare}
+              hitSlop={12}
+            >
+              <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+            </Pressable>
+          )}
+        </View>
       </View>
       <ScrollView contentContainerStyle={styles.list}>
         <View style={styles.head}>
@@ -153,6 +167,7 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: GUTTER, paddingBottom: 8 },
   back: { width: isTV ? 44 : 38, height: isTV ? 44 : 38, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   topTitle: { flex: 1, color: colors.text, fontSize: isTV ? 20 : 17, fontWeight: '800' },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topShare: { width: isTV ? 44 : 38, height: isTV ? 44 : 38, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   list: { paddingHorizontal: GUTTER, paddingBottom: 120 },
   head: { flexDirection: 'row', gap: 18, marginTop: 10, marginBottom: 14 },

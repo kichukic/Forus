@@ -6,8 +6,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiKey } from '../api/torbox';
 import { getAddonUrls, addAddon, removeAddon } from '../api/addons';
 import { useDownloads } from '../data/downloads';
+import { useNavScrollHide } from '../data/navChrome';
 import { getTraktSession, subscribeTrakt, type TraktSession } from '../api/trakt';
 import { TraktSetupScreen } from './TraktSetupScreen';
+import { ForUsWrappedModal } from '../components/ForUsWrappedModal';
 import { LIVE_NEWS, MOVIES, SHOWS } from '../data/channels';
 import { GLOW, GUTTER, RADIUS, colors, isTV, sz } from '../theme';
 
@@ -29,12 +31,15 @@ export function SettingsScreen({
   onOpenDownloads,
 }: Props) {
   const insets = useSafeAreaInsets();
+  // Scrolling the settings list down tucks the bottom bar away.
+  const navScroll = useNavScrollHide();
   const [connected, setConnected] = useState<boolean | null>(null);
   const [addons, setAddons] = useState<string[]>([]);
   const [newUrl, setNewUrl] = useState('');
   const [cleared, setCleared] = useState(false);
   const [traktOpen, setTraktOpen] = useState(false);
   const [traktSession, setTraktSession] = useState<TraktSession | null>(null);
+  const [wrappedOpen, setWrappedOpen] = useState(false);
   const downloads = useDownloads();
 
   useEffect(() => {
@@ -56,7 +61,11 @@ export function SettingsScreen({
   return (
     <View style={styles.screen}>
       <LinearGradient colors={GLOW} style={styles.glow} pointerEvents="none" />
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + GUTTER }]}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + GUTTER }]}
+        onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={48}
+      >
         <Text style={styles.title}>Settings</Text>
 
         <Group title="Your accounts">
@@ -85,6 +94,12 @@ export function SettingsScreen({
               first
             />
           )}
+          <Row
+            icon="sparkles-outline"
+            title="ForUs Wrapped"
+            detail="Your streaming persona & stats"
+            onPress={() => setWrappedOpen(true)}
+          />
           <Row
             icon="trash-outline"
             title="Clear watch history"
@@ -185,6 +200,7 @@ export function SettingsScreen({
       </ScrollView>
 
       <TraktSetupScreen visible={traktOpen} onClose={() => setTraktOpen(false)} />
+      <ForUsWrappedModal visible={wrappedOpen} onClose={() => setWrappedOpen(false)} />
     </View>
   );
 }

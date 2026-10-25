@@ -279,6 +279,15 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
                   title={cleanTitle(item.title)}
                   subtitle={item.channel}
                   duration={item.duration}
+                  favoriteItem={{
+                    id: `yt:${item.id}`,
+                    kind: 'video',
+                    title: cleanTitle(item.title),
+                    poster: item.thumbnail,
+                    channel: item.channel,
+                    duration: item.duration,
+                    videoId: item.id,
+                  }}
                 />
               </FocusCard>
             )}

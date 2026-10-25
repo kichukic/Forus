@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { deleteDownload, formatBytes, useDownloads, type DownloadItem } from '../data/downloads';
+import { useNavScrollHide } from '../data/navChrome';
 import { colors, isTV } from '../theme';
 import type { Playable } from '../types';
 
@@ -14,6 +15,8 @@ type Props = {
 export function DownloadsScreen({ onBack, onPlay }: Props) {
   const insets = useSafeAreaInsets();
   const downloads = useDownloads();
+  // Scrolling the download list down tucks the bottom bar away.
+  const navScroll = useNavScrollHide();
 
   const handlePlayOffline = (item: DownloadItem) => {
     onPlay({
@@ -147,6 +150,8 @@ export function DownloadsScreen({ onBack, onPlay }: Props) {
           data={downloads}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={48}
           contentContainerStyle={styles.list}
         />
       )}

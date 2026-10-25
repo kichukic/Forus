@@ -25,7 +25,7 @@ import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
 import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
-import { startChat, useChatStatus } from './src/chat/store';
+import { sendScreenTimeHeartbeat, startChat, useChatStatus } from './src/chat/store';
 import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
 import { onOpenChatRequest } from './src/chat/push';
 import { SendToFriend } from './src/chat/SendToFriend';
@@ -45,6 +45,8 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TorboxSetupScreen } from './src/screens/TorboxSetupScreen';
 import { DownloadsScreen } from './src/screens/DownloadsScreen';
 import { DownloadBar } from './src/components/DownloadBar';
+import { FavoritesScreen } from './src/screens/FavoritesScreen';
+import { AdminAnalyticsScreen } from './src/screens/AdminAnalyticsScreen';
 import { colors, isTV } from './src/theme';
 import type { SearchScope } from './src/data/channels';
 import type { Playable } from './src/types';
@@ -108,6 +110,12 @@ export default function App() {
     checkForUpdate().then((u) => {
       if (u) setUpdatePrompt(u);
     });
+
+    // Active screen time heartbeat
+    const heartbeatTimer = setInterval(() => {
+      sendScreenTimeHeartbeat(30);
+    }, 30000);
+    return () => clearInterval(heartbeatTimer);
   }, []);
 
   useEffect(() => {
@@ -337,6 +345,22 @@ export default function App() {
                 onBack={() => setScreen('settings')}
                 onPlay={play}
               />
+            </View>
+          )}
+
+          {screen === 'favorites' && (
+            <View style={layer('favorites')}>
+              <FavoritesScreen
+                onPlay={play}
+                onOpenMoviebox={setMoviebox}
+                onGoHome={() => setScreen('home')}
+              />
+            </View>
+          )}
+
+          {screen === 'admin' && (
+            <View style={layer('admin')}>
+              <AdminAnalyticsScreen onBack={() => setScreen('home')} />
             </View>
           )}
 

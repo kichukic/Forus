@@ -4,6 +4,7 @@ import {
   AppState,
   Easing,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,6 +16,7 @@ import {
   type RefreshControlProps,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clearVideoCache, thumbnailUrl } from '../api/youtube';
@@ -39,6 +41,8 @@ import { MovieboxScreen } from './MovieboxScreen';
 import { JackBoxScreen } from './JackBoxScreen';
 import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
+import { useNavScrollHide } from '../data/navChrome';
+import { heroProgress, resetHeroScroll, setHeroScroll } from '../data/heroChrome';
 import { THEMES, type Theme } from '../data/themes';
 import { CARD_WIDTH, GLOW, GUTTER, colors, isTV, sz } from '../theme';
 import { TransferList } from '../components/TransferList';
@@ -93,6 +97,23 @@ const activePage: { current: FlatList<ReactNode> | null } = { current: null };
 const TAB_FOCUS_DELAY_MS = 350;
 // The news channels' recorded uploads, one row each on the News tab.
 const NEWS_SOURCES = LIVE_NEWS.map(({ name, channelId }) => ({ name, channelId }));
+// A time-of-day greeting for the header.
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 5) return 'Burning the midnight oil';
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  if (h < 21) return 'Good evening';
+  return 'Winding down';
+}
+
+// Gradient fill that slides behind the active tab, with a soft accent glow.
+const PILL_GRADIENT = ['#b478ff', '#7d3ff0'] as const;
+// The frosted sheen laid over the header as the hero collapses.
+const FROST_TOP = 'rgba(28,22,40,0.92)' as const;
+const FROST_BOTTOM = 'rgba(18,14,26,0.6)' as const;
+// Room the greeting line takes; it interpolates to zero as the hero collapses.
+const GREET_H = sz(24, 30);
 
 type Props = {
   history: Playable[];
@@ -159,6 +180,7 @@ function HomeScreenView({
   const [launchFocus, setLaunchFocus] = useState(true);
   const open = (t: Tab) => {
     if (t === tab) return;
+    resetHeroScroll();
     setLaunchFocus(false);
     setDirection(TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1);
     setTab(t);
@@ -171,6 +193,7 @@ function HomeScreenView({
       if ((scrollPositions.get(tab) ?? 0) > 40) {
         activePage.current?.scrollToOffset({ offset: 0, animated: true });
         scrollPositions.set(tab, 0);
+        resetHeroScroll();
       } else if (tab !== 'all') {
         open('all');
       } else {
@@ -295,27 +318,61 @@ function HomeScreenView({
     </View>
   );
 
+  // Derived from the shared scroll signal: the greeting tucks away and a frosted
+  // sheen rises behind the header as the page scrolls down. On a TV heroProgress
+  // stays pinned at 0, so the hero always reads expanded.
+  const greet = greeting();
+  const frost = heroProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const greetOpacity = heroProgress.interpolate({ inputRange: [0, 0.5], outputRange: [1, 0] });
+  const greetHeight = heroProgress.interpolate({ inputRange: [0, 1], outputRange: [GREET_H, 0] });
+
   return (
     <View style={styles.screen}>
       {/* The purple haze behind the header. */}
       <LinearGradient colors={GLOW} style={styles.glow} pointerEvents="none" />
 
       <View style={[styles.top, { paddingTop: insets.top + (sz(8, 24)) }]}>
+        {/* Frosted glass that rises behind the header as the hero collapses. */}
+        <Animated.View pointerEvents="none" style={[styles.heroFrost, { opacity: frost }]}>
+          {!isTV && Platform.OS === 'ios' && (
+            <BlurView intensity={34} tint="dark" style={StyleSheet.absoluteFill} />
+          )}
+          <LinearGradient
+            colors={[FROST_TOP, FROST_BOTTOM]}
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+
         <View style={styles.header}>
           <View style={styles.brandBlock}>
             <Text style={styles.brand}>
               For<Text style={styles.brandAccent}>Us</Text>
             </Text>
+            <Animated.View style={{ height: greetHeight, opacity: greetOpacity, overflow: 'hidden' }}>
+              <Text style={styles.greeting} numberOfLines={1}>
+                {greet}
+              </Text>
+            </Animated.View>
           </View>
-          {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
-          <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' || tab === 'jackbox' ? 'all' : tab)} />
-          {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
-          {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
+          <View style={styles.actions}>
+            {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
+            <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' || tab === 'jackbox' ? 'all' : tab)} />
+            {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
+            {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
+          </View>
         </View>
         {/* On TV the row remembers the last tab, so Up from the page lands on it. */}
         <FocusRow>
           <ScrollView ref={tabBar} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-            <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]} />
+            <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]}>
+              <LinearGradient
+                colors={PILL_GRADIENT}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+            </Animated.View>
             {TABS.map((t) => (
               <TabButton
                 // Remounting is what hands the active tab the remote's focus on
@@ -526,6 +583,8 @@ type TabScrollProps = {
 // tab costs nothing until it is scrolled to, and rows far behind are let go.
 function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPlay, tabKey }: TabScrollProps) {
   const [themeCount, setThemeCount] = useState(THEMES_AT_START);
+  // Scrolling down tucks the bottom bar away; scrolling up brings it back.
+  const navScroll = useNavScrollHide();
   const scroll = useRef<FlatList<ReactNode>>(null);
   // Registered as the page in front when the list itself appears, which on TV
   // is a moment after the tab (once ListFrame has measured the room).
@@ -546,6 +605,8 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
 
   const onScroll = ({ nativeEvent: e }: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.contentOffset.y;
+    navScroll(y);
+    setHeroScroll(y);
     if (tabKey) scrollPositions.set(tabKey, y);
     // The place to come back to is kept until it is actually reached.
     if (restore.current > 0 && y >= restore.current - 4) restore.current = 0;
@@ -710,7 +771,17 @@ const styles = StyleSheet.create({
   hidden: { display: 'none' },
   panel: { flex: 1, width: '100%' },
   glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 360 },
-  top: { paddingBottom: sz(8, 12) },
+  top: { position: 'relative', paddingBottom: sz(8, 12) },
+  heroFrost: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
   content: { paddingTop: sz(6, 8), paddingBottom: sz(110, 40) },
   header: {
     flexDirection: 'row',
@@ -720,7 +791,17 @@ const styles = StyleSheet.create({
     marginBottom: sz(12, 16),
   },
   brandBlock: { flex: 1 },
-  brand: { color: colors.text, fontSize: sz(25, 32), fontWeight: '900', letterSpacing: -0.5 },
+  greeting: { color: colors.muted, fontSize: sz(13.5, 17), fontWeight: '600', marginTop: sz(2, 4) },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: sz(10, 14) },
+  brand: {
+    color: colors.text,
+    fontSize: sz(25, 32),
+    fontWeight: '900',
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(155,92,255,0.45)',
+    textShadowRadius: 16,
+    textShadowOffset: { width: 0, height: 0 },
+  },
   brandAccent: { color: colors.accent },
   round: {
     width: sz(42, 50),
@@ -741,7 +822,18 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  pill: { position: 'absolute', top: 0, bottom: 0, borderRadius: 22, backgroundColor: colors.accent },
+  pill: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: colors.accent,
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
+  },
   tabFocused: { borderColor: colors.text },
   tabText: { color: colors.muted, fontSize: sz(13.5, 17), fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
   tabTextActive: { color: '#fff' },

@@ -11,7 +11,15 @@ import type { Playable } from '../types';
 export type ChatUser = { id: string; name: string; email?: string };
 // `phone` is always a number Phone.Email verified; `hasPassword` is false for
 // phone-only accounts.
-export type Me = ChatUser & { emailVerified: boolean; phone?: string; hasPassword: boolean };
+export type Me = ChatUser & {
+  emailVerified: boolean;
+  phone?: string;
+  hasPassword: boolean;
+  isAdmin?: boolean;
+  isadmin?: boolean;
+  screenTimeSeconds?: number;
+  lastActiveAt?: string;
+};
 
 // A ForUs film or episode shared in a chat.
 export type SharedTitle =
@@ -201,3 +209,31 @@ export type AiVibeResult = { title: string; year?: number; reason?: string };
 // A Gemini call is slower than the chat endpoints, so it gets its own budget.
 export const aiVibeSearch = (prompt: string) =>
   call<{ results: AiVibeResult[] }>('POST', '/ai/search', { prompt }, 30000).then((r) => r.results);
+
+// Admin Analytics
+export type AdminUserAnalytics = {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  isAdmin: boolean;
+  online: boolean;
+  currentSessionSeconds: number;
+  totalScreenTimeSeconds: number;
+  lastActiveAt: string;
+  joinedAt: string;
+};
+
+export type AdminAnalyticsData = {
+  onlineCount: number;
+  totalUsers: number;
+  totalScreenTimeSeconds: number;
+  onlineUsers: AdminUserAnalytics[];
+  users: AdminUserAnalytics[];
+};
+
+export const getAdminAnalytics = () =>
+  call<AdminAnalyticsData>('GET', '/admin/analytics', undefined, 15000);
+
+export const recordScreenTimeHeartbeat = (seconds = 30) =>
+  call<{ ok: boolean }>('POST', '/analytics/heartbeat', { seconds }).catch(() => ({ ok: false }));

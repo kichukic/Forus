@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav';
+import { useNavScrollHide } from '../data/navChrome';
 import { Loader } from '../components/Loader';
 import { GUTTER, colors } from '../theme';
 import type { ChatUser, Conversation } from './api';
@@ -21,6 +22,8 @@ type Props = {
 
 export function ConversationListView({ onOpen, onFriends, onProfile }: Props) {
   const insets = useSafeAreaInsets();
+  // Scrolling the chat list down tucks the bottom bar away.
+  const navScroll = useNavScrollHide();
   const { conversations, friends, live, me } = useChat();
   const [refreshing, setRefreshing] = useState(false);
   const requests = friends?.incoming.length ?? 0;
@@ -43,6 +46,8 @@ export function ConversationListView({ onOpen, onFriends, onProfile }: Props) {
         <FlatList
           data={conversations}
           keyExtractor={(c) => c.user.id}
+          onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={48}
           contentContainerStyle={{ paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom + 40, flexGrow: 1 }}
           refreshControl={
             <RefreshControl
