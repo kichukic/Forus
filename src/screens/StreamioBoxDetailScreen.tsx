@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { loadMeta, type StreamioItem } from '../api/streamiobox';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { resolveDirectSeriesEpisode } from '../api/directStreams';
+import { shareMovie } from '../chat/share';
+import { FavoriteHeart } from '../components/FavoriteHeart';
 import { showToast } from '../data/toasts';
 import { GUTTER, RADIUS, colors, isTV } from '../theme';
 import type { Playable } from '../types';
@@ -78,6 +80,28 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease, onPlay }
           <Ionicons name="chevron-back" size={isTV ? 28 : 24} color={colors.text} />
         </Pressable>
         <Text style={styles.topTitle} numberOfLines={1}>{item.title}</Text>
+        <View style={styles.topActions}>
+          <FavoriteHeart
+            item={{
+              id: `streamio:${item.id}`,
+              kind: 'movie',
+              title: item.title,
+              poster: item.poster,
+              year: item.year,
+              genre: item.genres?.[0],
+            }}
+            size={isTV ? 22 : 18}
+          />
+          {!isTV && (
+            <Pressable
+              onPress={() => shareMovie({ id: item.id, title: item.title, poster: item.poster, year: item.year })}
+              style={styles.topShare}
+              hitSlop={12}
+            >
+              <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+            </Pressable>
+          )}
+        </View>
       </View>
       <ScrollView contentContainerStyle={styles.list}>
         <View style={styles.head}>
@@ -85,6 +109,15 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease, onPlay }
           <View style={styles.headText}>
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.meta}>{[item.year, item.runtime, item.genres?.slice(0, 3).join(', ')].filter(Boolean).join(' · ')}</Text>
+            {!isTV && (
+              <Pressable
+                onPress={() => shareMovie({ id: item.id, title: item.title, poster: item.poster, year: item.year })}
+                style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
+              >
+                <Ionicons name="paper-plane-outline" size={16} color={colors.text} />
+                <Text style={styles.shareBtnText}>Send to a friend</Text>
+              </Pressable>
+            )}
           </View>
         </View>
         {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
@@ -134,12 +167,29 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: GUTTER, paddingBottom: 8 },
   back: { width: isTV ? 44 : 38, height: isTV ? 44 : 38, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   topTitle: { flex: 1, color: colors.text, fontSize: isTV ? 20 : 17, fontWeight: '800' },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topShare: { width: isTV ? 44 : 38, height: isTV ? 44 : 38, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   list: { paddingHorizontal: GUTTER, paddingBottom: 120 },
   head: { flexDirection: 'row', gap: 18, marginTop: 10, marginBottom: 14 },
   poster: { width: isTV ? 150 : 116, aspectRatio: 2 / 3, borderRadius: RADIUS, backgroundColor: colors.surface },
   headText: { flex: 1, justifyContent: 'center' },
   title: { color: colors.text, fontSize: isTV ? 28 : 22, fontWeight: '900' },
   meta: { color: colors.muted, fontSize: isTV ? 15 : 13, marginTop: 6 },
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignSelf: 'flex-start',
+  },
+  shareBtnPressed: { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: colors.text },
+  shareBtnText: { color: colors.text, fontSize: isTV ? 15 : 13, fontWeight: '700' },
   description: { color: colors.muted, fontSize: isTV ? 16 : 14, lineHeight: isTV ? 24 : 20, marginBottom: 18 },
   sectionTitle: { color: colors.text, fontSize: isTV ? 20 : 17, fontWeight: '800', marginTop: 14, marginBottom: 10 },
   episode: {

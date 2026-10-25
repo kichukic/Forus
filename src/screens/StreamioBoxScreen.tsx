@@ -23,6 +23,7 @@ import {
   type StreamioType,
 } from '../api/streamiobox';
 import { FocusCard } from '../components/FocusCard';
+import { shareOnLongPress } from '../chat/share';
 import { playableKey } from '../data/history';
 import { Loader } from '../components/Loader';
 import { SectionHeader } from '../components/Section';
@@ -345,7 +346,17 @@ const StreamioCell = memo(function StreamioCell({
 }) {
   return (
     <View style={[styles.cell, { width: cardWidth }]}>
-      <FocusCard onPress={() => onOpen(item)} width={cardWidth - 8} style={styles.card}>
+      <FocusCard
+        onPress={() => onOpen(item)}
+        onLongPress={shareOnLongPress({
+          kind: 'stream',
+          url: item.id,
+          title: item.title,
+          poster: item.poster,
+        })}
+        width={cardWidth - 8}
+        style={styles.card}
+      >
         <PosterCard item={item} />
       </FocusCard>
     </View>

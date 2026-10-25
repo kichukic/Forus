@@ -2,7 +2,7 @@
   "expo": {
     "name": "ForUs",
     "slug": "MytvstreamApp",
-    "version": "1.0.127",
+    "version": "1.0.164",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
@@ -44,7 +44,22 @@
           "color": "#9b5cff"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "recordAudioAndroid": true,
+          "microphonePermission": "ForUs uses the microphone to record voice messages for your friends."
+        }
+      ]
     ],
     "android": {
       "package": "com.forus.app",
@@ -52,9 +67,11 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundImage": "./assets/images/adaptive-background.png"
       },
-      "versionCode": 128,
+      "versionCode": 165,
       "permissions": [
-        "android.permission.REQUEST_INSTALL_PACKAGES"
+        "android.permission.REQUEST_INSTALL_PACKAGES",
+        "android.permission.READ_CONTACTS",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     }
   }

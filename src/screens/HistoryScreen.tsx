@@ -1,14 +1,19 @@
+import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { thumbnailUrl } from '../api/youtube';
 import { LiveTileContent, VideoCardContent } from '../components/Cards';
 import { FileCardContent } from '../components/FileCardContent';
+import { shareOnLongPress } from '../chat/share';
 import { FocusCard } from '../components/FocusCard';
 import { ListFrame } from '../components/ListFrame';
+import { ForUsWrappedModal } from '../components/ForUsWrappedModal';
 import { cleanTitle } from '../components/VideoRow';
 import { LIVE_NEWS } from '../data/channels';
 import { playableKey } from '../data/history';
+import { useNavScrollHide } from '../data/navChrome';
 import { CARD_GAP, CARD_WIDTH, GUTTER, colors, isTV, sz } from '../theme';
 import type { Playable } from '../types';
 
@@ -21,6 +26,8 @@ type Props = {
 // Everything watched recently, as a grid, newest first.
 export function HistoryScreen({ history, onPlay, onClear }: Props) {
   const insets = useSafeAreaInsets();
+  // Scrolling the history grid down tucks the bottom bar away.
+  const navScroll = useNavScrollHide();
   const { width } = useWindowDimensions();
   // On TV as many cards as fit at the usual card size.
   const columns = isTV
@@ -29,6 +36,7 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
       ? 3
       : 2;
   const cardWidth = (width - GUTTER * 2 - CARD_GAP * (columns - 1)) / columns;
+  const [wrappedOpen, setWrappedOpen] = useState(false);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + GUTTER }]}>
@@ -42,6 +50,28 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
         )}
       </View>
 
+      <Pressable
+        onPress={() => setWrappedOpen(true)}
+        style={({ pressed }) => [styles.wrappedBanner, pressed && { opacity: 0.85 }]}
+      >
+        <LinearGradient
+          colors={['#3b0764', '#701a75', '#1e1b4b']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.wrappedIconCircle}>
+          <Ionicons name="sparkles" size={sz(18, 22)} color="#ffd166" />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.wrappedBannerTitle}>Your 2026 ForUs Wrapped</Text>
+          <Text style={styles.wrappedBannerSub}>Discover your streaming persona & watch stats</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={sz(18, 22)} color="#fff" />
+      </Pressable>
+
+      <ForUsWrappedModal visible={wrappedOpen} onClose={() => setWrappedOpen(false)} />
+
       {history.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="time-outline" size={48} color={colors.faint} />
@@ -54,6 +84,8 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
             <FlatList
               key={columns}
               data={history}
+              onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
+              scrollEventThrottle={48}
               numColumns={columns}
               keyExtractor={playableKey}
               // An exact height on TV; see ListFrame.
@@ -65,6 +97,17 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
                   // TV: the remote starts on the most recent item.
                   preferredFocus={index === 0}
                   onPress={() => onPlay(item)}
+                  onLongPress={
+                    item.kind === 'video'
+                      ? shareOnLongPress(item.videoId, item.title)
+                      : item.kind === 'moviebox'
+                        ? shareOnLongPress({ kind: 'moviebox', subjectId: item.subjectId, title: item.title, poster: item.poster })
+                        : item.kind === 'stream'
+                          ? shareOnLongPress({ kind: 'stream', url: item.url, title: item.title, poster: item.poster })
+                          : item.kind === 'file'
+                            ? shareOnLongPress({ kind: 'file', source: item.source, itemId: item.itemId, fileId: item.fileId, title: item.title })
+                            : undefined
+                  }
                   style={{ marginRight: (index + 1) % columns === 0 ? 0 : CARD_GAP, marginBottom: 18 }}
                 >
                   <Card item={item} />
@@ -87,8 +130,8 @@ function Card({ item }: { item: Playable }) {
   if (item.kind === 'moviebox') {
     return <VideoCardContent image={item.poster} title={item.title} subtitle="MovieBox" />;
   }
-  if (item.kind === 'stream') {
-    return <VideoCardContent image={item.poster} title={item.title} subtitle="Stream" />;
+  if (item.kind === 'stream' || item.kind === 'web') {
+    return <VideoCardContent image={item.poster} title={item.title} subtitle={item.kind === 'web' ? 'Web Stream' : 'Stream'} />;
   }
   return <VideoCardContent image={thumbnailUrl(item.videoId)} title={cleanTitle(item.title)} />;
 }
@@ -98,6 +141,35 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: GUTTER, marginBottom: 16 },
   title: { flex: 1, color: colors.text, fontSize: sz(26, 32), fontWeight: '900' },
+  wrappedBanner: {
+    marginHorizontal: GUTTER,
+    marginBottom: 16,
+    borderRadius: 18,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: sz(12, 16),
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(217, 70, 239, 0.4)',
+  },
+  wrappedIconCircle: {
+    width: sz(38, 44),
+    height: sz(38, 44),
+    borderRadius: sz(19, 22),
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wrappedBannerTitle: {
+    color: '#fff',
+    fontSize: sz(14, 16),
+    fontWeight: '800',
+  },
+  wrappedBannerSub: {
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: sz(11, 13),
+  },
   clear: {
     flexDirection: 'row',
     alignItems: 'center',

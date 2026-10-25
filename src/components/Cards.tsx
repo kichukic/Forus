@@ -8,6 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { resolveLiveVideoIdForTile, savedLiveVideoId } from '../api/youtubeLive';
 import { LIVE_NEWS } from '../data/channels';
 import { Shimmer } from './Shimmer';
+import { FavoriteHeart } from './FavoriteHeart';
+import type { FavoriteItem } from '../data/favorites';
 import { CARD_HEIGHT, RADIUS, colors, sz } from '../theme';
 
 type VideoCardProps = {
@@ -20,6 +22,8 @@ type VideoCardProps = {
   placeholder?: string;
   // The picture's height, for a grid of smaller cards.
   height?: number;
+  // Favorite item to show a heart icon on the card
+  favoriteItem?: FavoriteItem;
 };
 
 // Pictures that have been on screen already. One fades in the first time it
@@ -48,6 +52,7 @@ export const VideoCardContent = memo(function VideoCardContent({
   live,
   placeholder,
   height,
+  favoriteItem,
 }: VideoCardProps) {
   // Until its picture is in (or has failed), the card shimmers.
   const [settled, setSettled] = useState<string | null>(null);
@@ -81,6 +86,11 @@ export const VideoCardContent = memo(function VideoCardContent({
           </LinearGradient>
         )}
         <View style={styles.topRight}>{live ? <LiveBadge /> : duration ? <Chip text={duration} /> : null}</View>
+        {favoriteItem ? (
+          <View style={styles.favoriteBadge}>
+            <FavoriteHeart item={favoriteItem} size={sz(14, 16)} />
+          </View>
+        ) : null}
         <View style={styles.play}>
           <Ionicons name="play" size={sz(13, 16)} color="#fff" style={styles.playIcon} />
         </View>
@@ -248,6 +258,7 @@ const styles = StyleSheet.create({
   blank: { justifyContent: 'center', padding: 14 },
   placeholder: { color: colors.text, fontSize: sz(15, 18), fontWeight: '700', opacity: 0.85 },
   topRight: { position: 'absolute', top: 8, right: 8, flexDirection: 'row' },
+  favoriteBadge: { position: 'absolute', top: 8, left: 8, zIndex: 10 },
   play: {
     position: 'absolute',
     right: 8,

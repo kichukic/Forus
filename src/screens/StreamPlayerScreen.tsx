@@ -6,6 +6,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import { useOpenSubtitles } from '../hooks/useOpenSubtitles';
+import { useAudioTracks } from '../hooks/useAudioTracks';
+import { useTraktScrobble } from '../hooks/useTraktScrobble';
+import { AudioTrackPicker } from '../components/AudioTrackPicker';
+import { shareTitle } from '../chat/share';
 import { colors, isTV } from '../theme';
 
 type Props = {
@@ -17,9 +21,11 @@ type Props = {
 export function StreamPlayerScreen({ url, title, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const fullscreenOrientation = useFullscreenOrientation();
+  const [audioPickerOpen, setAudioPickerOpen] = useState(false);
   const player = useVideoPlayer(url, (p) => {
     p.loop = false;
   });
+  const audio = useAudioTracks(player);
 
   useEffect(() => {
     player.play();
@@ -33,6 +39,7 @@ export function StreamPlayerScreen({ url, title, onClose }: Props) {
   });
 
   const subs = useOpenSubtitles(title);
+  useTraktScrobble(title, currentTime ?? 0, player.duration ?? 0, player.playing);
 
   const spoken = subs.spoken(currentTime ?? 0);
 
@@ -63,12 +70,28 @@ export function StreamPlayerScreen({ url, title, onClose }: Props) {
           <Ionicons name="chevron-back" size={isTV ? 28 : 24} color={colors.text} />
         </Pressable>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        {audio.hasMultiple ? (
+          <Pressable onPress={() => setAudioPickerOpen(true)} style={styles.ccBtn} hitSlop={8}>
+            <Ionicons name="volume-high" size={20} color={colors.accent} />
+          </Pressable>
+        ) : null}
         {subs.hasSubs ? (
           <Pressable onPress={subs.cycle} style={styles.ccBtn} hitSlop={8}>
             <Ionicons name="text" size={20} color={subs.chosen ? colors.accent : colors.text} />
           </Pressable>
         ) : null}
+        <Pressable onPress={() => shareTitle({ kind: 'stream', url, title })} style={styles.ccBtn} hitSlop={8}>
+          <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+        </Pressable>
       </View>
+
+      <AudioTrackPicker
+        visible={audioPickerOpen}
+        tracks={audio.tracks}
+        selected={audio.selected}
+        onSelect={audio.select}
+        onClose={() => setAudioPickerOpen(false)}
+      />
     </View>
   );
 }

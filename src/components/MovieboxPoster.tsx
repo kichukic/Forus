@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { MovieboxSubject } from '../api/moviebox';
+import { FavoriteHeart } from './FavoriteHeart';
 import { RADIUS, colors, isTV } from '../theme';
 
 // The width of a poster in a row, which is taller than it is wide.
@@ -24,7 +25,7 @@ export const POSTER_ROW_PROPS = {
 
 // A handful of deep colours, so a missing poster is not a black square.
 const POSTER_COLOURS = ['#3a2a5c', '#2a3a5c', '#5c2a3a', '#2a5c3a', '#5c3a2a', '#2a4a5c'];
-function posterColour(title: string): string {
+export function posterColour(title: string): string {
   let hash = 0;
   for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) >>> 0;
   return POSTER_COLOURS[hash % POSTER_COLOURS.length];
@@ -68,6 +69,21 @@ export function MovieboxPoster({ subject }: { subject: MovieboxSubject }) {
             </Text>
           </View>
         ) : null}
+        <View style={styles.heartBtn}>
+          <FavoriteHeart
+            item={{
+              id: `moviebox:${subject.id}`,
+              kind: 'moviebox',
+              title: subject.title,
+              poster: subject.poster,
+              year: subject.year,
+              genre: subject.genre,
+              rating: subject.rating,
+              subjectId: subject.id,
+            }}
+            size={isTV ? 18 : 15}
+          />
+        </View>
       </View>
       <Text style={styles.title} numberOfLines={2}>
         {subject.title}
@@ -102,6 +118,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(12,10,18,0.78)',
   },
   ratingText: { color: '#fff', fontSize: isTV ? 12 : 10.5, fontWeight: '800' },
+  heartBtn: {
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    zIndex: 10,
+  },
   series: {
     position: 'absolute',
     right: 6,

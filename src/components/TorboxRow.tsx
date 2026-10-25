@@ -14,6 +14,7 @@ import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, GUTTER, RADIUS, colors, isTV, sz } f
 import type { FilePlayable } from '../types';
 import { FileCardContent } from './FileCardContent';
 import { FocusCard } from './FocusCard';
+import { shareOnLongPress } from '../chat/share';
 import { SkeletonLoader } from './SkeletonLoader';
 
 type Props = {
@@ -140,6 +141,13 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
                 title: item.file.name,
               })
             }
+            onLongPress={shareOnLongPress({
+              kind: 'file',
+              source: item.file.source,
+              itemId: item.file.itemId,
+              fileId: item.file.fileId,
+              title: item.file.name,
+            })}
           >
             <FileCardContent
               fileName={item.file.name}

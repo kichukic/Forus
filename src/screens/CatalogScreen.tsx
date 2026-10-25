@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { loadCatalog, loadCatalogPage, searchCatalog, type CatalogMovie } from '../api/catalog';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { FocusCard } from '../components/FocusCard';
+import { shareOnLongPress } from '../chat/share';
 import { Loader } from '../components/Loader';
 import { SectionHeader } from '../components/Section';
 import { GUTTER, RADIUS, colors, isTV } from '../theme';
@@ -325,7 +326,18 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
         }
         renderItem={({ item }) => (
           <View style={[styles.cell, { width: cardWidth }]}>
-            <FocusCard onPress={() => onOpen(item)} width={cardWidth - 8} style={styles.card}>
+            <FocusCard
+              onPress={() => onOpen(item)}
+              onLongPress={shareOnLongPress({
+                kind: 'movie',
+                id: item.id,
+                title: item.title,
+                poster: item.poster,
+                year: item.year,
+              })}
+              width={cardWidth - 8}
+              style={styles.card}
+            >
               <PosterCard movie={item} />
             </FocusCard>
           </View>

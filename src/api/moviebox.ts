@@ -415,7 +415,7 @@ export async function browseShelves(tabId: number): Promise<MovieboxShelf[]> {
       .filter((s): s is MovieboxSubject => s !== null);
     // Only the rows that actually hold films are shown.
     if (subjects.length === 0) continue;
-    // The headings come with emoji of their own ("💗Bollywood Love Stories").
+    // The headings come with emojis of their own.
     shelves.push({ title: stripEmoji(item.title || 'Films'), subjects });
   }
   if (shelves.length > 0) shelfCache.set(tabId, { at: Date.now(), shelves });

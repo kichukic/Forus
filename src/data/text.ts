@@ -1,7 +1,7 @@
 // Tidying of the titles the app shows.
 //
-// The channels and the film services decorate their titles with emoji
-// (😂 🔥 🤣 ❤️ 💗 🦸🏻), which look untidy in a list. The app shows the titles
+// The channels and the film services decorate their titles with emojis,
+// which look untidy in a list. The app shows the titles
 // without them, and without the leftovers they leave behind.
 
 // These ranges cover the picture emoji, plus the invisible characters that

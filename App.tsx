@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { Animated, AppState, BackHandler, Easing, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { BlurTargetView } from 'expo-blur';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
 import { AnimatedSplash } from './src/components/AnimatedSplash';
 import { BottomNav, BOTTOM_NAV_HEIGHT, type NavId } from './src/components/BottomNav';
+import { ScreenReveal } from './src/components/ScreenReveal';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
-import { addToHistory, clearHistory, loadHistory, playableKey } from './src/data/history';
+import { addToHistory, clearHistory, loadHistory, mergeHistories, playableKey, type HistoryEntry } from './src/data/history';
 import { askToRemind, startReminders } from './src/data/reminders';
 import { useEvent } from './src/hooks/useEvent';
 import { addTransfer, loadTransfers, playableFrom } from './src/data/transfers';
@@ -23,12 +25,18 @@ import { FatalErrorScreen } from './src/screens/FatalErrorScreen';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
+import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
+import { sendScreenTimeHeartbeat, startChat, useChatStatus } from './src/chat/store';
+import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
+import { onOpenChatRequest } from './src/chat/push';
+import { SendToFriend } from './src/chat/SendToFriend';
 import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
 import { StreamioBoxDetailScreen } from './src/screens/StreamioBoxDetailScreen';
 import { MovieboxPlayerScreen } from './src/screens/MovieboxPlayerScreen';
 import { MovieScreen } from './src/screens/MovieScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { StreamPlayerScreen } from './src/screens/StreamPlayerScreen';
+import { WebPlayerScreen } from './src/screens/WebPlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
 import { TransferBar } from './src/components/TransferBar';
 import { ToastHost } from './src/components/ToastHost';
@@ -36,6 +44,10 @@ import { TransferToast } from './src/components/TransferToast';
 import { UpdatePrompt } from './src/components/UpdatePrompt';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TorboxSetupScreen } from './src/screens/TorboxSetupScreen';
+import { DownloadsScreen } from './src/screens/DownloadsScreen';
+import { DownloadBar } from './src/components/DownloadBar';
+import { FavoritesScreen } from './src/screens/FavoritesScreen';
+import { AdminAnalyticsScreen } from './src/screens/AdminAnalyticsScreen';
 import { colors, isTV } from './src/theme';
 import type { SearchScope } from './src/data/channels';
 import type { Playable } from './src/types';
@@ -55,6 +67,29 @@ const MIN_FRESH_POSTERS = 16;
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const home = useRef<HomeHandle>(null);
+  // Home stays mounted, so returning to it from another tab won't remount and
+  // animate it. Ease its layer back in ourselves when it becomes active again;
+  // the very first launch already starts expanded, so it skips the reveal.
+  const [homeShown] = useState(() => new Animated.Value(1));
+  const prevScreen = useRef<Screen>('home');
+  useEffect(() => {
+    if (screen === 'home' && prevScreen.current !== 'home' && !isTV) {
+      homeShown.setValue(0);
+      Animated.timing(homeShown, {
+        toValue: 1,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+    prevScreen.current = screen;
+  }, [screen, homeShown]);
+  const homeLift = homeShown.interpolate({ inputRange: [0, 1], outputRange: [16, 0] });
+  // The screens behind the bottom bar, for its blur.
+  const blurTarget = useRef<View>(null);
+  const chat = useRef<ChatHandle>(null);
+  // An open conversation fills the screen, without the bottom bar.
+  const [chatFull, setChatFull] = useState(false);
   // The opening animation. It stays until the home screen's data has loaded
   // (or loading gave up), so the home screen opens already filled in.
   const [splash, setSplash] = useState(true);
@@ -66,11 +101,11 @@ export default function App() {
   // The splash's poster wall: last launch's posters until enough fresh ones arrive.
   const [savedPosters, setSavedPosters] = useState<(string | number)[]>([]);
   // Where the TorBox screen goes back to.
-  const [torboxFrom, setTorboxFrom] = useState<NavId>('home');
+  const [torboxFrom, setTorboxFrom] = useState<Screen>('home');
   const [playing, setPlaying] = useState<Playable | null>(null);
   // On a phone the player can shrink into the corner while you keep browsing.
   const [mini, setMini] = useState(false);
-  const [history, setHistory] = useState<Playable[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [torboxVersion, setTorboxVersion] = useState(0);
   // Which tab's channels search looks in.
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
@@ -89,9 +124,17 @@ export default function App() {
     loadHistory().then(setHistory);
     loadTransfers();
     setupTransferNotices();
+    // Chat is for phones; the TV has no bottom bar to reach it.
+    if (!isTV) startChat();
     checkForUpdate().then((u) => {
       if (u) setUpdatePrompt(u);
     });
+
+    // Active screen time heartbeat
+    const heartbeatTimer = setInterval(() => {
+      sendScreenTimeHeartbeat(30);
+    }, 30000);
+    return () => clearInterval(heartbeatTimer);
   }, []);
 
   useEffect(() => {
@@ -110,11 +153,49 @@ export default function App() {
     return () => clearTimeout(giveUp);
   }, []);
 
+  const clearAllHistory = () => {
+    setHistory(clearHistory());
+    clearSyncedHistory();
+  };
+
+  // Watch history follows the chat account: merged with the server's on
+  // signing in and whenever the app comes back to the front.
+  const chatStatus = useChatStatus();
+  const latestHistory = useRef(history);
+  useEffect(() => {
+    latestHistory.current = history;
+  });
+  useEffect(() => {
+    if (chatStatus !== 'signedIn') return;
+    const sync = () =>
+      syncHistory(latestHistory.current).then((remote) => {
+        if (remote) setHistory((current) => mergeHistories(current, remote));
+      });
+    sync();
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && sync());
+    return () => sub.remove();
+  }, [chatStatus]);
+
+  // A tapped message notification goes to the Chat tab, which opens the chat;
+  // a full-screen video steps into the corner.
+  const playingNow = useRef(playing);
+  useEffect(() => {
+    playingNow.current = playing;
+  });
+  useEffect(() => {
+    if (isTV) return;
+    return onOpenChatRequest(() => {
+      setScreen('chat');
+      if (playingNow.current) setMini(true);
+    });
+  }, []);
+
   // Anything fatal is shown on screen rather than ending the app.
   useEffect(() => subscribeErrors((error, isFatal) => isFatal && setCrash(error)), []);
 
   const play = useEvent((item: Playable) => {
     setHistory((h) => addToHistory(h, item));
+    pushWatched(item);
     setPlaying(item);
     setMini(false);
     // Phones only: the first play asks to allow "Continue watching" reminders.
@@ -168,6 +249,8 @@ export default function App() {
         if (isTV) closePlayer();
         else setMini(true);
       } else if (screen === 'torbox') closeTorbox();
+      else if (screen === 'downloads') setScreen('settings');
+      else if (screen === 'chat' && chat.current?.goBack()) return true;
       else if (screen !== 'home') setScreen('home');
       else if (playing) closePlayer();
       // TV: Back first goes to the top of the page and the tabs, then to the
@@ -181,7 +264,7 @@ export default function App() {
 
   // On TV nothing behind a player may keep remote focus, so it's hidden.
   const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!streamioSeries);
-  const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox;
+  const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox && !(screen === 'chat' && chatFull);
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
 
   return (
@@ -189,63 +272,123 @@ export default function App() {
       <ErrorBoundary label="App">
         <View style={styles.root}>
         <StatusBar hidden={isTV} style="light" />
-        {/* Home stays mounted so its tabs, rows and scroll position survive. */}
-        <View style={layer('home')}>
-          <HomeScreen
-            history={history}
-            torboxVersion={torboxVersion}
-            onPlay={play}
-            onOpenTorbox={openTorbox}
-            onOpenSearch={openSearch}
-            onOpenMovie={setMovie}
-            onOpenMoviebox={setMoviebox}
-            onOpenStreamioSeries={setStreamioSeries}
-            onSendRelease={sendRelease}
-            onOpenHistory={openHistory}
-            onOpenSettings={openSettings}
-            ref={home}
-          />
-        </View>
-
-        {screen === 'search' && (
-          <View style={layer('search')}>
-            <SearchScreen
-              key={searchScope}
-              scope={searchScope}
-              onPlay={play}
-              onOpenMoviebox={setMoviebox}
-              onSendRelease={(option) => addTransfer(option)}
-            />
-          </View>
-        )}
-
-        {screen === 'history' && (
-          <View style={layer('history')}>
-            <HistoryScreen history={history} onPlay={play} onClear={() => setHistory(clearHistory())} />
-          </View>
-        )}
-
-        {screen === 'settings' && (
-          <View style={layer('settings')}>
-            <SettingsScreen
+        {/* The screens, which the bottom bar's frosted glass blurs. */}
+        <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
+          {/* Home stays mounted so its tabs, rows and scroll position survive. */}
+          <Animated.View style={[layer('home'), { opacity: homeShown, transform: [{ translateY: homeLift }] }]}>
+            <HomeScreen
+              history={history}
               torboxVersion={torboxVersion}
+              onPlay={play}
               onOpenTorbox={openTorbox}
-              onClearHistory={() => setHistory(clearHistory())}
-              onCheckForUpdates={() => {
-                checkForUpdate(true).then((u) => {
-                  if (u) setUpdatePrompt(u);
-                  else showToast({ text: 'You are on the latest version.' });
-                });
-              }}
+              onOpenSearch={openSearch}
+              onOpenMovie={setMovie}
+              onOpenMoviebox={setMoviebox}
+              onOpenStreamioSeries={setStreamioSeries}
+              onSendRelease={sendRelease}
+              onOpenHistory={openHistory}
+              onOpenSettings={openSettings}
+              ref={home}
             />
-          </View>
-        )}
+          </Animated.View>
 
-        {screen === 'torbox' && (
-          <View style={layer('torbox')}>
-            <TorboxSetupScreen onDone={closeTorbox} />
-          </View>
-        )}
+          {screen === 'search' && (
+            <ScreenReveal style={layer('search')}>
+              <SearchScreen
+                key={searchScope}
+                scope={searchScope}
+                onPlay={play}
+                onOpenMoviebox={setMoviebox}
+                onSendRelease={(option) => addTransfer(option)}
+              />
+            </ScreenReveal>
+          )}
+
+          {screen === 'chat' && (
+            <ScreenReveal style={layer('chat')}>
+              <ChatScreen
+                ref={chat}
+                onFullScreen={setChatFull}
+                onPlay={(title) => {
+                  if (title.kind === 'video') play({ kind: 'video', videoId: title.videoId, title: title.title });
+                  else if (title.kind === 'web') play({ kind: 'web', url: title.url, title: title.title, poster: title.poster });
+                  else if (title.kind === 'stream') play({ kind: 'stream', url: title.url, title: title.title, poster: title.poster });
+                  else if (title.kind === 'moviebox') play({ kind: 'moviebox', subjectId: title.subjectId, season: title.season ?? 0, episode: title.episode ?? 0, title: title.title, poster: title.poster });
+                  else if (title.kind === 'movie') {
+                    setMovie({
+                      id: title.id,
+                      title: title.title,
+                      poster: title.poster,
+                      year: title.year,
+                    });
+                  } else if (title.kind === 'file') {
+                    play({
+                      kind: 'file',
+                      source: title.source as any,
+                      itemId: title.itemId,
+                      fileId: title.fileId,
+                      title: title.title,
+                    });
+                  }
+                }}
+              />
+            </ScreenReveal>
+          )}
+
+          {screen === 'history' && (
+            <ScreenReveal style={layer('history')}>
+              <HistoryScreen history={history} onPlay={play} onClear={clearAllHistory} />
+            </ScreenReveal>
+          )}
+
+          {screen === 'settings' && (
+            <ScreenReveal style={layer('settings')}>
+              <SettingsScreen
+                torboxVersion={torboxVersion}
+                onOpenTorbox={openTorbox}
+                onClearHistory={clearAllHistory}
+                onOpenDownloads={() => setScreen('downloads')}
+                onCheckForUpdates={() => {
+                  checkForUpdate(true).then((u) => {
+                    if (u) setUpdatePrompt(u);
+                    else showToast({ text: 'You are on the latest version.' });
+                  });
+                }}
+              />
+            </ScreenReveal>
+          )}
+
+          {screen === 'downloads' && (
+            <ScreenReveal style={layer('downloads')}>
+              <DownloadsScreen
+                onBack={() => setScreen('settings')}
+                onPlay={play}
+              />
+            </ScreenReveal>
+          )}
+
+          {screen === 'favorites' && (
+            <ScreenReveal style={layer('favorites')}>
+              <FavoritesScreen
+                onPlay={play}
+                onOpenMoviebox={setMoviebox}
+                onGoHome={() => setScreen('home')}
+              />
+            </ScreenReveal>
+          )}
+
+          {screen === 'admin' && (
+            <ScreenReveal style={layer('admin')}>
+              <AdminAnalyticsScreen onBack={() => setScreen('home')} />
+            </ScreenReveal>
+          )}
+
+          {screen === 'torbox' && (
+            <ScreenReveal style={layer('torbox')}>
+              <TorboxSetupScreen onDone={closeTorbox} />
+            </ScreenReveal>
+          )}
+        </BlurTargetView>
 
         <TransferToast
           onPlay={(transfer) => {
@@ -256,8 +399,17 @@ export default function App() {
         />
 
         <ToastHost />
+        {!isTV && <SendToFriend />}
 
         <UpdatePrompt update={updatePrompt} onClose={() => setUpdatePrompt(null)} />
+
+        {showNav && (
+          <DownloadBar
+            onOpen={() => {
+              setScreen('downloads');
+            }}
+          />
+        )}
 
         {showNav && (
           <TransferBar
@@ -271,6 +423,7 @@ export default function App() {
         {showNav && (
           <BottomNav
             active={screen as NavId}
+            blurTarget={blurTarget}
             onSelect={(id) => {
               // The bottom bar's Search looks everywhere.
               if (id === 'search') setSearchScope('all');
@@ -280,7 +433,7 @@ export default function App() {
         )}
 
         {movie && (
-          <View style={StyleSheet.absoluteFill}>
+          <ScreenReveal style={StyleSheet.absoluteFill}>
             <MovieScreen
               key={movie.id}
               movie={movie}
@@ -292,11 +445,11 @@ export default function App() {
                 openTorbox();
               }}
             />
-          </View>
+          </ScreenReveal>
         )}
 
         {moviebox && (
-          <View style={StyleSheet.absoluteFill}>
+          <ScreenReveal style={StyleSheet.absoluteFill}>
             <MovieboxDetailScreen
               key={moviebox.id}
               subject={moviebox}
@@ -308,11 +461,11 @@ export default function App() {
                 addTransfer(option);
               }}
             />
-          </View>
+          </ScreenReveal>
         )}
 
         {streamioSeries && (
-          <View style={StyleSheet.absoluteFill}>
+          <ScreenReveal style={StyleSheet.absoluteFill}>
             <StreamioBoxDetailScreen
               key={streamioSeries.id}
               item={streamioSeries}
@@ -323,7 +476,7 @@ export default function App() {
                 addTransfer(option);
               }}
             />
-          </View>
+          </ScreenReveal>
         )}
 
         {playing && (
@@ -340,6 +493,8 @@ export default function App() {
                 <MovieboxPlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               ) : playing.kind === 'stream' ? (
                 <StreamPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
+              ) : playing.kind === 'web' ? (
+                <WebPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
               ) : (
                 <PlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               )

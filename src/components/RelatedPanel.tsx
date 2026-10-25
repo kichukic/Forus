@@ -16,6 +16,7 @@ import { colors } from '../theme';
 import { pictureFade, pictureShown, pictureWasShown } from './Cards';
 import { Loader } from './Loader';
 import { Shimmer } from './Shimmer';
+import { shareOnLongPress } from '../chat/share';
 import type { Playable } from '../types';
 
 type Props = {
@@ -75,8 +76,12 @@ export function RelatedPanel({ item, onPlay, dragHandlers, children }: Props) {
 }
 
 function RelatedRow({ card, onPress }: { card: RelatedCard; onPress: () => void }) {
+  const item = card.item;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+    <Pressable
+      onPress={onPress}
+      onLongPress={item.kind === 'video' ? shareOnLongPress(item.videoId, item.title) : undefined}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <Thumbnail card={card} />
       <View style={styles.text}>
         <Text style={styles.title} numberOfLines={3}>

@@ -28,6 +28,7 @@ import {
 } from '../api/moviebox';
 import { FocusCard } from '../components/FocusCard';
 import { FocusRow } from '../components/FocusRow';
+import { shareOnLongPress } from '../chat/share';
 import {
   MovieboxPoster,
   POSTER_ROW_HEIGHT,
@@ -340,7 +341,17 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
           }
           renderItem={({ item }) => (
             <View style={[styles.cell, { width: cardWidth }]}>
-              <FocusCard onPress={() => onOpen(item)} width={cardWidth - 8} style={styles.card}>
+              <FocusCard
+                onPress={() => onOpen(item)}
+                onLongPress={shareOnLongPress({
+                  kind: 'moviebox',
+                  subjectId: item.id,
+                  title: item.title,
+                  poster: item.poster,
+                })}
+                width={cardWidth - 8}
+                style={styles.card}
+              >
                 <MovieboxPoster subject={item} />
               </FocusCard>
             </View>
@@ -429,7 +440,16 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
                 style={{ height: POSTER_ROW_HEIGHT }}
                 {...POSTER_ROW_PROPS}
                 renderItem={({ item: subject }) => (
-                  <FocusCard onPress={() => onOpen(subject)} width={POSTER_WIDTH}>
+                  <FocusCard
+                    onPress={() => onOpen(subject)}
+                    onLongPress={shareOnLongPress({
+                      kind: 'moviebox',
+                      subjectId: subject.id,
+                      title: subject.title,
+                      poster: subject.poster,
+                    })}
+                    width={POSTER_WIDTH}
+                  >
                     <MovieboxPoster subject={subject} />
                   </FocusCard>
                 )}

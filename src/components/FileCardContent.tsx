@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { findArtwork, parseFileName, type Artwork } from '../api/artwork';
 import { VideoCardContent } from './Cards';
+import type { FavoriteItem } from '../data/favorites';
 
 type Props = {
   fileName: string;
   detail?: string; // e.g. the file size
   // The picture's height, for a grid of smaller cards.
   height?: number;
+  favoriteItem?: FavoriteItem;
 };
 
 // Inside of a TorBox card: the title's artwork once found, with a tidy name on it.
-export function FileCardContent({ fileName, detail, height }: Props) {
+export function FileCardContent({ fileName, detail, height, favoriteItem }: Props) {
   const [art, setArt] = useState<Artwork | null>(null);
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export function FileCardContent({ fileName, detail, height }: Props) {
       title={`${art ? art.title : parsed.title}${year ? ` (${year})` : ''}`}
       subtitle={detail}
       height={height}
+      favoriteItem={favoriteItem}
     />
   );
 }

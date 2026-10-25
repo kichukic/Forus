@@ -393,7 +393,7 @@ npx expo run:android
 | **D-Pad Up / Down** | Vertical navigation across content rows | Display / hide on-screen playback controls |
 | **D-Pad Left / Right** | Horizontal carousel / grid navigation | Relative 10-second seek backward / forward |
 | **Select / Enter** | Open selected title / trigger action | Toggle Play / Pause |
-| **Back Button** | Focus top tab navigation ➔ Exit app | Exit fullscreen ➔ Return to parent view |
+| **Back Button** | Focus top tab navigation -> Exit app | Exit fullscreen -> Return to parent view |
 
 ---
 

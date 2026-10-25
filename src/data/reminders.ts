@@ -7,6 +7,7 @@ import { AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { colors } from '../theme';
 import type { Playable } from '../types';
+import { chatFromNotification, openChatRequest } from '../chat/push';
 import { stripEmoji } from './text';
 
 const CHANNEL = 'continue-watching';
@@ -65,10 +66,10 @@ export function startReminders(
   onOpen: (item: Playable) => void,
 ): () => void {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
+    handleNotification: async (notification) => ({
       shouldShowBanner: true,
       shouldShowList: true,
-      shouldPlaySound: false,
+      shouldPlaySound: notification.request.content.data?.kind === 'message',
       shouldSetBadge: false,
     }),
   });
@@ -80,7 +81,11 @@ export function startReminders(
   }).catch(() => {});
 
   const open = (response: Notifications.NotificationResponse | null) => {
-    const item = response?.notification.request.content.data?.item as Playable | undefined;
+    const data = response?.notification.request.content.data;
+    // A friend's message: open that chat.
+    const chat = chatFromNotification(data);
+    if (chat) return openChatRequest(chat);
+    const item = data?.item as Playable | undefined;
     if (item) onOpen(item);
   };
   // A tap that launched the app from closed.

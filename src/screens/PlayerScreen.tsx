@@ -16,6 +16,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { PlayerControls, ProgressLine, type PlaybackTime } from '../components/PlayerControls';
 import type { ShellControls } from '../components/PlayerShell';
 import { StoreValue, useValueStore } from '../hooks/useValueStore';
+import { shareTitle } from '../chat/share';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { SourcePicker } from '../components/SourcePicker';
 import {
@@ -331,6 +332,9 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
             // Only a third-party site's own player is left touchable.
             focusable={!isTV && external}
             pointerEvents={isTV || !external ? 'none' : 'auto'}
+            // The video gets its own GPU layer instead of sharing the app's,
+            // which plays smoother, on a TV's chip most of all.
+            androidLayerType="hardware"
             javaScriptEnabled
             domStorageEnabled
             allowsFullscreenVideo
@@ -394,11 +398,23 @@ export function PlayerScreen({ item, onClose, onPlay, shell }: Props) {
             {item.kind === 'live' ? '● LIVE  ' : ''}
             {item.title}
           </Text>
-          <Pressable onPress={() => setPickerOpen(true)} style={styles.link}>
-            <Text style={styles.linkText}>
-              {trying ? `Trying ${trying}…` : `Source: ${current?.label ?? '…'}`}
-            </Text>
-          </Pressable>
+          <View style={styles.infoActions}>
+            <Pressable onPress={() => setPickerOpen(true)} style={styles.link}>
+              <Text style={styles.linkText}>
+                {trying ? `Trying ${trying}…` : `Source: ${current?.label ?? '…'}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (item.kind === 'video') shareTitle({ kind: 'video', videoId: item.videoId, title: item.title });
+                else if (item.kind === 'live') shareTitle({ kind: 'stream', url: item.channelId, title: item.title });
+              }}
+              style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+            >
+              <Ionicons name="paper-plane-outline" size={15} color={colors.text} />
+              <Text style={styles.shareText}>Send to a friend</Text>
+            </Pressable>
+          </View>
         </RelatedPanel>
       )}
 
@@ -493,6 +509,19 @@ const styles = StyleSheet.create({
   webview: { flex: 1, backgroundColor: '#000' },
   infoTitle: { color: colors.text, fontSize: 17, fontWeight: '700', lineHeight: 24 },
   link: { marginTop: 8 },
+  infoActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' },
+  share: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceRaised,
+  },
+  sharePressed: { opacity: 0.6 },
+  shareText: { color: colors.text, fontSize: 13, fontWeight: '700' },
   linkText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
   close: {
     position: 'absolute',

@@ -4,7 +4,7 @@
 // next time, so later launches open with a full wall). It takes over from the
 // native splash (the same mark on the same background) and waits for that to
 // finish fading before anything moves, then dollies forward into the app.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -50,15 +50,15 @@ export function AnimatedSplash({ ready, progress, status, posters, onDone }: Pro
   const { width, height } = useWindowDimensions();
   const [introDone, setIntroDone] = useState(false);
 
-  const columns = useRef(Array.from({ length: COLUMNS }, () => new Animated.Value(0))).current;
-  const wall = useRef(new Animated.Value(0)).current; // the wall fades in and settles
-  const mark = useRef(new Animated.Value(0)).current; // the mark rises into place
-  const halo = useRef(new Animated.Value(0)).current;
-  const words = useRef(new Animated.Value(0)).current;
-  const shine = useRef(new Animated.Value(0)).current;
-  const footer = useRef(new Animated.Value(0)).current;
-  const bar = useRef(new Animated.Value(0)).current;
-  const exit = useRef(new Animated.Value(0)).current;
+  const [columns] = useState(() => Array.from({ length: COLUMNS }, () => new Animated.Value(0)));
+  const [wall] = useState(() => new Animated.Value(0)); // the wall fades in and settles
+  const [mark] = useState(() => new Animated.Value(0)); // the mark rises into place
+  const [halo] = useState(() => new Animated.Value(0));
+  const [words] = useState(() => new Animated.Value(0));
+  const [shine] = useState(() => new Animated.Value(0));
+  const [footer] = useState(() => new Animated.Value(0));
+  const [bar] = useState(() => new Animated.Value(0));
+  const [exit] = useState(() => new Animated.Value(0));
 
   // The wall is larger than the screen, so its tilted edges stay off screen.
   const wallWidth = width * 1.75;
@@ -275,7 +275,7 @@ export function AnimatedSplash({ ready, progress, status, posters, onDone }: Pro
             </Animated.View>
           </View>
           <Text style={styles.credit}>
-            Made with <Text style={styles.heart}>♥</Text>
+            Made with love
           </Text>
         </Animated.View>
       </View>

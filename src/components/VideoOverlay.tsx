@@ -17,11 +17,23 @@ type Props = {
   show: boolean;
   onToggle: () => void;
   onSeekBy: (seconds: number) => void;
+  onCycleAudio?: () => void;
+  hasMultipleAudio?: boolean;
 };
 
 const SKIP = 15;
 
-export function VideoOverlay({ player, paused, time, buffering, show, onToggle, onSeekBy }: Props) {
+export function VideoOverlay({
+  player,
+  paused,
+  time,
+  buffering,
+  show,
+  onToggle,
+  onSeekBy,
+  onCycleAudio,
+  hasMultipleAudio,
+}: Props) {
   if (!show) return null;
 
   return (
@@ -51,6 +63,15 @@ export function VideoOverlay({ player, paused, time, buffering, show, onToggle, 
             <Ionicons name="play-forward" size={isTV ? 26 : 20} color={colors.text} />
             <Text style={styles.btnText}>{SKIP}s</Text>
           </Pressable>
+          {hasMultipleAudio && onCycleAudio && (
+            <Pressable
+              onPress={onCycleAudio}
+              style={({ focused }) => [styles.btn, focused && styles.btnFocused]}
+            >
+              <Ionicons name="volume-high" size={isTV ? 26 : 20} color={colors.accent} />
+              <Text style={[styles.btnText, { color: colors.accent }]}>Audio</Text>
+            </Pressable>
+          )}
         </FocusRow>
       </View>
     </View>
