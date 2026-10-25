@@ -198,7 +198,7 @@ export function FavoritesScreen({ onPlay, onOpenMoviebox, onGoHome }: Props) {
           </Text>
           <Text style={styles.emptySub}>
             {allFavorites.length === 0
-              ? 'Tap the ❤️ icon on any movie, show, or video to save it here for fast 1-tap watching.'
+              ? 'Tap the heart icon on any movie, show, or video to save it here for fast 1-tap watching.'
               : 'Try clearing your search keyword or switching categories.'}
           </Text>
           {allFavorites.length === 0 && (

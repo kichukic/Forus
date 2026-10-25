@@ -227,7 +227,7 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
                   style={({ focused, pressed }) => [styles.result, (focused || pressed) && styles.resultActive]}
                 >
                   <Text style={styles.resultName} numberOfLines={1}>{opt.name}</Text>
-                  <Text style={styles.resultMeta}>{opt.language} · ★ {opt.rating} · {opt.downloads} downloads</Text>
+                  <Text style={styles.resultMeta}>{opt.language} · {opt.rating} · {opt.downloads} downloads</Text>
                 </Pressable>
               ))}
             </ScrollView>

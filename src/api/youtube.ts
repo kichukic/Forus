@@ -21,7 +21,7 @@ export function thumbnailUrl(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
 }
 
-// Channels decorate titles with emoji (😂 🔥 🤣 ❤️); the app shows titles
+// Channels decorate titles with emojis; the app shows titles
 // without them.
 export { stripEmoji };
 

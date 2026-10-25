@@ -338,7 +338,7 @@ function PosterCard({ item, loading }: { item: MovieDbItem; loading?: boolean })
         {item.title}
       </Text>
       <Text style={styles.subtitle} numberOfLines={1}>
-        {[item.year, item.rating ? `${item.rating}★` : null].filter(Boolean).join(' · ')}
+        {[item.year, item.rating ? item.rating : null].filter(Boolean).join(' · ')}
       </Text>
     </View>
   );

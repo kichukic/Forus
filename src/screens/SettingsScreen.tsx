@@ -194,7 +194,7 @@ export function SettingsScreen({
             For<Text style={{ color: colors.accent }}>Us</Text>
           </Text>
           <Text style={styles.creditText}>
-            Made with <Text style={{ color: colors.accent }}>♥</Text>
+            Made with <Text style={{ color: colors.accent }}>love</Text>
           </Text>
         </View>
       </ScrollView>

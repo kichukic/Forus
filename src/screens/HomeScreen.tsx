@@ -642,7 +642,7 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
         ]
       : []),
     <Text key="credit" style={styles.credit}>
-      Made with <Text style={styles.heart}>♥</Text>
+      Made with love
     </Text>,
   ];
 
@@ -720,10 +720,15 @@ function TabButton({
   onLayout: (x: number, width: number) => void;
 }) {
   const [focused, setFocused] = useState(false);
+  const [press] = useState(() => new Animated.Value(1));
+  const squeeze = (to: number) =>
+    Animated.spring(press, { toValue: to, useNativeDriver: true, speed: 40, bounciness: 8 }).start();
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => !isTV && squeeze(0.9)}
+      onPressOut={() => !isTV && squeeze(1)}
       // On TV a tab that stays highlighted opens without pressing OK.
       onFocus={() => {
         setFocused(true);
@@ -738,7 +743,9 @@ function TabButton({
       // The selected tab's purple comes from the sliding pill behind it.
       style={[styles.tab, focused && styles.tabFocused]}
     >
-      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+      <Animated.View style={{ transform: [{ scale: press }] }}>
+        <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -753,15 +760,22 @@ function RoundButton({
   onPress: () => void;
 }) {
   const [focused, setFocused] = useState(false);
+  const [press] = useState(() => new Animated.Value(1));
+  const squeeze = (to: number) =>
+    Animated.spring(press, { toValue: to, useNativeDriver: true, speed: 40, bounciness: 8 }).start();
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => !isTV && squeeze(0.86)}
+      onPressOut={() => !isTV && squeeze(1)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       accessibilityLabel={label}
       style={({ pressed }) => [styles.round, (focused || pressed) && styles.roundActive]}
     >
-      <Ionicons name={icon} size={sz(20, 24)} color={colors.text} />
+      <Animated.View style={{ transform: [{ scale: press }] }}>
+        <Ionicons name={icon} size={sz(20, 24)} color={colors.text} />
+      </Animated.View>
     </Pressable>
   );
 }

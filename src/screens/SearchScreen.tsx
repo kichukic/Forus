@@ -84,14 +84,14 @@ const SCOPE_TEXT: Record<SearchScope, { heading: string; placeholder: string; no
 };
 
 const VIBE_SUGGESTIONS = [
-  '🌧️ Rainy Noir Detective',
-  '🚀 Gritty Space Survival',
-  '🧠 Mind-bending Sci-Fi Plot Twist',
-  '🛋️ Wholesome Cozy Comfort',
-  '🩸 Intense Psychological Thriller',
-  '🏎️ High Octane Adrenaline Heist',
-  '🌌 Ethereal Cyberpunk Aesthetic',
-  '🏰 Epic Medieval Dark Fantasy',
+  'Rainy Noir Detective',
+  'Gritty Space Survival',
+  'Mind-bending Sci-Fi Plot Twist',
+  'Wholesome Cozy Comfort',
+  'Intense Psychological Thriller',
+  'High Octane Adrenaline Heist',
+  'Ethereal Cyberpunk Aesthetic',
+  'Epic Medieval Dark Fantasy',
 ];
 
 // Typing on a TV remote is slow, so a search runs once typing pauses.

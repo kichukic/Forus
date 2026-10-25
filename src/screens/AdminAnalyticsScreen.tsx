@@ -148,7 +148,7 @@ export function AdminAnalyticsScreen({ onBack }: Props) {
           style={[styles.segmentBtn, mode === 'online' && styles.segmentBtnActive]}
         >
           <Text style={[styles.segmentText, mode === 'online' && styles.segmentTextActive]}>
-            🟢 Online Now ({data?.onlineCount ?? 0})
+            Online Now ({data?.onlineCount ?? 0})
           </Text>
         </Pressable>
         <Pressable
@@ -156,7 +156,7 @@ export function AdminAnalyticsScreen({ onBack }: Props) {
           style={[styles.segmentBtn, mode === 'all' && styles.segmentBtnActive]}
         >
           <Text style={[styles.segmentText, mode === 'all' && styles.segmentTextActive]}>
-            🏆 Screen Time ({data?.totalUsers ?? 0})
+            Screen Time ({data?.totalUsers ?? 0})
           </Text>
         </Pressable>
       </View>

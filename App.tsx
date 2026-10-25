@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, BackHandler, StyleSheet, View } from 'react-native';
+import { Animated, AppState, BackHandler, Easing, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { BlurTargetView } from 'expo-blur';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
 import { AnimatedSplash } from './src/components/AnimatedSplash';
 import { BottomNav, BOTTOM_NAV_HEIGHT, type NavId } from './src/components/BottomNav';
+import { ScreenReveal } from './src/components/ScreenReveal';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
@@ -66,6 +67,24 @@ const MIN_FRESH_POSTERS = 16;
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const home = useRef<HomeHandle>(null);
+  // Home stays mounted, so returning to it from another tab won't remount and
+  // animate it. Ease its layer back in ourselves when it becomes active again;
+  // the very first launch already starts expanded, so it skips the reveal.
+  const [homeShown] = useState(() => new Animated.Value(1));
+  const prevScreen = useRef<Screen>('home');
+  useEffect(() => {
+    if (screen === 'home' && prevScreen.current !== 'home' && !isTV) {
+      homeShown.setValue(0);
+      Animated.timing(homeShown, {
+        toValue: 1,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+    prevScreen.current = screen;
+  }, [screen, homeShown]);
+  const homeLift = homeShown.interpolate({ inputRange: [0, 1], outputRange: [16, 0] });
   // The screens behind the bottom bar, for its blur.
   const blurTarget = useRef<View>(null);
   const chat = useRef<ChatHandle>(null);
@@ -256,7 +275,7 @@ export default function App() {
         {/* The screens, which the bottom bar's frosted glass blurs. */}
         <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
           {/* Home stays mounted so its tabs, rows and scroll position survive. */}
-          <View style={layer('home')}>
+          <Animated.View style={[layer('home'), { opacity: homeShown, transform: [{ translateY: homeLift }] }]}>
             <HomeScreen
               history={history}
               torboxVersion={torboxVersion}
@@ -271,10 +290,10 @@ export default function App() {
               onOpenSettings={openSettings}
               ref={home}
             />
-          </View>
+          </Animated.View>
 
           {screen === 'search' && (
-            <View style={layer('search')}>
+            <ScreenReveal style={layer('search')}>
               <SearchScreen
                 key={searchScope}
                 scope={searchScope}
@@ -282,11 +301,11 @@ export default function App() {
                 onOpenMoviebox={setMoviebox}
                 onSendRelease={(option) => addTransfer(option)}
               />
-            </View>
+            </ScreenReveal>
           )}
 
           {screen === 'chat' && (
-            <View style={layer('chat')}>
+            <ScreenReveal style={layer('chat')}>
               <ChatScreen
                 ref={chat}
                 onFullScreen={setChatFull}
@@ -313,17 +332,17 @@ export default function App() {
                   }
                 }}
               />
-            </View>
+            </ScreenReveal>
           )}
 
           {screen === 'history' && (
-            <View style={layer('history')}>
+            <ScreenReveal style={layer('history')}>
               <HistoryScreen history={history} onPlay={play} onClear={clearAllHistory} />
-            </View>
+            </ScreenReveal>
           )}
 
           {screen === 'settings' && (
-            <View style={layer('settings')}>
+            <ScreenReveal style={layer('settings')}>
               <SettingsScreen
                 torboxVersion={torboxVersion}
                 onOpenTorbox={openTorbox}
@@ -336,38 +355,38 @@ export default function App() {
                   });
                 }}
               />
-            </View>
+            </ScreenReveal>
           )}
 
           {screen === 'downloads' && (
-            <View style={layer('downloads')}>
+            <ScreenReveal style={layer('downloads')}>
               <DownloadsScreen
                 onBack={() => setScreen('settings')}
                 onPlay={play}
               />
-            </View>
+            </ScreenReveal>
           )}
 
           {screen === 'favorites' && (
-            <View style={layer('favorites')}>
+            <ScreenReveal style={layer('favorites')}>
               <FavoritesScreen
                 onPlay={play}
                 onOpenMoviebox={setMoviebox}
                 onGoHome={() => setScreen('home')}
               />
-            </View>
+            </ScreenReveal>
           )}
 
           {screen === 'admin' && (
-            <View style={layer('admin')}>
+            <ScreenReveal style={layer('admin')}>
               <AdminAnalyticsScreen onBack={() => setScreen('home')} />
-            </View>
+            </ScreenReveal>
           )}
 
           {screen === 'torbox' && (
-            <View style={layer('torbox')}>
+            <ScreenReveal style={layer('torbox')}>
               <TorboxSetupScreen onDone={closeTorbox} />
-            </View>
+            </ScreenReveal>
           )}
         </BlurTargetView>
 
@@ -414,7 +433,7 @@ export default function App() {
         )}
 
         {movie && (
-          <View style={StyleSheet.absoluteFill}>
+          <ScreenReveal style={StyleSheet.absoluteFill}>
             <MovieScreen
               key={movie.id}
               movie={movie}
@@ -426,11 +445,11 @@ export default function App() {
                 openTorbox();
               }}
             />
-          </View>
+          </ScreenReveal>
         )}
 
         {moviebox && (
-          <View style={StyleSheet.absoluteFill}>
+          <ScreenReveal style={StyleSheet.absoluteFill}>
             <MovieboxDetailScreen
               key={moviebox.id}
               subject={moviebox}
@@ -442,11 +461,11 @@ export default function App() {
                 addTransfer(option);
               }}
             />
-          </View>
+          </ScreenReveal>
         )}
 
         {streamioSeries && (
-          <View style={StyleSheet.absoluteFill}>
+          <ScreenReveal style={StyleSheet.absoluteFill}>
             <StreamioBoxDetailScreen
               key={streamioSeries.id}
               item={streamioSeries}
@@ -457,7 +476,7 @@ export default function App() {
                 addTransfer(option);
               }}
             />
-          </View>
+          </ScreenReveal>
         )}
 
         {playing && (

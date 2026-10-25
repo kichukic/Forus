@@ -320,7 +320,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
                 shown.year,
                 shown.duration,
                 shown.contentRating,
-                shown.rating ? `★ ${shown.rating}` : undefined,
+                shown.rating ? `${shown.rating}` : undefined,
               ]
                 .filter(Boolean)
                 .join(' · ')}

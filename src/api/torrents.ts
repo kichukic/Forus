@@ -44,9 +44,9 @@ type Stream = {
 
 // Torrentio writes the seeders, the size and the tracker into the title.
 function parseTitle(title: string) {
-  const seeders = title.match(/👤\s*(\d+)/)?.[1];
-  const size = title.match(/💾\s*([\d.]+\s*[KMGT]B)/i)?.[1]?.replace(/\s+/g, '');
-  const tracker = title.match(/⚙️\s*([^\n\d]+)$/)?.[1]?.trim();
+  const seeders = title.match(/\u{1F464}\s*(\d+)/u)?.[1];
+  const size = title.match(/\u{1F4BE}\s*([\d.]+\s*[KMGT]B)/iu)?.[1]?.replace(/\s+/g, '');
+  const tracker = title.match(/\u2699\uFE0F?\s*([^\n\d]+)$/u)?.[1]?.trim();
   const quality = title.match(/\b(2160p|1080p|720p|480p|360p|4K|UHD|FHD|HD|SD)\b/i)?.[1] ?? '';
   return {
     seeders: seeders ? Number(seeders) : undefined,

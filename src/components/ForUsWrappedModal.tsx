@@ -48,7 +48,7 @@ export function ForUsWrappedModal({ visible, onClose }: Props) {
     const favsCount = favorites.length;
 
     let persona = 'The Trendsetter';
-    let personaEmoji = '✨';
+    let personaIcon: keyof typeof Ionicons.glyphMap = 'sparkles';
     let personaTagline = 'Curating the finest streams on ForUs with immaculate taste.';
 
     const nightWatches = history.filter((h) => {
@@ -62,15 +62,15 @@ export function ForUsWrappedModal({ visible, onClose }: Props) {
 
     if (nightWatches >= 2 || (titlesCount > 0 && nightWatches / titlesCount >= 0.35)) {
       persona = 'The Midnight Binger';
-      personaEmoji = '🦉';
+      personaIcon = 'moon';
       personaTagline = 'You only sleep when the credits finish rolling.';
     } else if (fileCount >= 2 || (titlesCount > 0 && fileCount / titlesCount >= 0.35)) {
       persona = 'The Torrent Titan';
-      personaEmoji = '⚡';
+      personaIcon = 'flash';
       personaTagline = 'Ultra-high bitrate, 4K HDR streams, zero compromises.';
     } else if (movieboxCount >= 2 || (titlesCount > 0 && movieboxCount / titlesCount >= 0.35)) {
       persona = 'The Cinephile';
-      personaEmoji = '🍿';
+      personaIcon = 'film';
       personaTagline = 'Blockbusters, cinematic masterpieces, and endless popcorn.';
     }
 
@@ -81,7 +81,7 @@ export function ForUsWrappedModal({ visible, onClose }: Props) {
       titlesCount,
       favsCount,
       persona,
-      personaEmoji,
+      personaIcon,
       personaTagline,
       topTitle,
     };
@@ -90,7 +90,7 @@ export function ForUsWrappedModal({ visible, onClose }: Props) {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `🎁 My ForUs Wrapped 2026:\n\n${stats.personaEmoji} Persona: ${stats.persona}\n⏱️ Streaming Time: ${stats.hours} Hours\n🎬 Titles Watched: ${stats.titlesCount}\n❤️ Favorites Pinned: ${stats.favsCount}\n\nStream with me on ForUs!`,
+        message: `ForUs Wrapped 2026\n\nPersona: ${stats.persona}\nStreaming Time: ${stats.hours} Hours\nTitles Watched: ${stats.titlesCount}\nFavorites Pinned: ${stats.favsCount}\n\nStream with me on ForUs!`,
       });
     } catch {
       showToast({ text: 'Could not open share menu' });
@@ -123,7 +123,9 @@ export function ForUsWrappedModal({ visible, onClose }: Props) {
                 style={StyleSheet.absoluteFill}
               />
               <Text style={styles.heroSubtitle}>YOUR STREAMING PERSONA</Text>
-              <Text style={styles.heroEmoji}>{stats.personaEmoji}</Text>
+              <View style={styles.heroIconWrap}>
+                <Ionicons name={stats.personaIcon} size={sz(52, 64)} color="#ffd166" />
+              </View>
               <Text style={styles.heroTitle}>{stats.persona}</Text>
               <Text style={styles.heroTagline}>{stats.personaTagline}</Text>
             </View>
@@ -237,9 +239,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.2,
   },
-  heroEmoji: {
-    fontSize: sz(56, 72),
-    marginVertical: 4,
+  heroIconWrap: {
+    marginVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroTitle: {
     color: '#fff',

@@ -301,13 +301,13 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
           hitSlop={12}
           style={[styles.close, { top: (portraitPhone ? (width * 9) / 16 : 0) + 8 }]}
         >
-          <Text style={styles.closeText}>✕</Text>
+          <Ionicons name="close" size={18} color="#fff" />
         </Pressable>
       )}
 
       {!isTV && !mini && shell && (
         <Pressable onPress={shell.minimize} hitSlop={12} style={styles.minimize}>
-          <Text style={styles.minimizeText}>⌄</Text>
+          <Ionicons name="chevron-down" size={20} color="#fff" />
         </Pressable>
       )}
 
