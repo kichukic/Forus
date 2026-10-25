@@ -298,12 +298,19 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
   );
 }
 
+const GENERIC_PREFIX =
+  /^(new|superhit|latest|super hit|blockbuster|classic)\s+(malayalam|hindi|action|comedy|romantic|full|hd|\d{4})*\s*(movie|movies|cinema|film|full movie|full length)?$/i;
+
 // YouTube titles pile up "| Actor | Actor | Channel"; the part before the
-// first bar is the actual name.
+// first bar is usually the actual name unless it is generic channel boilerplate.
 export function cleanTitle(title: string): string {
   // Titles saved before emoji were stripped (history) still carry them.
   const plain = stripEmoji(title);
-  const head = plain.split('|')[0].trim();
+  const parts = plain.split('|').map((p) => p.trim()).filter(Boolean);
+  let head = parts[0] || plain;
+  if (parts.length > 1 && GENERIC_PREFIX.test(head)) {
+    head = parts[1];
+  }
   return head.length >= 4 ? head : plain;
 }
 

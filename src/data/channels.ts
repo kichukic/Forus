@@ -50,13 +50,17 @@ export const SHOWS: VideoSource[] = [
 // Verified distributor channels that upload complete films for free. They also
 // post trailers, songs and scenes, so only titles that say "full movie" are kept
 // (Hindi studios write "Full Hindi Movie" or "Hindi Full Movie").
-export const FULL_MOVIE = /full (hindi )?movie|hindi full movie|full length/i;
+export const FULL_MOVIE = /full (hindi )?movie|hindi full movie|full length|full film|full cinema/i;
 
 export const MOVIES: VideoSource[] = [
-  { name: 'Speed Audio & Video', channelId: 'UCCylGvN1jEnQ3dB4iajSMCA', titleFilter: FULL_MOVIE },
-  { name: 'Matinee Now', channelId: 'UCN8O3J_z9fdoF1xrYK89uOQ', titleFilter: FULL_MOVIE },
+  { name: 'SUPER FILMS', channelId: 'UCliFkRxHlF30zCvMYvDwMwQ', titleFilter: FULL_MOVIE },
+  { name: 'Mango Malayalam', channelId: 'UCiKN63TrDOa6pjslivoUZpQ', titleFilter: FULL_MOVIE },
   { name: 'Matinee Now HD', channelId: 'UCKH7E8Jr7_pFraJ9QEF5wdg', titleFilter: FULL_MOVIE },
+  { name: 'Speed Audio & Video', channelId: 'UCCylGvN1jEnQ3dB4iajSMCA', titleFilter: FULL_MOVIE },
+  { name: 'Horizon Movies', channelId: 'UC8eJ_Kjxp_TqWvpumGVo9wA', titleFilter: FULL_MOVIE },
+  { name: 'Eros Universe Malayalam', channelId: 'UCcEQky369NZq38PccnmAKdw', titleFilter: FULL_MOVIE },
   { name: 'Musiczone Movies', channelId: 'UCVgAX4cKkI3VhYtVmHUBASg', titleFilter: FULL_MOVIE },
+  { name: 'Matinee Now', channelId: 'UCN8O3J_z9fdoF1xrYK89uOQ', titleFilter: FULL_MOVIE },
   { name: 'Central Talkies', channelId: 'UC-y6ddbfjQiKV43LVfOKiMw', titleFilter: FULL_MOVIE },
 ];
 
@@ -86,6 +90,8 @@ const SEARCH_ONLY_FILMS: VideoSource[] = [
   { name: 'Saina Movies', channelId: 'UCeM3IXubMXTH3LdsMQ3VAhw' },
   { name: 'Friday Film House', channelId: 'UCv65_DW-OzwBgJw99zWJy3g' },
   { name: 'Goodwill Entertainments', channelId: 'UCq6f9bBWaWTHl0FhH167RgA' },
+  { name: 'TRP Entertainments', channelId: 'UCTbdNxjDpncG9eEA-Y0Y-OQ' },
+  { name: 'API Malayalam', channelId: 'UCGH6FMbhlmVDUP96nQVYe2Q' },
 ];
 const SEARCH_ONLY_SHOWS: VideoSource[] = [{ name: 'Asianet Plus', channelId: 'UCjtSIpqwfNEd4H2ulPgn9yQ' }];
 

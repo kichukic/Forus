@@ -237,3 +237,30 @@ export const getAdminAnalytics = () =>
 
 export const recordScreenTimeHeartbeat = (seconds = 30) =>
   call<{ ok: boolean }>('POST', '/analytics/heartbeat', { seconds }).catch(() => ({ ok: false }));
+
+// Blocked Banners
+export type BlockedBannerItem = {
+  videoId: string;
+  title?: string;
+  channel?: string;
+  blockedByName?: string;
+  createdAt: string;
+};
+
+export const fetchGloballyBlockedBanners = () =>
+  call<{ ok: boolean; blockedVideoIds: string[]; items: BlockedBannerItem[] }>(
+    'GET',
+    '/banners/blocked',
+    undefined,
+    10000,
+  ).catch(() => ({ ok: false, blockedVideoIds: [], items: [] }));
+
+export const blockBannerGloballyApi = (data: { videoId: string; title?: string; channel?: string }) =>
+  call<{ ok: boolean; item: BlockedBannerItem }>('POST', '/admin/banners/block', data);
+
+export const unblockBannerGloballyApi = (videoId: string) =>
+  call<{ ok: boolean }>('DELETE', `/admin/banners/block/${encodeURIComponent(videoId)}`);
+
+export const getAdminBlockedBanners = () =>
+  call<{ ok: boolean; items: BlockedBannerItem[] }>('GET', '/admin/banners/blocked', undefined, 10000);
+

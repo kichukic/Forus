@@ -53,12 +53,12 @@ export async function preloadHome(onStep: (step: PreloadStep) => void): Promise<
     ),
   );
 
-  // The same picks the carousel and New today make: newest first, and for the
-  // carousel one per channel.
+  // The carousel features movies (one per channel), while New today mixes all newest.
+  const movieVideos = lists.slice(SHOWS.length).flat().sort((a, b) => b.published.localeCompare(a.published));
+  const movieFirstPerChannel = movieVideos.filter((v, i) => movieVideos.findIndex((o) => o.channel === v.channel) === i);
   const newest = lists.flat().sort((a, b) => b.published.localeCompare(a.published));
-  const firstPerChannel = newest.filter((v, i) => newest.findIndex((o) => o.channel === v.channel) === i);
   const pictures = [
-    ...firstPerChannel.slice(0, HERO_PICTURES).map((v) => `https://i.ytimg.com/vi/${v.id}/maxresdefault.jpg`),
+    ...movieFirstPerChannel.slice(0, HERO_PICTURES).map((v) => `https://i.ytimg.com/vi/${v.id}/maxresdefault.jpg`),
     ...newest.slice(0, CARD_PICTURES).map((v) => v.thumbnail),
   ];
 

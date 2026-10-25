@@ -32,6 +32,7 @@ import { ListFrame } from '../components/ListFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
+import { CinemasRow } from '../components/CinemasRow';
 import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
 import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
@@ -79,14 +80,7 @@ const HINDI_THEMES = THEMES.filter((t) => t.kind === 'hindi');
 // The All tab is a mix of everything, so it carries the themed rows of the
 // other tabs as well.
 const ALL_THEMES = [...MOVIE_THEMES, ...SHOW_THEMES, ...HINDI_THEMES];
-const HERO_ALL_SOURCES = [
-  MOVIES[0],
-  SHOWS[0],
-  MOVIES[1],
-  SHOWS[1],
-  MOVIES[2],
-  SHOWS[4],
-];
+const HERO_ALL_SOURCES = MOVIES;
 // Where each tab was left. Only the tab in front is mounted, so the place is
 // kept here instead of in the tab itself.
 const scrollPositions = new Map<string, number>();
@@ -405,10 +399,17 @@ function HomeScreenView({
           <HeroCarousel
             key={`hero-all-${refreshKey}`}
             sources={HERO_ALL_SOURCES}
-            label="New today"
+            label="Featured movie"
             onPlay={playVideo}
             // On TV the remote starts on Watch Now, until Back sends it to the tabs.
             takeFocus={focusTabs === 0 && launchFocus}
+          />
+
+          {/* Latest cinema releases currently in theaters */}
+          <CinemasRow
+            key={`cinemas-row-${refreshKey}`}
+            version={refreshKey}
+            onOpenMovie={onOpenMovie}
           />
 
           {/* A row of films from MovieBox, so the page holds everything. */}
@@ -449,6 +450,13 @@ function HomeScreenView({
         'movies',
         <TabScroll refreshControl={refreshControl} themes={MOVIE_THEMES} tabKey="movies" refreshKey={refreshKey} onPlay={playVideo}>
           <HeroCarousel key={`hero-movies-${refreshKey}`} sources={MOVIES} label="Trending movie" onPlay={playVideo} />
+          <CinemasRow
+            key={`cinemas-movies-${refreshKey}`}
+            title="Now In Theaters"
+            subtitle="Current box office releases"
+            version={refreshKey}
+            onOpenMovie={onOpenMovie}
+          />
           {MOVIES.map((source) => (
             <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
           ))}

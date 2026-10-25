@@ -12,6 +12,7 @@ import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
 import { addToHistory, clearHistory, loadHistory, mergeHistories, playableKey, type HistoryEntry } from './src/data/history';
 import { askToRemind, startReminders } from './src/data/reminders';
+import { initBannerFilter } from './src/data/bannerFilter';
 import { useEvent } from './src/hooks/useEvent';
 import { addTransfer, loadTransfers, playableFrom } from './src/data/transfers';
 import { showToast } from './src/data/toasts';
@@ -124,6 +125,7 @@ export default function App() {
     loadHistory().then(setHistory);
     loadTransfers();
     setupTransferNotices();
+    initBannerFilter();
     // Chat is for phones; the TV has no bottom bar to reach it.
     if (!isTV) startChat();
     checkForUpdate().then((u) => {

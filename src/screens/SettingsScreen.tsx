@@ -10,6 +10,8 @@ import { useNavScrollHide } from '../data/navChrome';
 import { getTraktSession, subscribeTrakt, type TraktSession } from '../api/trakt';
 import { TraktSetupScreen } from './TraktSetupScreen';
 import { ForUsWrappedModal } from '../components/ForUsWrappedModal';
+import { useBannerFilter } from '../data/bannerFilter';
+import { showToast } from '../data/toasts';
 import { LIVE_NEWS, MOVIES, SHOWS } from '../data/channels';
 import { GLOW, GUTTER, RADIUS, colors, isTV, sz } from '../theme';
 
@@ -41,6 +43,7 @@ export function SettingsScreen({
   const [traktSession, setTraktSession] = useState<TraktSession | null>(null);
   const [wrappedOpen, setWrappedOpen] = useState(false);
   const downloads = useDownloads();
+  const { localCount, clearLocal } = useBannerFilter();
 
   useEffect(() => {
     getTraktSession().then(setTraktSession);
@@ -99,6 +102,17 @@ export function SettingsScreen({
             title="ForUs Wrapped"
             detail="Your streaming persona & stats"
             onPress={() => setWrappedOpen(true)}
+          />
+          <Row
+            icon="eye-off-outline"
+            title="Hidden Banners"
+            detail={localCount > 0 ? `${localCount} hidden (tap to reset)` : 'None'}
+            onPress={() => {
+              if (localCount > 0) {
+                clearLocal();
+                showToast({ text: 'Reset all hidden banners', icon: 'refresh-outline' });
+              }
+            }}
           />
           <Row
             icon="trash-outline"

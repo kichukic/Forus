@@ -7,8 +7,16 @@
 export type Theme = { title: string; query: string; kind: 'movie' | 'show' | 'hindi' };
 
 export const THEMES: Theme[] = [
+  { title: 'Latest Malayalam Movies', query: 'latest malayalam full movie 2025 2026', kind: 'movie' },
+  { title: 'New Malayalam Releases', query: 'new malayalam full movie 2024 2025', kind: 'movie' },
+  { title: 'Recent Malayalam Blockbusters', query: 'superhit malayalam full movie 2024 2025', kind: 'movie' },
+  { title: 'New Malayalam Thrillers', query: 'malayalam thriller full movie 2024 2025', kind: 'movie' },
+  { title: 'Recent Malayalam Comedies', query: 'malayalam comedy full movie 2024 2025', kind: 'movie' },
+  { title: 'Tovino Thomas movies', query: 'Tovino Thomas malayalam full movie', kind: 'movie' },
   { title: 'Mohanlal movies', query: 'Mohanlal malayalam full movie', kind: 'movie' },
   { title: 'Mammootty movies', query: 'Mammootty malayalam full movie', kind: 'movie' },
+  { title: 'Prithviraj movies', query: 'Prithviraj malayalam full movie', kind: 'movie' },
+  { title: 'Basil Joseph movies', query: 'Basil Joseph malayalam full movie', kind: 'movie' },
   { title: 'Comedy movies', query: 'malayalam comedy full movie', kind: 'movie' },
   { title: 'Uppum Mulakum', query: 'Uppum Mulakum full episode', kind: 'show' },
   { title: 'Dileep movies', query: 'Dileep malayalam full movie', kind: 'movie' },
