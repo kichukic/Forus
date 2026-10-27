@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +17,7 @@ type Props = {
   onOpenReel: (item: ReelItem, index: number) => void;
 };
 
-export function ReelsHomeRow({ onOpenReel }: Props) {
+export const ReelsHomeRow = memo(function ReelsHomeRow({ onOpenReel }: Props) {
   const [reels, setReels] = useState<ReelItem[] | null>(null);
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export function ReelsHomeRow({ onOpenReel }: Props) {
       </FocusRow>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

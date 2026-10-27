@@ -80,7 +80,7 @@ export default function App() {
       homeShown.setValue(0);
       Animated.timing(homeShown, {
         toValue: 1,
-        duration: 280,
+        duration: 170,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }).start();

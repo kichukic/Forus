@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +26,7 @@ type Props = {
   version?: number;
 };
 
-export function CinemasRow({
+export const CinemasRow = memo(function CinemasRow({
   title = 'In Cinemas Now',
   subtitle = 'Latest theatrical releases',
   onOpenMovie,
@@ -178,7 +178,7 @@ export function CinemasRow({
       </FocusRow>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: { marginBottom: sz(22, 28) },

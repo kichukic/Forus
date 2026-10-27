@@ -207,7 +207,7 @@ export const HeroCarousel = memo(function HeroCarousel({ sources, label, onPlay,
   );
 });
 
-function Slide({
+const Slide = memo(function Slide({
   video,
   label,
   height,
@@ -297,7 +297,7 @@ function Slide({
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: { marginTop: 4, marginBottom: sz(6, 12) },

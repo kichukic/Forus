@@ -1,8 +1,9 @@
 // The Favorites screen: a dedicated sanctuary for all movies, series,
 // TorBox files, and videos the user has hearted across the app.
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import {
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -213,6 +214,11 @@ export function FavoritesScreen({ onPlay, onOpenMoviebox, onGoHome }: Props) {
           key={columns}
           data={filtered}
           numColumns={columns}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          maxToRenderPerBatch={4}
+          initialNumToRender={6}
+          updateCellsBatchingPeriod={50}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[styles.grid, { paddingBottom: insets.bottom + 110 }]}
           onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
@@ -231,7 +237,7 @@ export function FavoritesScreen({ onPlay, onOpenMoviebox, onGoHome }: Props) {
   );
 }
 
-function FavoriteCard({
+const FavoriteCard = memo(function FavoriteCard({
   item,
   width,
   onPress,
@@ -312,7 +318,7 @@ function FavoriteCard({
       </Text>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },

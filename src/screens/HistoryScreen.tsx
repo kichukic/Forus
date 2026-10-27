@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -87,6 +87,11 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
               onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
               scrollEventThrottle={48}
               numColumns={columns}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === 'android'}
+              maxToRenderPerBatch={4}
+              initialNumToRender={6}
+              updateCellsBatchingPeriod={50}
               keyExtractor={playableKey}
               // An exact height on TV; see ListFrame.
               style={height ? { height } : styles.list}

@@ -18,12 +18,12 @@ export function ScreenReveal({ children, style }: Props) {
     Animated.spring(shown, {
       toValue: 1,
       useNativeDriver: true,
-      // TV: quick and tight. Phone: a touch more glide.
-      speed: isTV ? 30 : 16,
-      bounciness: 0,
+      // Snappy, tactile response with zero sluggish glide
+      speed: isTV ? 30 : 28,
+      bounciness: isTV ? 0 : 2,
     }).start();
   }, [shown]);
-  const translateY = shown.interpolate({ inputRange: [0, 1], outputRange: [sz(isTV ? 10 : 22, 10), 0] });
+  const translateY = shown.interpolate({ inputRange: [0, 1], outputRange: [sz(isTV ? 10 : 12, 10), 0] });
   return (
     <Animated.View style={[style, { opacity: shown, transform: [{ translateY }] }]}>
       {children}

@@ -47,10 +47,10 @@ export const BOTTOM_NAV_HEIGHT = 64;
 
 // The selected tab's pill opening and the others making room, as one spring.
 const SWITCH = {
-  duration: 380,
-  create: { type: LayoutAnimation.Types.spring, property: LayoutAnimation.Properties.scaleXY, springDamping: 0.75 },
-  update: { type: LayoutAnimation.Types.spring, springDamping: 0.75 },
-  delete: { type: LayoutAnimation.Types.easeOut, property: LayoutAnimation.Properties.opacity, duration: 120 },
+  duration: 220,
+  create: { type: LayoutAnimation.Types.spring, property: LayoutAnimation.Properties.scaleXY, springDamping: 0.82 },
+  update: { type: LayoutAnimation.Types.spring, springDamping: 0.82 },
+  delete: { type: LayoutAnimation.Types.easeOut, property: LayoutAnimation.Properties.opacity, duration: 100 },
 };
 
 type Props = {
@@ -91,7 +91,7 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
     // come from one 0..1 value so they move together.
     Animated.spring(slide, {
       toValue: hidden ? 1 : 0,
-      speed: 12,
+      speed: 24,
       bounciness: 0,
       useNativeDriver: true,
     }).start();

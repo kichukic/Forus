@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -519,6 +520,11 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
           onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
           scrollEventThrottle={48}
           numColumns={columns}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          maxToRenderPerBatch={4}
+          initialNumToRender={4}
+          updateCellsBatchingPeriod={50}
           keyExtractor={(video) => `yt:${video.id}`}
           contentContainerStyle={styles.grid}
           ListHeaderComponent={

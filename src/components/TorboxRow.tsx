@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { memo, useEffect, useState, type ReactElement } from 'react';
 import {
   FlatList,
   Platform,
@@ -41,7 +41,7 @@ type Card = { type: 'file'; file: TorboxFile } | { type: 'settings' };
 const GRID_COLUMNS = 3;
 
 
-export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refreshControl }: Props) {
+export const TorboxRow = memo(function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refreshControl }: Props) {
   const [state, setState] = useState<State>({ status: 'loading' });
   // The list is loaded again when the version changes, and goes back to
   // loading while it does.
@@ -178,7 +178,7 @@ export function TorboxRow({ version, onPlay, onOpenSettings, grid, header, refre
       {list}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: { marginBottom: sz(12, 20) },

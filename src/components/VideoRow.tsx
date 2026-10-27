@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { loadVideoPage, loadVideos, searchVideoPage, stripEmoji, type Video } from '../api/youtube';
 import { FULL_MOVIE, MOVIES, SHOWS, TRUSTED_CHANNELS, type VideoSource } from '../data/channels';
@@ -272,31 +272,47 @@ function VideoList({ title, subtitle, videos, failed, onPlay, onEndReached, load
               // Only there while more is really loading, so it can move.
               loadingMore ? <SkeletonLoader columns={2} cardWidth={CARD_WIDTH} rows={1} style={styles.more} /> : null
             }
-            renderItem={({ item }) => (
-              <FocusCard onPress={() => onPlay(item)} onLongPress={shareOnLongPress(item.id, item.title)}>
-                <VideoCardContent
-                  image={item.thumbnail}
-                  title={cleanTitle(item.title)}
-                  subtitle={item.channel}
-                  duration={item.duration}
-                  favoriteItem={{
-                    id: `yt:${item.id}`,
-                    kind: 'video',
-                    title: cleanTitle(item.title),
-                    poster: item.thumbnail,
-                    channel: item.channel,
-                    duration: item.duration,
-                    videoId: item.id,
-                  }}
-                />
-              </FocusCard>
-            )}
+            renderItem={({ item }) => <VideoRowCard item={item} onPlay={onPlay} />}
           />
         </FocusRow>
       )}
     </View>
   );
 }
+
+const VideoRowCard = memo(function VideoRowCard({
+  item,
+  onPlay,
+}: {
+  item: Video & { channel?: string };
+  onPlay: (video: Video) => void;
+}) {
+  const title = useMemo(() => cleanTitle(item.title), [item.title]);
+  const favoriteItem = useMemo(
+    () => ({
+      id: `yt:${item.id}`,
+      kind: 'video' as const,
+      title,
+      poster: item.thumbnail,
+      channel: item.channel,
+      duration: item.duration,
+      videoId: item.id,
+    }),
+    [item.id, title, item.thumbnail, item.channel, item.duration],
+  );
+
+  return (
+    <FocusCard onPress={() => onPlay(item)} onLongPress={shareOnLongPress(item.id, item.title)}>
+      <VideoCardContent
+        image={item.thumbnail}
+        title={title}
+        subtitle={item.channel}
+        duration={item.duration}
+        favoriteItem={favoriteItem}
+      />
+    </FocusCard>
+  );
+});
 
 const GENERIC_PREFIX =
   /^(new|superhit|latest|super hit|blockbuster|classic)\s+(malayalam|hindi|action|comedy|romantic|full|hd|\d{4})*\s*(movie|movies|cinema|film|full movie|full length)?$/i;

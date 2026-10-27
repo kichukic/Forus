@@ -1,6 +1,6 @@
 // A row of films from MovieBox, for the home page. It brings the same films
 // the MovieBox tab shows, so the home page is a mix of everything.
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { browseShelves, type MovieboxSubject } from '../api/moviebox';
 import { FocusCard } from './FocusCard';
@@ -23,7 +23,7 @@ type Props = {
 // MovieBox has, and keeps the page light on a phone with little memory.
 const MAX_SHELVES = 1;
 
-export function MovieboxRow({ onOpen, tabId = 1, version = 0 }: Props) {
+export const MovieboxRow = memo(function MovieboxRow({ onOpen, tabId = 1, version = 0 }: Props) {
   const [shelves, setShelves] = useState<{ title: string; subjects: MovieboxSubject[] }[] | null>(
     null,
   );
@@ -85,7 +85,7 @@ export function MovieboxRow({ onOpen, tabId = 1, version = 0 }: Props) {
       ))}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: { marginBottom: sz(22, 28) },
