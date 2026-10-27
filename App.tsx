@@ -62,7 +62,7 @@ type Screen = NavId | 'torbox';
 installErrorHandler();
 
 // The longest the splash waits for the home screen's data.
-const PRELOAD_TIMEOUT_MS = 8000;
+const PRELOAD_TIMEOUT_MS = 2500;
 // Fresh posters replace the saved ones once there are enough to fill the wall.
 const MIN_FRESH_POSTERS = 16;
 

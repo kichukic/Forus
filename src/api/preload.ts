@@ -66,22 +66,17 @@ export async function preloadHome(onStep: (step: PreloadStep) => void): Promise<
   const next = newest.slice(0, POSTER_COUNT).map((v) => v.thumbnail);
   if (next.length) AsyncStorage.setItem(POSTERS_KEY, JSON.stringify(next)).catch(() => {});
 
-  onStep({ label: 'Getting the pictures ready…', progress: 0.7, posters: [...posters] });
-  let fetched = 0;
+  // Prefetch only the immediate hero pictures to release the splash in < 800ms
+  const heroOnly = pictures.slice(0, HERO_PICTURES);
   await Promise.all(
-    [...pictures, ...next].map((uri) =>
-      // The same cache the cards read from, so the pictures show instantly.
-      Image.prefetch(uri, 'memory-disk')
-        .catch(() => false)
-        .then(() => {
-          fetched++;
-          onStep({
-            label: 'Getting the pictures ready…',
-            progress: 0.7 + 0.28 * (fetched / (pictures.length + next.length)),
-            posters: [...posters],
-          });
-        }),
-    ),
+    heroOnly.map((uri) => Image.prefetch(uri, 'memory-disk').catch(() => false)),
   );
+
   onStep({ label: 'All set', progress: 1, posters: [...posters] });
+
+  // Prefetch the remaining images asynchronously in background without blocking startup
+  setTimeout(() => {
+    const remaining = [...pictures.slice(HERO_PICTURES), ...next];
+    Promise.all(remaining.map((uri) => Image.prefetch(uri, 'memory-disk').catch(() => false))).catch(() => {});
+  }, 120);
 }

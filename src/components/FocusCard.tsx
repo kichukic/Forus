@@ -1,5 +1,5 @@
 import { memo, useState, type ReactNode } from 'react';
-import { Animated, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { Animated, Pressable, StyleSheet, Vibration, type ViewStyle } from 'react-native';
 import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, RADIUS, colors, isTV, sz } from '../theme';
 
 type Props = {
@@ -40,7 +40,12 @@ export const FocusCard = memo(function FocusCard({
         setFocused(false);
         animate(1);
       }}
-      onPressIn={() => !isTV && animate(0.96)}
+      onPressIn={() => {
+        if (!isTV) {
+          Vibration.vibrate(10);
+          animate(0.96);
+        }
+      }}
       onPressOut={() => !isTV && animate(1)}
       hasTVPreferredFocus={preferredFocus}
       // A focused card grows, so it is drawn above its neighbours.

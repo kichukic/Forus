@@ -11,6 +11,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  Vibration,
   View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -100,7 +101,10 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
   const opacity = slide.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.55, 0] });
 
   const select = (id: NavId) => {
-    if (id !== active) LayoutAnimation.configureNext(SWITCH);
+    if (id !== active) {
+      Vibration.vibrate(10);
+      LayoutAnimation.configureNext(SWITCH);
+    }
     onSelect(id);
   };
 
@@ -144,6 +148,7 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
         if (targetIdx !== lastSwipedIndexRef.current) {
           lastSwipedIndexRef.current = targetIdx;
           hasSwitchedRef.current = true;
+          Vibration.vibrate(10);
           LayoutAnimation.configureNext(SWITCH);
           curOnSelect(curItems[targetIdx].id);
         }
@@ -160,6 +165,7 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
           if (gesture.dx > 25 || gesture.vx > 0.3) {
             const nextIdx = Math.min(curItems.length - 1, startIdx + 1);
             if (nextIdx !== startIdx) {
+              Vibration.vibrate(10);
               LayoutAnimation.configureNext(SWITCH);
               curOnSelect(curItems[nextIdx].id);
             }
@@ -168,6 +174,7 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
           else if (gesture.dx < -25 || gesture.vx < -0.3) {
             const prevIdx = Math.max(0, startIdx - 1);
             if (prevIdx !== startIdx) {
+              Vibration.vibrate(10);
               LayoutAnimation.configureNext(SWITCH);
               curOnSelect(curItems[prevIdx].id);
             }
