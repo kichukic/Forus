@@ -71,8 +71,6 @@ export function ContactsView({ onBack, onOpen }: Props) {
     getPermissionsAsync().then(({ granted }) => {
       if (granted) search();
     });
-    // Runs once, on opening.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Friend requests made here also update this list.

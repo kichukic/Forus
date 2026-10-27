@@ -41,7 +41,21 @@ export function ConversationListView({ onOpen, onFriends, onProfile }: Props) {
         }
       />
       {conversations === null ? (
-        <Loader label="Loading your chats" icon="chatbubbles-outline" style={styles.loader} />
+        <View style={styles.loaderContainer}>
+          <Loader label="Loading your chats" icon="chatbubbles-outline" style={styles.loader} />
+          {!live && (
+            <Button
+              label={refreshing ? 'Connecting…' : 'Retry connection'}
+              kind="plain"
+              disabled={refreshing}
+              onPress={() => {
+                setRefreshing(true);
+                refresh().finally(() => setRefreshing(false));
+              }}
+              style={styles.retryButton}
+            />
+          )}
+        </View>
       ) : (
         <FlatList
           data={conversations}
@@ -112,6 +126,8 @@ function Row({ item, meId, onPress }: { item: Conversation; meId?: string; onPre
 
 const styles = StyleSheet.create({
   loader: { marginTop: 40, alignSelf: 'center' },
+  loaderContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  retryButton: { marginTop: 20 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: GUTTER, paddingVertical: 11 },
   pressed: { backgroundColor: colors.surface },
   rowText: { flex: 1 },

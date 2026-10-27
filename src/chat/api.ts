@@ -92,7 +92,7 @@ export class ChatError extends Error {
   }
 }
 
-async function call<T>(method: string, path: string, body?: unknown, timeoutMs = 10000): Promise<T> {
+async function call<T>(method: string, path: string, body?: unknown, timeoutMs = 25000): Promise<T> {
   let res: Response;
   try {
     res = await fetchWithTimeout(

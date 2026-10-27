@@ -96,15 +96,19 @@ export async function startChat() {
   });
   if (!(await api.loadSession())) return set({ status: 'signedOut' });
   try {
-    set({ me: await api.getMe(), status: 'signedIn' });
-    connect();
-    refresh();
-    setupMessageNotifications();
+    const me = await api.getMe();
+    set({ me, status: 'signedIn' });
   } catch (e) {
     // An expired sign-in; anything else (offline) keeps the session for later.
-    if (e instanceof api.ChatError && e.status === 401) await signOut();
-    else set({ status: 'signedIn' });
+    if (e instanceof api.ChatError && e.status === 401) {
+      await signOut();
+      return;
+    }
+    set({ status: 'signedIn' });
   }
+  connect();
+  refresh();
+  setupMessageNotifications();
 }
 
 async function signedIn(me: Me) {
@@ -167,6 +171,9 @@ export async function removeEmail() {
 /** Reloads the conversation list and friends. */
 export async function refresh() {
   if (state.status !== 'signedIn') return;
+  if (!state.me) {
+    void api.getMe().then((me) => set({ me })).catch(() => {});
+  }
   const [conversations, friends] = await Promise.all([
     api.getConversations().catch(() => state.conversations),
     api.getFriends().catch(() => state.friends),
@@ -180,11 +187,20 @@ function connect() {
   if (socket || !api.sessionToken()) return;
   socket = io(api.serverAddress(), {
     auth: { token: api.sessionToken() },
-    transports: ['websocket'],
+    transports: ['websocket', 'polling'],
     reconnectionDelayMax: 10000,
   });
-  socket.on('connect', () => set({ live: true }));
+  socket.on('connect', () => {
+    set({ live: true });
+    refresh();
+  });
   socket.on('disconnect', () => set({ live: false }));
+  socket.on('connect_error', (err) => {
+    set({ live: false });
+    if (err?.message === 'unauthorized') {
+      void signOut();
+    }
+  });
   socket.on('message', ({ message, from }: { message: ChatMessage; from?: ChatUser }) => received(message, from));
   socket.on('read', ({ userId, with: other, at }: { userId: string; with?: string; at: string }) => {
     if (userId === state.me?.id && other) {
