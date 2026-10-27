@@ -33,6 +33,8 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
 import { CinemasRow } from '../components/CinemasRow';
+import { ReelsHomeRow } from '../components/ReelsHomeRow';
+import type { ReelItem } from '../api/reels';
 import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
 import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
@@ -124,6 +126,8 @@ type Props = {
   onOpenStreamioSeries: (item: StreamioItem) => void;
   // Sends a release found by searching to TorBox.
   onSendRelease: (option: TorrentOption) => void;
+  // Opens full screen reels starting at a specific reel.
+  onOpenReels?: (item?: ReelItem, index?: number) => void;
   // TV has no bottom bar, so these sit in the header there.
   onOpenHistory: () => void;
   onOpenSettings: () => void;
@@ -156,6 +160,7 @@ function HomeScreenView({
   onSendRelease,
   onOpenHistory,
   onOpenSettings,
+  onOpenReels,
   ref,
 }: Props) {
   // Keeps the header clear of a phone's status bar and notch. Zero on TVs.
@@ -418,6 +423,13 @@ function HomeScreenView({
             version={refreshKey}
             onOpen={onOpenMoviebox}
           />
+
+          {/* Quick-access row of vertical trending Reels & Shorts */}
+          {onOpenReels && (
+            <ReelsHomeRow
+              onOpenReel={(reel, idx) => onOpenReels(reel, idx)}
+            />
+          )}
 
           {history.length > 0 && (
             <View style={styles.row}>

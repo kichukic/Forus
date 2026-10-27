@@ -23,7 +23,7 @@ import { useNavHidden } from '../data/navChrome';
 import { Badge } from '../chat/ui';
 import { colors } from '../theme';
 
-export type NavId = 'home' | 'search' | 'favorites' | 'downloads' | 'history' | 'chat' | 'settings' | 'admin';
+export type NavId = 'home' | 'reels' | 'search' | 'favorites' | 'downloads' | 'history' | 'chat' | 'settings' | 'admin';
 
 export type NavItem = {
   id: NavId;
@@ -34,6 +34,7 @@ export type NavItem = {
 
 const BASE_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
+  { id: 'reels', label: 'Reels', icon: 'film-outline', activeIcon: 'film' },
   { id: 'search', label: 'Search', icon: 'search-outline', activeIcon: 'search' },
   { id: 'favorites', label: 'Favorites', icon: 'heart-outline', activeIcon: 'heart' },
   { id: 'downloads', label: 'Downloads', icon: 'arrow-down-circle-outline', activeIcon: 'arrow-down-circle' },

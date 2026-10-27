@@ -26,6 +26,7 @@ import { FatalErrorScreen } from './src/screens/FatalErrorScreen';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
+import { ReelsScreen } from './src/screens/ReelsScreen';
 import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
 import { sendScreenTimeHeartbeat, startChat, useChatStatus } from './src/chat/store';
 import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
@@ -67,6 +68,7 @@ const MIN_FRESH_POSTERS = 16;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
+  const [reelsInitialIndex, setReelsInitialIndex] = useState(0);
   const home = useRef<HomeHandle>(null);
   // Home stays mounted, so returning to it from another tab won't remount and
   // animate it. Ease its layer back in ourselves when it becomes active again;
@@ -290,9 +292,22 @@ export default function App() {
               onSendRelease={sendRelease}
               onOpenHistory={openHistory}
               onOpenSettings={openSettings}
+              onOpenReels={(_, index) => {
+                setReelsInitialIndex(index ?? 0);
+                setScreen('reels');
+              }}
               ref={home}
             />
           </Animated.View>
+
+          {screen === 'reels' && (
+            <ScreenReveal style={layer('reels')}>
+              <ReelsScreen
+                initialIndex={reelsInitialIndex}
+                onPlayFullMovie={play}
+              />
+            </ScreenReveal>
+          )}
 
           {screen === 'search' && (
             <ScreenReveal style={layer('search')}>
@@ -427,6 +442,7 @@ export default function App() {
             active={screen as NavId}
             blurTarget={blurTarget}
             onSelect={(id) => {
+              if (id === 'reels') setReelsInitialIndex(0);
               // The bottom bar's Search looks everywhere.
               if (id === 'search') setSearchScope('all');
               setScreen(id);
