@@ -11,6 +11,7 @@ import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { WebView } from 'react-native-webview';
 import type { ReelItem as ReelItemType } from '../api/reels';
+import { ORIGIN } from '../api/sources';
 import { ReelOverlay } from './ReelOverlay';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -195,40 +196,23 @@ function YouTubePlayer({
 
   useEffect(() => {
     if (!webViewRef.current) return;
-    const cmd = playing ? 'playVideo' : 'pauseVideo';
-    webViewRef.current.injectJavaScript(`
-      try {
-        var frame = document.querySelector('iframe');
-        if (frame) {
-          frame.contentWindow.postMessage('{"event":"command","func":"${cmd}","args":""}', '*');
-        }
-      } catch (e) {}
-      true;
-    `);
+    const cmd = playing ? 'play' : 'pause';
+    webViewRef.current.injectJavaScript(`try { window.cmd('${cmd}'); } catch (e) {} true;`);
   }, [playing]);
 
   useEffect(() => {
     if (!webViewRef.current) return;
-    const cmd = muted ? 'mute' : 'unMute';
-    webViewRef.current.injectJavaScript(`
-      try {
-        var frame = document.querySelector('iframe');
-        if (frame) {
-          frame.contentWindow.postMessage('{"event":"command","func":"${cmd}","args":""}', '*');
-        }
-      } catch (e) {}
-      true;
-    `);
+    const cmd = muted ? 'mute' : 'unmute';
+    webViewRef.current.injectJavaScript(`try { window.cmd('${cmd}'); } catch (e) {} true;`);
   }, [muted]);
 
   const embedHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!doctype html>
+<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; background-color: #000; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
   .video-container {
     position: absolute;
     top: 50%;
@@ -242,31 +226,58 @@ function YouTubePlayer({
   iframe {
     width: 100%;
     height: 100%;
-    border: none;
+    border: 0;
     pointer-events: none;
   }
 </style>
-</head>
-<body>
-  <div class="video-container">
-    <iframe
-      src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&loop=1&playlist=${videoId}&playsinline=1&rel=0&iv_load_policy=3&enablejsapi=1&origin=https://mytvstream.app"
-      allow="autoplay; encrypted-media"
-      allowfullscreen
-    ></iframe>
-  </div>
-</body>
-</html>
+</head><body>
+<div class="video-container">
+  <iframe
+    id="p"
+    src="https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&playsinline=1&controls=0&rel=0&iv_load_policy=3&fs=0&disablekb=1&cc_load_policy=0&origin=${encodeURIComponent(ORIGIN)}"
+    allow="autoplay; encrypted-media"
+  ></iframe>
+</div>
+<script>
+  var player;
+  function onYouTubeIframeAPIReady() {
+    player = new YT.Player('p', {
+      events: {
+        onReady: function(e) {
+          if (${muted ? 'true' : 'false'}) e.target.mute();
+          if (${playing ? 'true' : 'false'}) e.target.playVideo();
+        },
+        onStateChange: function(e) {
+          if (e.data === 0) {
+            e.target.seekTo(0);
+            e.target.playVideo();
+          }
+        }
+      }
+    });
+  }
+  window.cmd = function(action) {
+    if (!player) return;
+    if (action === 'play') { try { player.playVideo(); } catch(e){} }
+    else if (action === 'pause') { try { player.pauseVideo(); } catch(e){} }
+    else if (action === 'mute') { try { player.mute(); } catch(e){} }
+    else if (action === 'unmute') { try { player.unMute(); } catch(e){} }
+  };
+</script>
+<script src="https://www.youtube.com/iframe_api"></script>
+</body></html>
   `;
 
   return (
     <WebView
       ref={webViewRef}
-      source={{ html: embedHtml }}
+      source={{ html: embedHtml, baseUrl: ORIGIN }}
       style={StyleSheet.absoluteFill}
       allowsInlineMediaPlayback
       mediaPlaybackRequiresUserAction={false}
+      androidLayerType="hardware"
       javaScriptEnabled
+      domStorageEnabled
       scrollEnabled={false}
       pointerEvents="none"
     />
