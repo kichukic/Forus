@@ -4,7 +4,6 @@ import {
   Dimensions,
   Pressable,
   StyleSheet,
-  Vibration,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -117,7 +116,6 @@ export function ReelItem({
 
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
       // Double tap detected: trigger heart burst
-      Vibration.vibrate(18);
       setShowHeart(true);
       heartAnim.setValue(0);
       Animated.sequence([
