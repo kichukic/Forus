@@ -380,12 +380,13 @@ export async function browseTabs(): Promise<{ id: number; name: string }[]> {
   for (const bottom of data?.bottomTabs ?? []) {
     for (const sub of bottom.subTabs ?? []) {
       const id = sub.tabId ?? 0;
-      // The tabs that are films, series and shows. The rest are live channels,
+      // The tabs that are films, series, shows and short dramas. The rest are live channels,
       // music, football and games, which are not this app's business.
-      if (!['TrenTab', 'OperateTab', 'SubjTab'].includes(sub.type ?? '')) continue;
+      if (!['TrenTab', 'OperateTab', 'SubjTab', 'ShortTvTab'].includes(sub.type ?? '')) continue;
       if (!id || seen.has(id) || EXCLUDED_TABS.includes(id)) continue;
       seen.add(id);
-      tabs.push({ id, name: sub.name ?? 'Films' });
+      const name = sub.name === 'ShortTV' ? 'Short Drama' : (sub.name ?? 'Films');
+      tabs.push({ id, name });
     }
   }
   return tabs;
@@ -724,3 +725,37 @@ export function forgetMovieboxToken(): void {
   token = null;
   AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
 }
+
+/** Tab 13 is MovieBox ShortTV / Short Dramas */
+export const SHORT_DRAMA_TAB_ID = 13;
+
+/**
+ * Loads short drama subjects from MovieBox ShortTV shelves.
+ */
+export async function shortDramaSubjects(): Promise<MovieboxSubject[]> {
+  const shelves = await browseShelves(SHORT_DRAMA_TAB_ID).catch(() => [] as MovieboxShelf[]);
+  const subjects: MovieboxSubject[] = [];
+  const seen = new Set<string>();
+  for (const shelf of shelves) {
+    for (const item of shelf.subjects) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      subjects.push(item);
+    }
+  }
+  return subjects;
+}
+
+/**
+ * Resolves episode 1 playable stream for a short drama subject.
+ */
+export async function shortDramaEpisode1(subjectId: string): Promise<string | null> {
+  try {
+    const rows = await playableRows(subjectId, 1, 1);
+    const link = rows[0]?.previewUrl;
+    return link || null;
+  } catch {
+    return null;
+  }
+}
+

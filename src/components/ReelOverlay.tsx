@@ -111,11 +111,13 @@ export function ReelOverlay({
           <Text style={styles.actionText}>{muted ? 'Muted' : 'Audio'}</Text>
         </Pressable>
 
-        {/* Watch full movie shortcut */}
+        {/* Watch full movie or drama series shortcut */}
         {onPlayFullMovie && (
           <Pressable onPress={onPlayFullMovie} style={styles.movieBtn} hitSlop={8}>
             <Ionicons name="film" size={24} color={colors.accent} />
-            <Text style={styles.movieBtnText}>Watch</Text>
+            <Text style={styles.movieBtnText}>
+              {item.category === 'drama' ? 'Drama' : 'Watch'}
+            </Text>
           </Pressable>
         )}
       </View>
@@ -130,7 +132,9 @@ export function ReelOverlay({
             {item.author}
           </Text>
           <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText}>{item.category.toUpperCase()}</Text>
+            <Text style={styles.categoryBadgeText}>
+              {item.category === 'drama' ? 'SHORT DRAMA' : item.category.toUpperCase()}
+            </Text>
           </View>
         </View>
 

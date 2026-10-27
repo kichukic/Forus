@@ -1,5 +1,6 @@
 import { stripEmoji } from '../data/text';
 import { fetchWithTimeout } from './http';
+import { shortDramaEpisode1, shortDramaSubjects } from './moviebox';
 import type { Playable } from '../types';
 
 export type ReelCategory = 'all' | 'drama' | 'cinema' | 'comedy' | 'trailer' | 'scenes';
@@ -146,6 +147,66 @@ const FEED_TIMEOUT_MS = 6000;
 const cache = new Map<string, { at: number; reels: ReelItem[] }>();
 const CACHE_MS = 15 * 60 * 1000;
 
+const mbDramaCache: { at: number; reels: ReelItem[] } = { at: 0, reels: [] };
+const MB_DRAMA_CACHE_MS = 15 * 60 * 1000;
+
+async function fetchMovieboxShortDramaReels(): Promise<ReelItem[]> {
+  if (mbDramaCache.reels.length > 0 && Date.now() - mbDramaCache.at < MB_DRAMA_CACHE_MS) {
+    return mbDramaCache.reels;
+  }
+
+  try {
+    const subjects = await shortDramaSubjects();
+    if (!subjects.length) return [];
+
+    const safeSubjects = subjects.filter((s) => isFamilySafe(s.title));
+    const targetSubjects = safeSubjects.slice(0, 16);
+
+    const streamPromises = targetSubjects.map(async (subj) => {
+      const streamUrl = await shortDramaEpisode1(subj.id);
+      if (!streamUrl) return null;
+
+      const isHindi =
+        /[\u0900-\u097F]/i.test(subj.title) ||
+        /hindi|boss|pati|dulhan|dulhaniya|pyaar|raja|shehzada|crorepati|arabpati|damaad|bahu/i.test(subj.title);
+
+      let hash = 0;
+      for (let i = 0; i < subj.id.length; i++) hash = (hash * 31 + subj.id.charCodeAt(i)) & 0xffffffff;
+      const likesCount = 14000 + Math.abs(hash % 38000);
+
+      const reel: ReelItem = {
+        id: `mb-${subj.id}`,
+        title: subj.title,
+        author: 'MovieBox MiniTV',
+        source: { type: 'direct', url: streamUrl },
+        thumbnailUrl: subj.poster || subj.backdrop || '',
+        category: 'drama',
+        language: isHindi ? 'hindi' : 'malayalam',
+        likesCount,
+        relatedPlayable: {
+          kind: 'moviebox',
+          subjectId: subj.id,
+          season: 1,
+          episode: 1,
+          title: subj.title,
+          poster: subj.poster,
+        },
+      };
+      return reel;
+    });
+
+    const settled = await Promise.all(streamPromises);
+    const validReels = settled.filter((r): r is ReelItem => r !== null);
+    if (validReels.length > 0) {
+      mbDramaCache.at = Date.now();
+      mbDramaCache.reels = validReels;
+    }
+    return validReels;
+  } catch {
+    return [];
+  }
+}
+
 async function fetchChannelShorts(channel: ChannelSource): Promise<ReelItem[]> {
   const hit = cache.get(channel.channelId);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.reels;
@@ -253,12 +314,41 @@ export async function fetchReels(
   const secondaryLang = activeLang === 'hindi' ? 'malayalam' : 'hindi';
   const secondaryChannels = filterChannels(secondaryLang);
 
-  const [primaryLists, secondaryLists] = await Promise.all([
+  const shouldFetchMbDramas = category === 'drama' || category === 'all';
+  const mbDramaPromise = shouldFetchMbDramas
+    ? fetchMovieboxShortDramaReels()
+    : Promise.resolve([] as ReelItem[]);
+
+  const [primaryLists, secondaryLists, mbDramas] = await Promise.all([
     Promise.all(primaryChannels.map((c) => fetchChannelShorts(c))),
     Promise.all(secondaryChannels.map((c) => fetchChannelShorts(c))),
+    mbDramaPromise,
   ]);
 
   const merged = shuffleInterleave(primaryLists, secondaryLists);
+
+  if (mbDramas.length > 0) {
+    if (category === 'drama') {
+      const dramaList: ReelItem[] = [];
+      const ytDrama = [...merged];
+      let mbIdx = 0;
+      let ytIdx = 0;
+      while (mbIdx < mbDramas.length || ytIdx < ytDrama.length) {
+        if (mbIdx < mbDramas.length) dramaList.push(mbDramas[mbIdx++]);
+        if (ytIdx < ytDrama.length) dramaList.push(ytDrama[ytIdx++]);
+      }
+      merged.length = 0;
+      merged.push(...dramaList);
+    } else {
+      let mbIdx = 0;
+      for (let i = 2; i < merged.length && mbIdx < mbDramas.length; i += 4) {
+        merged.splice(i, 0, mbDramas[mbIdx++]);
+      }
+      while (mbIdx < mbDramas.length && merged.length < 30) {
+        merged.push(mbDramas[mbIdx++]);
+      }
+    }
+  }
 
   // Eliminate potential duplicates and enforce family safety
   const seen = new Set<string>();
@@ -276,4 +366,6 @@ export async function fetchReels(
 
 export function clearReelsCache() {
   cache.clear();
+  mbDramaCache.at = 0;
+  mbDramaCache.reels = [];
 }
