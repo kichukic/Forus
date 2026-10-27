@@ -223,7 +223,7 @@ function HomeScreenView({
       pillX.setValue(layout.x);
       pillWidth.setValue(layout.width);
     } else {
-      const spring = { useNativeDriver: false, speed: 18, bounciness: 7 };
+      const spring = { useNativeDriver: false, speed: 26, bounciness: 3 };
       Animated.parallel([
         Animated.spring(pillX, { toValue: layout.x, ...spring }),
         Animated.spring(pillWidth, { toValue: layout.width, ...spring }),
@@ -680,10 +680,10 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
           // On TV render enough rows initially to prevent focus traps and layout glitches.
           initialNumToRender={isTV ? 6 : 2}
           maxToRenderPerBatch={isTV ? 4 : 1}
-          windowSize={isTV ? 7 : 7}
-          updateCellsBatchingPeriod={60}
-          // The remote's focus search needs the rows near the screen attached.
-          removeClippedSubviews={false}
+          windowSize={isTV ? 7 : 5}
+          updateCellsBatchingPeriod={50}
+          // The remote's focus search needs the rows near the screen attached; mobile detaches to save memory.
+          removeClippedSubviews={!isTV}
           // More themed rows once the end is a screen or so away.
           onEndReached={() => setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length))}
           onEndReachedThreshold={1.2}
@@ -714,7 +714,7 @@ function SlideIn({ direction, children }: { direction: number; children: ReactNo
   useEffect(() => {
     Animated.timing(progress, {
       toValue: 1,
-      duration: isTV ? 220 : 320,
+      duration: isTV ? 200 : 180,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();

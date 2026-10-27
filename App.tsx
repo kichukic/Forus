@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, AppState, BackHandler, Easing, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { BlurTargetView } from 'expo-blur';
+import { Image } from 'expo-image';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
 import { AnimatedSplash } from './src/components/AnimatedSplash';
@@ -138,7 +139,18 @@ export default function App() {
     const heartbeatTimer = setInterval(() => {
       sendScreenTimeHeartbeat(30);
     }, 30000);
-    return () => clearInterval(heartbeatTimer);
+
+    // Trim decoded image memory cache when app goes into background to prevent OS kills
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background') {
+        Image.clearMemoryCache().catch(() => {});
+      }
+    });
+
+    return () => {
+      clearInterval(heartbeatTimer);
+      appStateSub.remove();
+    };
   }, []);
 
   useEffect(() => {
