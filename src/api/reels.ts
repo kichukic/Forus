@@ -32,35 +32,38 @@ type ChannelSource = {
 };
 
 const REEL_CHANNELS: ChannelSource[] = [
-  // --- Malayalam Channels ---
-  // Short Drama / Serials
-  { name: 'Asianet Serials', channelId: 'UCp_r6Z-Oh0YTf-ym71z5Nqg', category: 'drama', language: 'malayalam' },
-  { name: 'Mazhavil Serials', channelId: 'UCUPD0jQo-EP0B1Nf4uzeIMA', category: 'drama', language: 'malayalam' },
-  { name: 'Flowers TV', channelId: 'UCSrS91iCgFCv_3KwjWWHzSg', category: 'drama', language: 'malayalam' },
-  { name: 'Zee Keralam', channelId: 'UCbrfwFuwMVRtxUTtEYJUKKg', category: 'drama', language: 'malayalam' },
-  // Comedy
-  { name: 'Flowers Comedy', channelId: 'UCmAPdImtXLGh5E-lTTH4Qmg', category: 'comedy', language: 'malayalam' },
-  { name: 'Sun Surya Comedy', channelId: 'UCG9xw4kFo11e39yaaN09BtQ', category: 'comedy', language: 'malayalam' },
-  // Cinema & Scenes
+  // --- Malayalam Cinema & Movie Channels ---
+  // Mass & Action Cinema
   { name: 'Aashirvad Cinemas', channelId: 'UC_J44kyEsEB8LPlhfm2Xb4g', category: 'cinema', language: 'malayalam' },
-  { name: 'SUPER FILMS', channelId: 'UCliFkRxHlF30zCvMYvDwMwQ', category: 'cinema', language: 'malayalam' },
-  { name: 'Mango Malayalam', channelId: 'UCiKN63TrDOa6pjslivoUZpQ', category: 'cinema', language: 'malayalam' },
-  { name: 'Matinee Now HD', channelId: 'UCKH7E8Jr7_pFraJ9QEF5wdg', category: 'cinema', language: 'malayalam' },
-  { name: 'Kaumudy', channelId: 'UCSVALYUGVruJ4I2RjhiudSQ', category: 'scenes', language: 'malayalam' },
-  // Trailers
-  { name: 'Speed Audio & Video', channelId: 'UCCylGvN1jEnQ3dB4iajSMCA', category: 'trailer', language: 'malayalam' },
-  { name: 'Friday Film House', channelId: 'UCv65_DW-OzwBgJw99zWJy3g', category: 'trailer', language: 'malayalam' },
+  { name: 'Wayfarer Films', channelId: 'UCqhz8slFDrgzO5qiSLChWMQ', category: 'cinema', language: 'malayalam' },
+  { name: 'Bhavana Studios', channelId: 'UCPvtzpmgq3fraUXl6lLoK3w', category: 'cinema', language: 'malayalam' },
 
-  // --- Hindi Channels ---
-  // Short Drama
-  { name: 'Dyar Entertainment', channelId: 'UC2lLHs_L-bVRaJvaKLP7gXA', category: 'drama', language: 'hindi' },
-  { name: 'Rajshri Dramas', channelId: 'UCEKWXRsfUHkan-D_ljU8Asw', category: 'drama', language: 'hindi' },
-  // Cinema
-  { name: 'Ultra Bollywood', channelId: 'UCmL1WlDI8UkXDXCXcBQN9CA', category: 'cinema', language: 'hindi' },
-  { name: 'Zee Movies Hindi', channelId: 'UCcWi9YwnWUsR53jV0T4ObKA', category: 'cinema', language: 'hindi' },
+  // Comedy Movie Scenes
+  { name: 'Friday Film House', channelId: 'UCv65_DW-OzwBgJw99zWJy3g', category: 'comedy', language: 'malayalam' },
+  { name: 'Cinecurry Malayalam', channelId: 'UC-yWaAglHbN3dsyleQscxtw', category: 'comedy', language: 'malayalam' },
+  { name: 'Movie World Visual Media', channelId: 'UCCYFVSq7TtFV51cGM0YRv4w', category: 'comedy', language: 'malayalam' },
+
+  // Movie Scenes & Remastered Classics
+  { name: 'Millennium Audios', channelId: 'UCvANYBOSmq2IasMM-djF-cQ', category: 'scenes', language: 'malayalam' },
+  { name: 'Matinee Now HD', channelId: 'UCN8O3J_z9fdoF1xrYK89uOQ', category: 'scenes', language: 'malayalam' },
+
+  // Trailers & Teasers
+  { name: 'Goodwill Entertainments', channelId: 'UCq6f9bBWaWTHl0FhH167RgA', category: 'trailer', language: 'malayalam' },
+
+  // --- Hindi / Bollywood Cinema Channels ---
+  // Mass Action & Movie Scenes
+  { name: 'Goldmines Telefilms', channelId: 'UCyoXW-Dse7fURq30EWl_CUA', category: 'cinema', language: 'hindi' },
+  { name: 'Yash Raj Films (YRF)', channelId: 'UCbTLwN10NoCU4WDzLf1JMOA', category: 'cinema', language: 'hindi' },
   { name: 'Ultra Movie Parlour', channelId: 'UCYauDsl-rswjQGpA0_-Z9Pw', category: 'cinema', language: 'hindi' },
-  // Comedy
-  { name: 'Shemaroo Comedy', channelId: 'UCBOmfqgTZi7yDp4-3Lr_3lA', category: 'comedy', language: 'hindi' },
+
+  // Bollywood Comedy Clips
+  { name: 'Shemaroo Movie Clips', channelId: 'UCMLyozwC9KP26FVSX98F74Q', category: 'comedy', language: 'hindi' },
+
+  // Movie Scenes & Songs
+  { name: 'Dharma Productions', channelId: 'UCKQKIY2YlI4L5QVg7hhfjrQ', category: 'scenes', language: 'hindi' },
+
+  // Trailers & Promos
+  { name: 'Zee Studios', channelId: 'UC3jMepkLKF8y4iiwWmAB3RA', category: 'trailer', language: 'hindi' },
 ];
 
 // Strict adult/NSFW content filter to block 18+, suggestive, or nudity content
@@ -97,6 +100,42 @@ export function isFamilySafe(text: string): boolean {
   return !ADULT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+// Block television mega serials, soap operas, and daytime TV drama clips
+const TV_SERIAL_PATTERNS = [
+  /\bserial\b/i,
+  /\bserials\b/i,
+  /\bmega serial\b/i,
+  /\bsoap opera\b/i,
+  /\btoday episode\b/i,
+  /\bepisode promo\b/i,
+  /\bpromo episode\b/i,
+  /\bkudumbavilakku\b/i,
+  /\bsanthwanam\b/i,
+  /\bchandrikayil\b/i,
+  /\bpatharamattu\b/i,
+  /\bmounaragam\b/i,
+  /\bgeetha govindam\b/i,
+  /\bsasneham\b/i,
+  /\bmanasinakkare\b/i,
+  /\bpadatha painkili\b/i,
+  /\bammayariyathe\b/i,
+  /\bkaliveedu\b/i,
+  /\bkoodevide\b/i,
+  /\bstar magic\b/i,
+  /\bparayam nedam\b/i,
+  /\bswayamvaram\b/i,
+  /\bshyamambaram\b/i,
+  /\bmizhirandilum\b/i,
+  /\bkalyani\b/i,
+  /\bchettayees\b/i,
+  /\banuraga ganam pole\b/i,
+  /\bbhagyalakshmi\b/i,
+];
+
+export function isTvSerial(text: string): boolean {
+  return TV_SERIAL_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 function decodeHtml(text: string): string {
   return text
     .replace(/&quot;/g, '"')
@@ -121,7 +160,7 @@ function parseShortsFeed(xml: string, channel: ChannelSource): ReelItem[] {
     if (!videoId || rawTitle === undefined) continue;
 
     const title = stripEmoji(decodeHtml(rawTitle)).trim();
-    if (!isFamilySafe(title)) continue;
+    if (!isFamilySafe(title) || isTvSerial(title)) continue;
 
     // Deterministic like count generator based on videoId characters for consistent UI
     let hash = 0;
@@ -314,7 +353,7 @@ export async function fetchReels(
   const secondaryLang = activeLang === 'hindi' ? 'malayalam' : 'hindi';
   const secondaryChannels = filterChannels(secondaryLang);
 
-  const shouldFetchMbDramas = category === 'drama' || category === 'all';
+  const shouldFetchMbDramas = category === 'drama';
   const mbDramaPromise = shouldFetchMbDramas
     ? fetchMovieboxShortDramaReels()
     : Promise.resolve([] as ReelItem[]);
@@ -327,34 +366,24 @@ export async function fetchReels(
 
   const merged = shuffleInterleave(primaryLists, secondaryLists);
 
-  if (mbDramas.length > 0) {
-    if (category === 'drama') {
-      const dramaList: ReelItem[] = [];
-      const ytDrama = [...merged];
-      let mbIdx = 0;
-      let ytIdx = 0;
-      while (mbIdx < mbDramas.length || ytIdx < ytDrama.length) {
-        if (mbIdx < mbDramas.length) dramaList.push(mbDramas[mbIdx++]);
-        if (ytIdx < ytDrama.length) dramaList.push(ytDrama[ytIdx++]);
-      }
-      merged.length = 0;
-      merged.push(...dramaList);
-    } else {
-      let mbIdx = 0;
-      for (let i = 2; i < merged.length && mbIdx < mbDramas.length; i += 4) {
-        merged.splice(i, 0, mbDramas[mbIdx++]);
-      }
-      while (mbIdx < mbDramas.length && merged.length < 30) {
-        merged.push(mbDramas[mbIdx++]);
-      }
+  if (mbDramas.length > 0 && category === 'drama') {
+    const dramaList: ReelItem[] = [];
+    const ytDrama = [...merged];
+    let mbIdx = 0;
+    let ytIdx = 0;
+    while (mbIdx < mbDramas.length || ytIdx < ytDrama.length) {
+      if (mbIdx < mbDramas.length) dramaList.push(mbDramas[mbIdx++]);
+      if (ytIdx < ytDrama.length) dramaList.push(ytDrama[ytIdx++]);
     }
+    merged.length = 0;
+    merged.push(...dramaList);
   }
 
-  // Eliminate potential duplicates and enforce family safety
+  // Eliminate potential duplicates and enforce family safety + no TV serials
   const seen = new Set<string>();
   const unique: ReelItem[] = [];
   for (const item of merged) {
-    if (!isFamilySafe(item.title)) continue;
+    if (!isFamilySafe(item.title) || isTvSerial(item.title)) continue;
     if (!seen.has(item.id)) {
       seen.add(item.id);
       unique.push(item);

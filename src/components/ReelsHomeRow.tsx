@@ -38,7 +38,7 @@ export function ReelsHomeRow({ onOpenReel }: Props) {
   if (reels === null) {
     return (
       <View style={styles.container}>
-        <SectionHeader title="Reels & Shorts" subtitle="Trending quick clips" />
+        <SectionHeader title="Movie Reels" subtitle="Cinema scenes, comedy & trailers" />
         <SkeletonLoader
           columns={isTV ? 7 : 4}
           cardWidth={REEL_CARD_WIDTH}
@@ -53,7 +53,7 @@ export function ReelsHomeRow({ onOpenReel }: Props) {
 
   return (
     <View style={styles.container}>
-      <SectionHeader title="Reels & Shorts" subtitle="Trending quick clips" />
+      <SectionHeader title="Movie Reels" subtitle="Cinema scenes, comedy & trailers" />
       <FocusRow>
         <FlatList
           data={reels}

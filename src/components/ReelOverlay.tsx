@@ -173,7 +173,17 @@ export function ReelOverlay({
           </Text>
           <View style={styles.categoryBadge}>
             <Text style={styles.categoryBadgeText}>
-              {item.category === 'drama' ? 'SHORT DRAMA' : item.category.toUpperCase()}
+              {item.category === 'cinema'
+                ? 'MASS & ACTION'
+                : item.category === 'comedy'
+                ? 'MOVIE COMEDY'
+                : item.category === 'trailer'
+                ? 'TRAILER'
+                : item.category === 'scenes'
+                ? 'FILM SCENE'
+                : item.category === 'drama'
+                ? 'SHORT DRAMA'
+                : item.category.toUpperCase()}
             </Text>
           </View>
         </View>

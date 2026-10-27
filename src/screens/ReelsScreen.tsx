@@ -23,12 +23,12 @@ import type { Playable } from '../types';
 import { colors, isTV } from '../theme';
 
 const CATEGORIES: { id: ReelCategory; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'drama', label: 'Short Drama' },
-  { id: 'cinema', label: 'Cinema' },
+  { id: 'all', label: 'All Movies' },
+  { id: 'cinema', label: 'Mass & Action' },
   { id: 'comedy', label: 'Comedy' },
   { id: 'trailer', label: 'Trailers' },
-  { id: 'scenes', label: 'Scenes' },
+  { id: 'scenes', label: 'Film Scenes' },
+  { id: 'drama', label: 'Short Drama' },
 ];
 
 const LANGUAGES: { id: ReelLanguage; label: string }[] = [
