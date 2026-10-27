@@ -10,8 +10,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { WebView } from 'react-native-webview';
-import type { ReelItem as ReelItemType } from '../api/reels';
+import { fetchReelEpisodes, type ReelDramaEpisode, type ReelItem as ReelItemType } from '../api/reels';
 import { ORIGIN } from '../api/sources';
+import { DramaEpisodesSheet } from './DramaEpisodesSheet';
 import { ReelOverlay } from './ReelOverlay';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -46,6 +47,68 @@ export function ReelItem({
   const heartAnim = useState(() => new Animated.Value(0))[0];
   const lastTapRef = useRef<number>(0);
 
+  // In-Reels Episodes State
+  const [episodes, setEpisodes] = useState<ReelDramaEpisode[]>([]);
+  const [episodesLoading, setEpisodesLoading] = useState(false);
+  const [showEpisodesSheet, setShowEpisodesSheet] = useState(false);
+  const [currentEpisode, setCurrentEpisode] = useState<ReelDramaEpisode | null>(null);
+
+  // Background episode preloading without synchronous setState in effect
+  useEffect(() => {
+    let alive = true;
+    if (isActive && (item.category === 'drama' || item.relatedPlayable?.kind === 'moviebox')) {
+      fetchReelEpisodes(item)
+        .then((list) => {
+          if (alive) setEpisodes(list);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      alive = false;
+    };
+  }, [isActive, item]);
+
+  const activeSource = currentEpisode?.streamUrl
+    ? { type: 'direct' as const, url: currentEpisode.streamUrl }
+    : currentEpisode?.videoId
+    ? { type: 'youtube' as const, videoId: currentEpisode.videoId }
+    : item.source;
+
+  const displayTitle = currentEpisode
+    ? `${item.title.replace(/\s*-\s*ep\s*\d+/i, '').replace(/\s*-\s*s\d+e\d+.*$/i, '')} · Ep ${currentEpisode.episode}`
+    : item.title;
+
+  const activeEpNum = currentEpisode?.episode ?? (item.category === 'drama' ? 1 : undefined);
+  const nextEp = episodes.find((e) => e.episode === (activeEpNum ?? 1) + 1);
+
+  const handleNextEpisode = () => {
+    if (nextEp) {
+      setCurrentEpisode(nextEp);
+      setPaused(false);
+    }
+  };
+
+  const handleSelectEpisode = (ep: ReelDramaEpisode) => {
+    setCurrentEpisode(ep);
+    setShowEpisodesSheet(false);
+    setPaused(false);
+  };
+
+  const handleOpenEpisodes = () => {
+    setShowEpisodesSheet(true);
+    if (episodes.length === 0 && !episodesLoading) {
+      setEpisodesLoading(true);
+      fetchReelEpisodes(item)
+        .then((list) => {
+          setEpisodes(list);
+        })
+        .catch(() => {})
+        .finally(() => {
+          setEpisodesLoading(false);
+        });
+    }
+  };
+
   const handlePress = () => {
     const now = Date.now();
     const DOUBLE_TAP_DELAY = 300;
@@ -70,6 +133,9 @@ export function ReelItem({
     }
   };
 
+  const playerKey = activeSource.type === 'youtube' ? activeSource.videoId : activeSource.url;
+  const isDrama = item.category === 'drama' || item.relatedPlayable?.kind === 'moviebox' || episodes.length > 0;
+
   return (
     <View style={styles.container}>
       {/* Background Poster / Thumbnail while loading or when inactive */}
@@ -82,15 +148,17 @@ export function ReelItem({
       {/* Media Player */}
       {shouldLoad && (
         <View style={StyleSheet.absoluteFill}>
-          {item.source.type === 'youtube' ? (
+          {activeSource.type === 'youtube' ? (
             <YouTubePlayer
-              videoId={item.source.videoId}
+              key={playerKey}
+              videoId={activeSource.videoId}
               playing={isActive && !paused}
               muted={muted}
             />
           ) : (
             <DirectPlayer
-              url={item.source.url}
+              key={playerKey}
+              url={activeSource.url}
               playing={isActive && !paused}
               muted={muted}
             />
@@ -136,10 +204,28 @@ export function ReelItem({
       {/* Overlay Actions & Details */}
       <ReelOverlay
         item={item}
+        displayTitle={displayTitle}
         muted={muted}
         onToggleMute={onToggleMute}
         onPlayFullMovie={onPlayFullMovie}
         onBack={onBack}
+        activeEpisode={activeEpNum}
+        totalEpisodes={episodes.length > 0 ? episodes.length : undefined}
+        onOpenEpisodes={isDrama ? handleOpenEpisodes : undefined}
+        onNextEpisode={nextEp ? handleNextEpisode : undefined}
+      />
+
+      {/* In-Reels All Episodes Drawer */}
+      <DramaEpisodesSheet
+        visible={showEpisodesSheet}
+        onClose={() => setShowEpisodesSheet(false)}
+        dramaTitle={item.title}
+        author={item.author}
+        currentEpisode={activeEpNum ?? 1}
+        episodes={episodes}
+        loading={episodesLoading}
+        onSelectEpisode={handleSelectEpisode}
+        onPlayFullMovie={onPlayFullMovie}
       />
     </View>
   );

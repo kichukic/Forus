@@ -1,6 +1,6 @@
 import { stripEmoji } from '../data/text';
 import { fetchWithTimeout } from './http';
-import { shortDramaEpisode1, shortDramaSubjects } from './moviebox';
+import { fetchDramaEpisodes, shortDramaEpisode1, shortDramaSubjects } from './moviebox';
 import type { Playable } from '../types';
 
 export type ReelCategory = 'all' | 'drama' | 'cinema' | 'comedy' | 'trailer' | 'scenes';
@@ -369,3 +369,44 @@ export function clearReelsCache() {
   mbDramaCache.at = 0;
   mbDramaCache.reels = [];
 }
+
+export type ReelDramaEpisode = {
+  episode: number;
+  title: string;
+  streamUrl?: string;
+  videoId?: string;
+  duration?: number;
+};
+
+/**
+ * Loads all episodes for a short drama or serial reel so users can browse
+ * and watch every episode directly within the Reels player.
+ */
+export async function fetchReelEpisodes(item: ReelItem): Promise<ReelDramaEpisode[]> {
+  // MovieBox short dramas
+  if (item.relatedPlayable?.kind === 'moviebox') {
+    const list = await fetchDramaEpisodes(item.relatedPlayable.subjectId);
+    return list.map((ep) => ({
+      episode: ep.episode,
+      title: ep.title || `Episode ${ep.episode}`,
+      streamUrl: ep.streamUrl,
+      duration: ep.duration,
+    }));
+  }
+
+  // YouTube serial shorts
+  if (item.source.type === 'youtube') {
+    const channel = REEL_CHANNELS.find((c) => c.name === item.author);
+    if (channel) {
+      const channelShorts = await fetchChannelShorts(channel);
+      return channelShorts.map((cs, idx) => ({
+        episode: idx + 1,
+        title: cs.title,
+        videoId: (cs.source as { videoId: string }).videoId,
+      }));
+    }
+  }
+
+  return [];
+}
+

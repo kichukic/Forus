@@ -759,3 +759,46 @@ export async function shortDramaEpisode1(subjectId: string): Promise<string | nu
   }
 }
 
+export type ShortDramaEpisode = {
+  season: number;
+  episode: number;
+  title: string;
+  streamUrl: string;
+  duration?: number;
+};
+
+const dramaEpisodesCache = new Map<string, ShortDramaEpisode[]>();
+
+/**
+ * Loads all playable episodes for a drama series by its MovieBox subject ID.
+ */
+export async function fetchDramaEpisodes(subjectId: string): Promise<ShortDramaEpisode[]> {
+  const held = dramaEpisodesCache.get(subjectId);
+  if (held && held.length > 0) return held;
+
+  try {
+    const seasons = await seasonList(subjectId);
+    const maxEp = seasons[0]?.episodes || 20;
+    const season = seasons[0]?.season || 1;
+    const list = await seasonEpisodes(subjectId, season, maxEp);
+
+    const episodes: ShortDramaEpisode[] = list
+      .filter((ep) => Boolean(ep.previewUrl))
+      .map((ep) => ({
+        season: ep.season,
+        episode: ep.episode,
+        title: ep.title || `Episode ${ep.episode}`,
+        streamUrl: ep.previewUrl,
+        duration: ep.duration,
+      }));
+
+    if (episodes.length > 0) {
+      dramaEpisodesCache.set(subjectId, episodes);
+    }
+    return episodes;
+  } catch {
+    return [];
+  }
+}
+
+

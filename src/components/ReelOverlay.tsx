@@ -9,18 +9,28 @@ import { colors, isTV } from '../theme';
 
 type Props = {
   item: ReelItem;
+  displayTitle?: string;
   muted: boolean;
   onToggleMute: () => void;
   onPlayFullMovie?: () => void;
   onBack?: () => void;
+  activeEpisode?: number;
+  totalEpisodes?: number;
+  onOpenEpisodes?: () => void;
+  onNextEpisode?: () => void;
 };
 
 export function ReelOverlay({
   item,
+  displayTitle,
   muted,
   onToggleMute,
   onPlayFullMovie,
   onBack,
+  activeEpisode,
+  totalEpisodes,
+  onOpenEpisodes,
+  onNextEpisode,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [liked, setLiked] = useState(false);
@@ -111,6 +121,24 @@ export function ReelOverlay({
           <Text style={styles.actionText}>{muted ? 'Muted' : 'Audio'}</Text>
         </Pressable>
 
+        {/* All Episodes in Reels */}
+        {onOpenEpisodes && (
+          <Pressable onPress={onOpenEpisodes} style={styles.actionBtn} hitSlop={8}>
+            <Ionicons name="albums-outline" size={28} color="#ffffff" />
+            <Text style={styles.actionText}>
+              {totalEpisodes ? `${totalEpisodes} Ep` : 'Episodes'}
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Quick Next Episode */}
+        {onNextEpisode && (
+          <Pressable onPress={onNextEpisode} style={styles.nextEpBtn} hitSlop={8}>
+            <Ionicons name="play-skip-forward" size={18} color="#ffffff" />
+            <Text style={styles.nextEpBtnText}>Next</Text>
+          </Pressable>
+        )}
+
         {/* Watch full movie or drama series shortcut */}
         {onPlayFullMovie && (
           <Pressable onPress={onPlayFullMovie} style={styles.movieBtn} hitSlop={8}>
@@ -124,6 +152,18 @@ export function ReelOverlay({
 
       {/* Bottom Info Section */}
       <View style={[styles.bottomInfo, { bottom: insets.bottom + 74 }]}>
+        {/* Episode Pill / Quick Access */}
+        {onOpenEpisodes && (
+          <Pressable onPress={onOpenEpisodes} style={styles.episodesPill} hitSlop={6}>
+            <Ionicons name="albums-outline" size={13} color={colors.accent} />
+            <Text style={styles.episodesPillText}>
+              {activeEpisode ? `Ep ${activeEpisode}` : 'Episodes'}
+              {totalEpisodes ? ` / ${totalEpisodes}` : ''} · See All Episodes
+            </Text>
+            <Ionicons name="chevron-forward" size={13} color={colors.accent} />
+          </Pressable>
+        )}
+
         <View style={styles.authorRow}>
           <View style={styles.avatar}>
             <Ionicons name="videocam" size={14} color="#ffffff" />
@@ -139,7 +179,7 @@ export function ReelOverlay({
         </View>
 
         <Text style={styles.titleText} numberOfLines={2}>
-          {item.title}
+          {displayTitle || item.title}
         </Text>
 
         <View style={styles.audioRow}>
@@ -217,6 +257,42 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 2,
     textTransform: 'uppercase',
+  },
+  nextEpBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.4)',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginTop: 2,
+  },
+  nextEpBtnText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  episodesPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(22,22,34,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(155,92,255,0.5)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    gap: 6,
+    marginBottom: 4,
+  },
+  episodesPillText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   bottomInfo: {
     position: 'absolute',
