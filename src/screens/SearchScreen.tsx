@@ -389,7 +389,6 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
           onChangeText={setQuery}
           placeholder={vibeMode ? 'Describe a mood, plot, or vibe…' : text.placeholder}
           placeholderTextColor={colors.muted}
-          autoFocus
           autoCorrect={false}
           returnKeyType="search"
           style={styles.input}
