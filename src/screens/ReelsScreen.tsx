@@ -38,7 +38,7 @@ const LANGUAGES: { id: ReelLanguage; label: string }[] = [
 ];
 
 const VIEWABILITY_CONFIG = {
-  itemVisiblePercentThreshold: 65,
+  itemVisiblePercentThreshold: 60,
 };
 
 const useRemote: typeof useTVEventHandler = useTVEventHandler ?? (() => {});
@@ -158,7 +158,7 @@ export function ReelsScreen({ initialIndex = 0, history = [], onPlayFullMovie, o
               <ReelItem
                 item={item}
                 isActive={index === activeIndex}
-                shouldLoad={Math.abs(index - activeIndex) <= 1}
+                shouldLoad={index === activeIndex}
                 muted={muted}
                 onToggleMute={() => setMuted((m) => !m)}
                 onPlayFullMovie={
@@ -175,6 +175,11 @@ export function ReelsScreen({ initialIndex = 0, history = [], onPlayFullMovie, o
           snapToInterval={windowHeight}
           snapToAlignment="start"
           decelerationRate="fast"
+          windowSize={3}
+          removeClippedSubviews
+          maxToRenderPerBatch={2}
+          initialNumToRender={1}
+          updateCellsBatchingPeriod={40}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={VIEWABILITY_CONFIG}
           initialScrollIndex={initialIndex > 0 && initialIndex < reels.length ? initialIndex : undefined}

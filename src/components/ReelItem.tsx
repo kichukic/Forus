@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useEvent } from 'expo';
 import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { WebView } from 'react-native-webview';
@@ -136,6 +137,35 @@ export function ReelItem({
   const playerKey = activeSource.type === 'youtube' ? activeSource.videoId : activeSource.url;
   const isDrama = item.category === 'drama' || item.relatedPlayable?.kind === 'moviebox' || episodes.length > 0;
 
+  // Zero-flicker poster overlay: smoothly dissolves once video playback begins
+  const posterOpacity = useState(() => new Animated.Value(1))[0];
+
+  useEffect(() => {
+    if (!shouldLoad) {
+      posterOpacity.setValue(1);
+      return;
+    }
+
+    // Safety timeout: ensure poster dissolves after 2.8s even if playing event was delayed
+    const timer = setTimeout(() => {
+      Animated.timing(posterOpacity, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }, 2800);
+
+    return () => clearTimeout(timer);
+  }, [shouldLoad, playerKey, posterOpacity]);
+
+  const handleVideoPlaying = useCallback(() => {
+    Animated.timing(posterOpacity, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, [posterOpacity]);
+
   return (
     <View style={styles.container}>
       {/* Background Poster / Thumbnail while loading or when inactive */}
@@ -145,7 +175,7 @@ export function ReelItem({
         contentFit="cover"
       />
 
-      {/* Media Player */}
+      {/* Media Player - rendered strictly when active to eliminate Chromium multi-process contention */}
       {shouldLoad && (
         <View style={StyleSheet.absoluteFill}>
           {activeSource.type === 'youtube' ? (
@@ -154,6 +184,7 @@ export function ReelItem({
               videoId={activeSource.videoId}
               playing={isActive && !paused}
               muted={muted}
+              onPlaying={handleVideoPlaying}
             />
           ) : (
             <DirectPlayer
@@ -161,10 +192,28 @@ export function ReelItem({
               url={activeSource.url}
               playing={isActive && !paused}
               muted={muted}
+              onPlaying={handleVideoPlaying}
             />
           )}
         </View>
       )}
+
+      {/* Seamless Poster Overlay: Dissolves into the video with 0 black flash or loading spinner */}
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            opacity: posterOpacity,
+          },
+        ]}
+        pointerEvents="none"
+      >
+        <Image
+          source={{ uri: item.thumbnailUrl }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
+      </Animated.View>
 
       {/* Tap Gesture Catcher (covers full screen behind overlay buttons) */}
       <Pressable style={StyleSheet.absoluteFill} onPress={handlePress} />
@@ -235,16 +284,26 @@ function DirectPlayer({
   url,
   playing,
   muted,
+  onPlaying,
 }: {
   url: string;
   playing: boolean;
   muted: boolean;
+  onPlaying?: () => void;
 }) {
   const player = useVideoPlayer(url, (p) => {
     p.loop = true;
     p.muted = muted;
     if (playing) p.play();
   });
+
+  const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
+
+  useEffect(() => {
+    if (isPlaying) {
+      onPlaying?.();
+    }
+  }, [isPlaying, onPlaying]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -273,10 +332,12 @@ function YouTubePlayer({
   videoId,
   playing,
   muted,
+  onPlaying,
 }: {
   videoId: string;
   playing: boolean;
   muted: boolean;
+  onPlaying?: () => void;
 }) {
   const webViewRef = useRef<WebView>(null);
 
@@ -298,16 +359,24 @@ function YouTubePlayer({
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #000000;
+    overflow: hidden;
+  }
   .video-container {
     position: absolute;
     top: 50%;
     left: 50%;
     width: 100vw;
-    height: 177.77vw;
+    height: 100vh;
     min-height: 100vh;
-    min-width: 56.25vh;
-    transform: translate(-50%, -50%);
+    min-width: 100vw;
+    /* Full-bleed edge crop: 1.22x scale pushes YouTube top header and bottom watermark outside viewport */
+    transform: translate(-50%, -50%) scale(1.22);
+    transform-origin: center center;
+    overflow: hidden;
   }
   iframe {
     width: 100%;
@@ -320,12 +389,19 @@ function YouTubePlayer({
 <div class="video-container">
   <iframe
     id="p"
-    src="https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&playsinline=1&controls=0&rel=0&iv_load_policy=3&fs=0&disablekb=1&cc_load_policy=0&origin=${encodeURIComponent(ORIGIN)}"
+    src="https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&playsinline=1&controls=0&rel=0&iv_load_policy=3&fs=0&disablekb=1&cc_load_policy=0&modestbranding=1&showinfo=0&autohide=1&origin=${encodeURIComponent(ORIGIN)}"
     allow="autoplay; encrypted-media"
   ></iframe>
 </div>
 <script>
   var player;
+  function sendMsg(type) {
+    try {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: type }));
+      }
+    } catch (e) {}
+  }
   function onYouTubeIframeAPIReady() {
     player = new YT.Player('p', {
       events: {
@@ -334,7 +410,9 @@ function YouTubePlayer({
           if (${playing ? 'true' : 'false'}) e.target.playVideo();
         },
         onStateChange: function(e) {
-          if (e.data === 0) {
+          if (e.data === 1) {
+            sendMsg('playing');
+          } else if (e.data === 0) {
             e.target.seekTo(0);
             e.target.playVideo();
           }
@@ -366,6 +444,14 @@ function YouTubePlayer({
       domStorageEnabled
       scrollEnabled={false}
       pointerEvents="none"
+      onMessage={(event) => {
+        try {
+          const data = JSON.parse(event.nativeEvent.data);
+          if (data?.type === 'playing') {
+            onPlaying?.();
+          }
+        } catch {}
+      }}
     />
   );
 }
