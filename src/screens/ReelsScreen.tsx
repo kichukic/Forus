@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   useTVEventHandler,
@@ -11,17 +12,29 @@ import {
   type ViewToken,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchReels, type ReelCategory, type ReelItem as ReelItemType } from '../api/reels';
+import {
+  fetchReels,
+  type ReelCategory,
+  type ReelItem as ReelItemType,
+  type ReelLanguage,
+} from '../api/reels';
 import { ReelItem } from '../components/ReelItem';
 import type { Playable } from '../types';
 import { colors, isTV } from '../theme';
 
 const CATEGORIES: { id: ReelCategory; label: string }[] = [
   { id: 'all', label: 'All' },
+  { id: 'drama', label: 'Short Drama' },
   { id: 'cinema', label: 'Cinema' },
   { id: 'comedy', label: 'Comedy' },
   { id: 'trailer', label: 'Trailers' },
   { id: 'scenes', label: 'Scenes' },
+];
+
+const LANGUAGES: { id: ReelLanguage; label: string }[] = [
+  { id: 'auto', label: 'For You' },
+  { id: 'malayalam', label: 'Malayalam' },
+  { id: 'hindi', label: 'Hindi' },
 ];
 
 const VIEWABILITY_CONFIG = {
@@ -32,15 +45,17 @@ const useRemote: typeof useTVEventHandler = useTVEventHandler ?? (() => {});
 
 type Props = {
   initialIndex?: number;
+  history?: Playable[];
   onPlayFullMovie?: (item: Playable) => void;
   onClose?: () => void;
 };
 
-export function ReelsScreen({ initialIndex = 0, onPlayFullMovie, onClose }: Props) {
+export function ReelsScreen({ initialIndex = 0, history = [], onPlayFullMovie, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
 
   const [category, setCategory] = useState<ReelCategory>('all');
+  const [language, setLanguage] = useState<ReelLanguage>('auto');
   const [reels, setReels] = useState<ReelItemType[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
@@ -48,11 +63,11 @@ export function ReelsScreen({ initialIndex = 0, onPlayFullMovie, onClose }: Prop
 
   const listRef = useRef<FlatList<ReelItemType>>(null);
 
-  // Load reels for the active category
+  // Load reels for the active category, language and user watch history profile
   useEffect(() => {
     let alive = true;
 
-    fetchReels(category)
+    fetchReels(category, language, history)
       .then((items) => {
         if (!alive) return;
         setReels(items);
@@ -68,10 +83,15 @@ export function ReelsScreen({ initialIndex = 0, onPlayFullMovie, onClose }: Prop
     return () => {
       alive = false;
     };
-  }, [category]);
+  }, [category, language, history]);
 
   const selectCategory = (newCat: ReelCategory) => {
     setCategory(newCat);
+    setLoading(true);
+  };
+
+  const selectLanguage = (newLang: ReelLanguage) => {
+    setLanguage(newLang);
     setLoading(true);
   };
 
@@ -109,7 +129,7 @@ export function ReelsScreen({ initialIndex = 0, onPlayFullMovie, onClose }: Prop
       {loading ? (
         <View style={styles.centerLoading}>
           <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={styles.loadingText}>Loading reels...</Text>
+          <Text style={styles.loadingText}>Curating your reels...</Text>
         </View>
       ) : reels.length === 0 ? (
         <View style={styles.centerLoading}>
@@ -119,7 +139,7 @@ export function ReelsScreen({ initialIndex = 0, onPlayFullMovie, onClose }: Prop
             style={styles.retryBtn}
             onPress={() => {
               setLoading(true);
-              fetchReels(category).then((it) => {
+              fetchReels(category, language, history).then((it) => {
                 setReels(it);
                 setLoading(false);
               });
@@ -166,24 +186,50 @@ export function ReelsScreen({ initialIndex = 0, onPlayFullMovie, onClose }: Prop
         />
       )}
 
-      {/* Floating Category Pills at Top */}
-      {!loading && reels.length > 0 && (
-        <View style={[styles.categoryBar, { top: insets.top + (onClose ? 48 : 10) }]}>
-          {CATEGORIES.map((cat) => {
-            const active = cat.id === category;
-            return (
-              <Pressable
-                key={cat.id}
-                onPress={() => selectCategory(cat.id)}
-                style={[styles.catPill, active && styles.catPillActive]}
-                hitSlop={6}
-              >
-                <Text style={[styles.catText, active && styles.catTextActive]}>
-                  {cat.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+      {/* Floating Top Controls: Language Switcher and Category Pills */}
+      {!loading && (
+        <View style={[styles.topControls, { top: insets.top + (onClose ? 44 : 8) }]}>
+          {/* Row 1: Language Switcher */}
+          <View style={styles.langBar}>
+            {LANGUAGES.map((lang) => {
+              const active = lang.id === language;
+              return (
+                <Pressable
+                  key={lang.id}
+                  onPress={() => selectLanguage(lang.id)}
+                  style={[styles.langPill, active && styles.langPillActive]}
+                  hitSlop={6}
+                >
+                  <Text style={[styles.langText, active && styles.langTextActive]}>
+                    {lang.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Row 2: Category Pills */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryScroll}
+          >
+            {CATEGORIES.map((cat) => {
+              const active = cat.id === category;
+              return (
+                <Pressable
+                  key={cat.id}
+                  onPress={() => selectCategory(cat.id)}
+                  style={[styles.catPill, active && styles.catPillActive]}
+                  hitSlop={6}
+                >
+                  <Text style={[styles.catText, active && styles.catTextActive]}>
+                    {cat.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         </View>
       )}
     </View>
@@ -229,15 +275,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  categoryBar: {
+  topControls: {
     position: 'absolute',
     left: 0,
     right: 0,
+    gap: 8,
+    zIndex: 20,
+  },
+  langBar: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 6,
+  },
+  langPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  langPillActive: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderColor: '#ffffff',
+  },
+  langText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  langTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  categoryScroll: {
+    paddingHorizontal: 16,
     gap: 8,
-    zIndex: 20,
+    alignItems: 'center',
   },
   catPill: {
     paddingHorizontal: 12,

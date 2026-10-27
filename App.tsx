@@ -304,6 +304,7 @@ export default function App() {
             <ScreenReveal style={layer('reels')}>
               <ReelsScreen
                 initialIndex={reelsInitialIndex}
+                history={history}
                 onPlayFullMovie={play}
               />
             </ScreenReveal>
