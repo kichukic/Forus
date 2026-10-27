@@ -34,6 +34,10 @@ export async function hasVoiceFile(messageId: string): Promise<boolean> {
   return (await FileSystem.getInfoAsync(voiceFile(messageId))).exists;
 }
 
+export async function removeLocalFile(uri: string): Promise<void> {
+  await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+}
+
 function authHeaders(): Record<string, string> {
   const token = sessionToken();
   return token ? { Authorization: `Bearer ${token}` } : {};

@@ -115,37 +115,42 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
       {stillFriends ? (
         <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           {voice.recording ? (
-            <RecordingBar elapsedMs={voice.elapsedMs} />
-          ) : (
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder="Message"
-              placeholderTextColor={colors.faint}
-              multiline
-              maxLength={4000}
-              style={styles.input}
+            <RecordingBar
+              elapsedMs={voice.elapsedMs}
+              onCancel={() => voice.finish(false)}
+              onSend={() => voice.finish(true)}
             />
-          )}
-          {/* With nothing typed, the button records a voice message instead. */}
-          {draft.trim() ? (
-            <Pressable
-              onPress={submit}
-              disabled={sending}
-              accessibilityLabel="Send"
-              style={({ pressed }) => [styles.send, pressed && styles.sendIdle]}
-            >
-              <Ionicons name="send" size={18} color="#fff" />
-            </Pressable>
           ) : (
-            <MicButton
-              recording={voice.recording}
-              onStart={() => {
-                voicePlayer.stop();
-                voice.start();
-              }}
-              onFinish={() => voice.finish(true)}
-            />
+            <>
+              <TextInput
+                value={draft}
+                onChangeText={setDraft}
+                placeholder="Message"
+                placeholderTextColor={colors.faint}
+                multiline
+                maxLength={4000}
+                style={styles.input}
+              />
+              {draft.trim() ? (
+                <Pressable
+                  onPress={submit}
+                  disabled={sending}
+                  accessibilityLabel="Send"
+                  style={({ pressed }) => [styles.send, pressed && styles.sendIdle]}
+                >
+                  <Ionicons name="send" size={18} color="#fff" />
+                </Pressable>
+              ) : (
+                <MicButton
+                  recording={voice.recording}
+                  onPress={() => {
+                    voicePlayer.stop();
+                    voice.start();
+                  }}
+                  onSwipeCancel={() => voice.finish(false)}
+                />
+              )}
+            </>
           )}
         </View>
       ) : (
