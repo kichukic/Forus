@@ -1,7 +1,8 @@
 // Voice messages in a conversation: holding the mic records (letting go
 // sends, a very short hold is dropped), and a voice bubble plays the copy kept
 // on this phone, collecting it from the server first if it's a friend's.
-import { useEffect, useRef, useState } from 'react';
+// Consecutive voice messages auto-advance seamlessly like WhatsApp.
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   createAudioPlayer,
@@ -21,6 +22,205 @@ import { MAX_VOICE_MS, VOICE_RECORDING, fetchVoice, formatDuration, hasVoiceFile
 
 // Shorter than this counts as a slip of the finger, not a message.
 const MIN_VOICE_MS = 700;
+
+export type VoicePlaybackController = {
+  activeVoiceId: string | null;
+  playing: boolean;
+  position: number;
+  duration: number;
+  toggle: (id: string) => void;
+  stop: () => void;
+};
+
+/** Coordinates conversation voice playback, stopping when finished and auto-advancing like WhatsApp. */
+export function useVoicePlayback(
+  messages: ChatMessage[],
+  onAutoAdvance?: (nextId: string) => void,
+): VoicePlaybackController {
+  const [activeVoice, setActiveVoice] = useState<{
+    id: string;
+    playing: boolean;
+    position: number;
+    duration: number;
+  } | null>(null);
+
+  const playerRef = useRef<AudioPlayer | null>(null);
+  const activeIdRef = useRef<string | null>(null);
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  const finishingRef = useRef(false);
+  const playVoiceRef = useRef<((id: string, isAutoAdvance?: boolean) => Promise<void>) | null>(null);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const stop = useCallback(() => {
+    activeIdRef.current = null;
+    finishingRef.current = false;
+    if (playerRef.current) {
+      try {
+        playerRef.current.pause();
+        playerRef.current.release();
+      } catch {}
+      playerRef.current = null;
+    }
+    setActiveVoice(null);
+  }, []);
+
+  const getNextVoiceId = useCallback((currentId: string): string | null => {
+    const list = messagesRef.current;
+    const currentIdx = list.findIndex((m) => m.id === currentId);
+    if (currentIdx <= 0) return null;
+    // FlatList is inverted: index 0 is newest, higher indexes are older.
+    // Chronological order flows from older to newer (towards index 0 / down the screen).
+    for (let i = currentIdx - 1; i >= 0; i--) {
+      if (list[i].voice) {
+        return list[i].id;
+      }
+    }
+    return null;
+  }, []);
+
+  const playVoice = useCallback(
+    async (id: string, isAutoAdvance = false) => {
+      const exists = await hasVoiceFile(id);
+      if (!exists) {
+        const ok = await fetchVoice(id);
+        if (!ok) {
+          if (isAutoAdvance) {
+            const next = getNextVoiceId(id);
+            if (next) void playVoiceRef.current?.(next, true);
+          }
+          return;
+        }
+      }
+
+      if (playerRef.current) {
+        try {
+          playerRef.current.pause();
+          playerRef.current.release();
+        } catch {}
+        playerRef.current = null;
+      }
+
+      activeIdRef.current = id;
+      finishingRef.current = false;
+      const targetMsg = messagesRef.current.find((m) => m.id === id);
+      const initialDuration = targetMsg?.voice?.durationMs ?? 0;
+
+      setActiveVoice({
+        id,
+        playing: true,
+        position: 0,
+        duration: initialDuration,
+      });
+
+      if (isAutoAdvance && onAutoAdvance) {
+        onAutoAdvance(id);
+      }
+
+      try {
+        await setAudioModeAsync({ playsInSilentMode: true });
+        const p = createAudioPlayer({ uri: voiceFile(id) }, { updateInterval: 100 });
+        p.loop = false;
+        playerRef.current = p;
+
+        p.addListener('playbackStatusUpdate', (s) => {
+          if (activeIdRef.current !== id) return;
+
+          const isDone = s.didJustFinish || (s.duration > 0 && s.currentTime >= s.duration - 0.05);
+          if (isDone) {
+            if (finishingRef.current) return;
+            finishingRef.current = true;
+
+            // Pause immediately and seek to start so it never loops
+            try {
+              p.pause();
+              p.seekTo(0);
+            } catch {}
+
+            setActiveVoice(null);
+            activeIdRef.current = null;
+
+            // WhatsApp-style auto-playback of the next voice message in sequence
+            const next = getNextVoiceId(id);
+            if (next) {
+              void playVoiceRef.current?.(next, true);
+            }
+            return;
+          }
+
+          setActiveVoice({
+            id,
+            playing: s.playing,
+            position: Math.round((s.currentTime ?? 0) * 1000),
+            duration: Math.round((s.duration ?? 0) * 1000) || initialDuration,
+          });
+        });
+
+        p.play();
+      } catch {
+        stop();
+      }
+    },
+    [getNextVoiceId, onAutoAdvance, stop],
+  );
+
+  useEffect(() => {
+    playVoiceRef.current = playVoice;
+  });
+
+  const pauseVoice = useCallback(() => {
+    if (playerRef.current) {
+      try {
+        playerRef.current.pause();
+      } catch {}
+    }
+    setActiveVoice((prev) => (prev ? { ...prev, playing: false } : null));
+  }, []);
+
+  const resumeVoice = useCallback(() => {
+    if (playerRef.current && activeIdRef.current) {
+      setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+      try {
+        playerRef.current.play();
+      } catch {}
+      setActiveVoice((prev) => (prev ? { ...prev, playing: true } : null));
+    } else if (activeIdRef.current) {
+      void playVoiceRef.current?.(activeIdRef.current);
+    }
+  }, []);
+
+  const toggle = useCallback(
+    (id: string) => {
+      if (activeIdRef.current === id) {
+        if (activeVoice?.playing) {
+          pauseVoice();
+        } else {
+          resumeVoice();
+        }
+      } else {
+        void playVoiceRef.current?.(id);
+      }
+    },
+    [activeVoice?.playing, pauseVoice, resumeVoice],
+  );
+
+  useEffect(() => {
+    return () => {
+      stop();
+    };
+  }, [stop]);
+
+  return {
+    activeVoiceId: activeVoice?.id ?? null,
+    playing: activeVoice?.playing ?? false,
+    position: activeVoice?.position ?? 0,
+    duration: activeVoice?.duration ?? 0,
+    toggle,
+    stop,
+  };
+}
 
 /** Recording for one conversation: start on press, finish (send) on release. */
 export function useVoiceRecorder(userId: string) {
@@ -104,11 +304,24 @@ export function MicButton({ recording, onStart, onFinish }: { recording: boolean
 type Availability = 'checking' | 'downloading' | 'ready' | 'missing';
 
 /** A voice message: play/pause, how far along, and the length. */
-export function VoiceBubble({ message, mine, time }: { message: ChatMessage; mine: boolean; time: string }) {
+export function VoiceBubble({
+  message,
+  mine,
+  time,
+  active = false,
+  playing = false,
+  position = 0,
+  onToggle,
+}: {
+  message: ChatMessage;
+  mine: boolean;
+  time: string;
+  active?: boolean;
+  playing?: boolean;
+  position?: number;
+  onToggle?: () => void;
+}) {
   const [availability, setAvailability] = useState<Availability>('checking');
-  const [playing, setPlaying] = useState(false);
-  const [position, setPosition] = useState(0);
-  const player = useRef<AudioPlayer | null>(null);
   const duration = message.voice?.durationMs ?? 0;
 
   useEffect(() => {
@@ -125,45 +338,21 @@ export function VoiceBubble({ message, mine, time }: { message: ChatMessage; min
     };
   }, [message.id, mine]);
 
-  // The player is made on the first play and let go with the bubble.
-  useEffect(
-    () => () => {
-      player.current?.release();
-      player.current = null;
-    },
-    [],
-  );
-
   const toggle = () => {
     if (availability !== 'ready') return;
-    if (!player.current) {
-      const p = createAudioPlayer({ uri: voiceFile(message.id) }, { updateInterval: 200 });
-      p.addListener('playbackStatusUpdate', (s) => {
-        setPlaying(s.playing);
-        setPosition(s.currentTime * 1000);
-        if (s.didJustFinish) {
-          p.seekTo(0);
-          setPosition(0);
-        }
-      });
-      player.current = p;
-    }
-    const p = player.current;
-    if (p.playing) p.pause();
-    else {
-      setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
-      p.play();
-    }
+    onToggle?.();
   };
 
-  const progress = duration > 0 ? Math.min(1, position / duration) : 0;
+  const currentPos = active ? position : 0;
+  const isPlaying = active && playing;
+  const progress = duration > 0 ? Math.min(1, currentPos / duration) : 0;
   const unavailable = availability === 'missing';
   return (
     <View style={[styles.voice, mine ? styles.voiceMine : styles.voiceTheirs]}>
       <Pressable
         onPress={toggle}
         disabled={availability !== 'ready'}
-        accessibilityLabel={playing ? 'Pause' : 'Play voice message'}
+        accessibilityLabel={isPlaying ? 'Pause' : 'Play voice message'}
         style={[styles.play, unavailable && styles.playOff]}
       >
         <Ionicons
@@ -171,14 +360,14 @@ export function VoiceBubble({ message, mine, time }: { message: ChatMessage; min
             unavailable
               ? 'mic-off'
               : availability === 'ready'
-                ? playing
+                ? isPlaying
                   ? 'pause'
                   : 'play'
                 : 'cloud-download-outline'
           }
           size={18}
           color="#fff"
-          style={availability === 'ready' && !playing ? styles.playIcon : undefined}
+          style={availability === 'ready' && !isPlaying ? styles.playIcon : undefined}
         />
       </Pressable>
       <View style={styles.voiceBody}>
@@ -190,7 +379,9 @@ export function VoiceBubble({ message, mine, time }: { message: ChatMessage; min
           </View>
         )}
         <View style={styles.voiceMeta}>
-          <Text style={styles.voiceTime}>{formatDuration(playing || position > 0 ? position : duration)}</Text>
+          <Text style={styles.voiceTime}>
+            {formatDuration(isPlaying || currentPos > 0 ? currentPos : duration)}
+          </Text>
           <Text style={styles.voiceTime}>{time}</Text>
         </View>
       </View>

@@ -1,7 +1,7 @@
 // One conversation: messages newest at the bottom, a film shared from ForUs
 // as a card that plays when tapped, "Seen" under the last thing you sent once
 // it's read, and the box to type in.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +14,7 @@ import { GUTTER, colors } from '../theme';
 import type { ChatMessage, ChatUser, SharedTitle } from './api';
 import { closeConversation, loadOlder, openConversation, send, useChat } from './store';
 import { Avatar, Header, chatStyles } from './ui';
-import { MicButton, RecordingBar, VoiceBubble, useVoiceRecorder } from './VoiceNote';
+import { MicButton, RecordingBar, VoiceBubble, useVoicePlayback, useVoiceRecorder } from './VoiceNote';
 
 type Props = {
   user: ChatUser;
@@ -51,7 +51,17 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
     }
   };
 
+  const listRef = useRef<FlatList<ChatMessage>>(null);
   const messages = thread?.messages ?? [];
+  const voicePlayer = useVoicePlayback(messages, (nextId) => {
+    const idx = messages.findIndex((m) => m.id === nextId);
+    if (idx >= 0) {
+      try {
+        listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.3 });
+      } catch {}
+    }
+  });
+
   // "Seen" goes under the newest message you sent, once it's been read.
   const lastMine = messages.find((m) => m.sender === me?.id);
 
@@ -64,6 +74,7 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
         right={<Avatar name={user.name} id={user.id} size={38} />}
       />
       <FlatList
+        ref={listRef}
         // Newest first, drawn upside down, so the list starts at the bottom and
         // older pages load as it's scrolled up.
         inverted
@@ -73,6 +84,7 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
         contentContainerStyle={styles.listContent}
         onEndReached={() => loadOlder(user.id)}
         onEndReachedThreshold={0.4}
+        onScrollToIndexFailed={() => {}}
         ListFooterComponent={thread?.loading ? <Loader style={styles.loader} /> : null}
         ListEmptyComponent={
           thread && !thread.loading ? (
@@ -94,6 +106,8 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
               grouped={older?.sender === item.sender}
               seen={item === lastMine && !!item.readAt}
               onPlay={onPlay}
+              activeVoice={voicePlayer.activeVoiceId === item.id ? voicePlayer : undefined}
+              onToggleVoice={() => voicePlayer.toggle(item.id)}
             />
           );
         }}
@@ -124,7 +138,14 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
               <Ionicons name="send" size={18} color="#fff" />
             </Pressable>
           ) : (
-            <MicButton recording={voice.recording} onStart={voice.start} onFinish={() => voice.finish(true)} />
+            <MicButton
+              recording={voice.recording}
+              onStart={() => {
+                voicePlayer.stop();
+                voice.start();
+              }}
+              onFinish={() => voice.finish(true)}
+            />
           )}
         </View>
       ) : (
@@ -142,19 +163,31 @@ function Bubble({
   grouped,
   seen,
   onPlay,
+  activeVoice,
+  onToggleVoice,
 }: {
   message: ChatMessage;
   mine: boolean;
   grouped: boolean;
   seen: boolean;
   onPlay: (title: SharedTitle) => void;
+  activeVoice?: { playing: boolean; position: number; duration: number };
+  onToggleVoice?: () => void;
 }) {
   const time = new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const title = message.title;
   return (
     <View style={[styles.bubbleRow, mine ? styles.right : styles.left, !grouped && styles.gap]}>
       {message.voice ? (
-        <VoiceBubble message={message} mine={mine} time={time} />
+        <VoiceBubble
+          message={message}
+          mine={mine}
+          time={time}
+          active={!!activeVoice}
+          playing={activeVoice?.playing}
+          position={activeVoice?.position}
+          onToggle={onToggleVoice}
+        />
       ) : title ? (
         <Pressable
           onPress={() => onPlay(title)}
