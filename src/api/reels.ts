@@ -41,6 +41,40 @@ const REEL_CHANNELS: ChannelSource[] = [
   { name: 'Kaumudy', channelId: 'UCSVALYUGVruJ4I2RjhiudSQ', category: 'scenes' },
 ];
 
+// Strict adult/NSFW content filter to block 18+, suggestive, or nudity content
+const ADULT_PATTERNS = [
+  /\b18\+\b/i,
+  /\badult\b/i,
+  /\bnsfw\b/i,
+  /\bnude\b/i,
+  /\bnudity\b/i,
+  /\bsexy\b/i,
+  /\bhot scene\b/i,
+  /\bbed scene\b/i,
+  /\bintimate scene\b/i,
+  /\bliplock\b/i,
+  /\bkissing scene\b/i,
+  /\berotic\b/i,
+  /\bcleavage\b/i,
+  /\bbikini\b/i,
+  /\bnavel\b/i,
+  /\buncensored\b/i,
+  /\bexplicit\b/i,
+  /\bbold scene\b/i,
+  /\bromance scene\b/i,
+  /\bhot romance\b/i,
+  /\bitem song hot\b/i,
+  /\bglamour\b/i,
+  /\bseductive\b/i,
+  /\bxxx\b/i,
+  /\bporn\b/i,
+  /\bweb series hot\b/i,
+];
+
+export function isFamilySafe(text: string): boolean {
+  return !ADULT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 function decodeHtml(text: string): string {
   return text
     .replace(/&quot;/g, '"')
@@ -65,6 +99,7 @@ function parseShortsFeed(xml: string, channel: ChannelSource): ReelItem[] {
     if (!videoId || rawTitle === undefined) continue;
 
     const title = stripEmoji(decodeHtml(rawTitle)).trim();
+    if (!isFamilySafe(title)) continue;
     // Deterministic like count generator based on videoId characters for consistent UI
     let hash = 0;
     for (let i = 0; i < videoId.length; i++) hash = (hash * 31 + videoId.charCodeAt(i)) & 0xffffffff;
@@ -136,6 +171,7 @@ export async function fetchReels(category: ReelCategory = 'all'): Promise<ReelIt
   const seen = new Set<string>();
   const unique: ReelItem[] = [];
   for (const item of merged) {
+    if (!isFamilySafe(item.title)) continue;
     if (!seen.has(item.id)) {
       seen.add(item.id);
       unique.push(item);
