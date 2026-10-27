@@ -135,9 +135,9 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
         // Subtle elastic drag translation for visual responsiveness
         dragX.setValue(Math.min(16, Math.max(-16, gesture.dx * 0.2)));
 
-        // Swiping right-to-left: gesture.dx < 0 -> moves forward (+1, +2...)
-        // Swiping left-to-right: gesture.dx > 0 -> moves backward (-1, -2...)
-        const stepOffset = Math.round(-gesture.dx / STEP_DISTANCE);
+        // Swiping left (gesture.dx < 0): moves to the left tab (-1, -2...)
+        // Swiping right (gesture.dx > 0): moves to the right tab (+1, +2...)
+        const stepOffset = Math.round(gesture.dx / STEP_DISTANCE);
         const targetIdx = Math.max(0, Math.min(curItems.length - 1, startIdx + stepOffset));
 
         if (targetIdx !== lastSwipedIndexRef.current) {
@@ -155,16 +155,16 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
 
         // If continuous drag hasn't stepped yet, check for a quick flick/swipe
         if (!hasSwitchedRef.current) {
-          // Swiped right-to-left: advance to next tab
-          if (gesture.dx < -25 || gesture.vx < -0.3) {
+          // Swiped right: move to right tab
+          if (gesture.dx > 25 || gesture.vx > 0.3) {
             const nextIdx = Math.min(curItems.length - 1, startIdx + 1);
             if (nextIdx !== startIdx) {
               LayoutAnimation.configureNext(SWITCH);
               curOnSelect(curItems[nextIdx].id);
             }
           }
-          // Swiped left-to-right: move back to previous tab
-          else if (gesture.dx > 25 || gesture.vx > 0.3) {
+          // Swiped left: move to left tab
+          else if (gesture.dx < -25 || gesture.vx < -0.3) {
             const prevIdx = Math.max(0, startIdx - 1);
             if (prevIdx !== startIdx) {
               LayoutAnimation.configureNext(SWITCH);
