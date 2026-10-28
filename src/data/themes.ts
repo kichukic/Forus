@@ -24,7 +24,6 @@ export const THEMES: Theme[] = [
   { title: 'Thrillers', query: 'malayalam thriller full movie', kind: 'movie' },
   { title: 'Jayaram family movies', query: 'Jayaram malayalam full movie', kind: 'movie' },
   { title: 'Aliyans', query: 'Aliyans latest episode', kind: 'show' },
-  { title: 'Prithviraj movies', query: 'Prithviraj malayalam full movie', kind: 'movie' },
   { title: 'Family movies', query: 'malayalam family full movie', kind: 'movie' },
   { title: 'Oru Chiri Iru Chiri Bumper Chiri', query: 'Oru Chiri Iru Chiri Bumper Chiri', kind: 'show' },
   { title: 'Action movies', query: 'malayalam action full movie', kind: 'movie' },

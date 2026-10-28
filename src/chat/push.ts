@@ -19,7 +19,6 @@ export async function setupMessageNotifications() {
       importance: Notifications.AndroidImportance.HIGH,
       lightColor: colors.accent,
       vibrationPattern: [0, 200, 120, 200],
-      sound: 'default',
     });
     const permission = await Notifications.getPermissionsAsync();
     if (!permission.granted && permission.canAskAgain) {

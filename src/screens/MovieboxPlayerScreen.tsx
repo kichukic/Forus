@@ -23,6 +23,7 @@ import { AudioTrackPicker } from '../components/AudioTrackPicker';
 import { useAudioTracks, audioTrackLabel } from '../hooks/useAudioTracks';
 import { useTraktScrobble } from '../hooks/useTraktScrobble';
 import { showToast } from '../data/toasts';
+import { loadProgress, saveProgress } from '../data/movieboxProgress';
 import { useRemoteSeek } from '../hooks/useRemoteSeek';
 import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import type { ShellControls } from '../components/PlayerShell';
@@ -61,6 +62,10 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const [loading, setLoading] = useState(true);
   // How many times a stale link has been fetched again.
   const attempts = useRef(0);
+  // Whether the saved place has already been put back.
+  const resumed = useRef(false);
+  // The latest time, kept for saving on the way out.
+  const latestTime = useRef(0);
   // Stops the next episode from being started twice.
   const playedNext = useRef(false);
   // The subtitles the file has, and the one being shown.
@@ -69,6 +74,9 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   // The words of the subtitle being shown, kept with the language they are
   // for, so the right ones are shown while a new one is on its way.
   const [loaded, setLoaded] = useState<{ id: string; list: SubtitleCue[] } | null>(null);
+  useEffect(() => {
+    latestTime.current = currentTime ?? 0;
+  }, [currentTime]);
   const audio = useAudioTracks(player);
   const [audioPickerOpen, setAudioPickerOpen] = useState(false);
   useTraktScrobble(item.title, currentTime ?? 0, player.duration ?? 0, player.playing);
@@ -107,6 +115,15 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
       const stream = await directStream(item.subjectId, best);
       await player.replaceAsync({ uri: stream.url });
       player.play();
+      // Put the film back where it was left, once.
+      if (!resumed.current) {
+        resumed.current = true;
+        loadProgress(item.subjectId, item.season, item.episode).then((saved) => {
+          if (saved && saved.position > 5 && player.duration > 0 && saved.position < player.duration * 0.95) {
+            player.currentTime = saved.position;
+          }
+        });
+      }
       // The subtitles belong to the file, so they are asked for now.
       captions(item.subjectId, best.resourceId)
         .then((list) => {
@@ -122,6 +139,19 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
       setLoading(false);
     }
   }, [item.episode, item.season, item.subjectId, player]);
+
+  useEffect(() => {
+    // Remember where this film or episode was left.
+    const timer = setInterval(() => {
+      const t = latestTime.current;
+      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, player.duration ?? 0);
+    }, 10000);
+    return () => {
+      clearInterval(timer);
+      const t = latestTime.current;
+      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, player.duration ?? 0);
+    };
+  }, [item.subjectId, item.season, item.episode, player]);
 
   useEffect(() => {
     playedNext.current = false;

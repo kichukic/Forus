@@ -126,6 +126,11 @@ type RawSubject = {
   vipInfo?: { requireMemberType?: number; previewSeconds?: number };
   staffList?: { name?: string; character?: string }[];
   dubs?: { subjectId?: string; lanName?: string; lanCode?: string; original?: boolean }[];
+  resourceDetectors?: {
+    resourceId?: string;
+    resolutionList?: RawEpisode[];
+    downloadUrl?: string;
+  }[];
 };
 
 // Whether the service has marked this film as one for adults.
@@ -465,14 +470,14 @@ export async function searchSubjects(keyword: string, page = 1): Promise<Moviebo
 }
 
 /** Everything known about one film or series. */
-export async function subjectDetails(id: string): Promise<{ subject: MovieboxSubject; cast: MovieboxCast }> {
+export async function subjectDetails(id: string): Promise<{ subject: MovieboxSubject; cast: MovieboxCast; resourceDetectors: RawSubject['resourceDetectors'] }> {
   const data = await request<RawSubject>('GET', `${BFF}/subject-api/get`, [['subjectId', id]]);
   const subject = toSubject(data ?? {});
   if (!subject) throw new Error('MovieBox has nothing for this title.');
   const cast: MovieboxCast = (data?.staffList ?? [])
     .filter((person) => person?.name)
     .map((person) => ({ name: person.name ?? '', character: person.character ?? '' }));
-  return { subject, cast };
+  return { subject, cast, resourceDetectors: data?.resourceDetectors ?? [] };
 }
 
 export type MovieboxSeason = { season: number; episodes: number; resolution: number };
@@ -572,6 +577,42 @@ export async function playableRows(
   season: number,
   episode: number,
 ): Promise<MovieboxEpisode[]> {
+  // The service's subject details carry the real, signed stream links for a
+  // film (its resourceDetectors). Those are not the dummy "update your app"
+  // video that the resource endpoints hand out, so they are tried first.
+  try {
+    const details = await subjectDetails(id);
+    for (const detector of details.resourceDetectors ?? []) {
+      const list = detector?.resolutionList ?? [];
+      if (list.length === 0) continue;
+      const matched = list.filter((raw) => {
+        if (season > 0 && raw?.se != null && Number(raw.se) !== season) return false;
+        if (episode > 0 && raw?.ep != null && Number(raw.ep) !== episode) return false;
+        return true;
+      });
+      const source = matched.length > 0 ? matched : list;
+      const rows = source
+        .map((raw) => toEpisode(raw, season === 0 ? (raw?.se ?? 0) : season))
+        .filter((row): row is MovieboxEpisode => row !== null);
+      if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) return rows;
+      // Fall back to the detector's download URL if it is a real link.
+      if (detector?.downloadUrl && !isNoticeVideo(detector.downloadUrl)) {
+        return [
+          {
+            season: season === 0 ? 1 : season,
+            episode: episode === 0 ? 1 : episode,
+            title: '',
+            resolution: 720,
+            size: 0,
+            duration: 0,
+            resourceId: detector.resourceId ?? id,
+            previewUrl: detector.downloadUrl,
+          },
+        ];
+      }
+    }
+  } catch {}
+
   const rows = await fetchRows(id, season, episode);
   if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) return rows;
   // A film is sometimes filed as the first episode of a first season, so the
@@ -657,6 +698,12 @@ export async function directStream(
     resolution: episode.resolution,
     whole: false,
   };
+
+  // The subject details already hand out the real, signed stream link, so when
+  // the preview is not the dummy "update your app" video it can be played as is.
+  if (episode.previewUrl && !isNoticeVideo(episode.previewUrl)) {
+    return { url: episode.previewUrl, size: episode.size, resolution: episode.resolution, whole: true };
+  }
 
   // If the preview link is already known to be the update notice video, resolve via TV API
   if (isNoticeVideo(episode.previewUrl)) {

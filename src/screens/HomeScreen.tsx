@@ -32,6 +32,7 @@ import { ListFrame } from '../components/ListFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
+import { MovieboxRecommendationsRow } from '../components/MovieboxRecommendationsRow';
 import { CinemasRow } from '../components/CinemasRow';
 import { ReelsHomeRow } from '../components/ReelsHomeRow';
 import type { ReelItem } from '../api/reels';
@@ -423,6 +424,9 @@ function HomeScreenView({
             version={refreshKey}
             onOpen={onOpenMoviebox}
           />
+
+          {/* Personalised from the last MovieBox film watched. */}
+          <MovieboxRecommendationsRow history={history} onOpen={onOpenMoviebox} />
 
           {/* Quick-access row of vertical trending Reels & Shorts */}
           {onOpenReels && (
