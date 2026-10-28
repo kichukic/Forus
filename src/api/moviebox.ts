@@ -197,12 +197,11 @@ async function getDevice(): Promise<Device> {
   } catch {
     saved = null;
   }
-  const versionCode = 50020117;
+  const versionCode = 50020133;
   device = {
     deviceId: saved?.deviceId ?? randomHex(32),
     gaid: saved?.gaid ?? randomId(),
     userAgent:
-      saved?.userAgent ??
       `com.community.oneroom/${versionCode} (Linux; U; Android 13; en_US; M2012K11AG; Build/TQ2A.230405.003; Cronet/135.0.7012.3)`,
   };
   if (!saved) AsyncStorage.setItem(DEVICE_KEY, JSON.stringify(device)).catch(() => {});
@@ -212,8 +211,8 @@ async function getDevice(): Promise<Device> {
 function clientInfo(info: Device): string {
   return JSON.stringify({
     package_name: 'com.community.oneroom',
-    version_name: '4.0.01.0813.03',
-    version_code: 50020117,
+    version_name: '4.0.03.1020.03',
+    version_code: 50020133,
     os: 'android',
     os_version: '13',
     install_ch: 'ps',
@@ -562,6 +561,11 @@ export async function seasonEpisodes(
   return [...best.values()].sort((a, b) => a.episode - b.episode);
 }
 
+function isNoticeVideo(url?: string): boolean {
+  if (!url) return false;
+  return url.includes('80da52722ee7de7a4303290af6783424') || url.includes('/other/2026/10/10/');
+}
+
 /** The files of one film, or of one episode of a series. */
 export async function playableRows(
   id: string,
@@ -569,11 +573,34 @@ export async function playableRows(
   episode: number,
 ): Promise<MovieboxEpisode[]> {
   const rows = await fetchRows(id, season, episode);
-  if (rows.length > 0) return rows;
+  if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) return rows;
   // A film is sometimes filed as the first episode of a first season, so the
   // other way round is tried before giving up.
-  if (season === 0 && episode === 0) return fetchRows(id, 1, 1);
-  return [];
+  if (season === 0 && episode === 0) {
+    const s1e1 = await fetchRows(id, 1, 1);
+    if (s1e1.length > 0 && !s1e1.every((r) => isNoticeVideo(r.previewUrl))) return s1e1;
+  }
+  // If the service returned the notice video (e.g. for short dramas) or no rows, resolve via TV shorts API
+  try {
+    const dramaEps = await fetchDramaEpisodes(id);
+    const targetEp = episode === 0 ? 1 : episode;
+    const match = dramaEps.find((e) => e.episode === targetEp) || dramaEps[0];
+    if (match?.streamUrl && !isNoticeVideo(match.streamUrl)) {
+      return [
+        {
+          season: match.season || (season === 0 ? 1 : season),
+          episode: match.episode,
+          title: match.title,
+          resolution: 720,
+          size: 0,
+          duration: match.duration || 0,
+          resourceId: id,
+          previewUrl: match.streamUrl,
+        },
+      ];
+    }
+  } catch {}
+  return rows;
 }
 
 async function fetchRows(
@@ -630,6 +657,24 @@ export async function directStream(
     resolution: episode.resolution,
     whole: false,
   };
+
+  // If the preview link is already known to be the update notice video, resolve via TV API
+  if (isNoticeVideo(episode.previewUrl)) {
+    try {
+      const dramaEps = await fetchDramaEpisodes(id);
+      const targetEp = episode.episode === 0 ? 1 : episode.episode;
+      const match = dramaEps.find((e) => e.episode === targetEp) || dramaEps[0];
+      if (match?.streamUrl && !isNoticeVideo(match.streamUrl)) {
+        return {
+          url: match.streamUrl,
+          size: 0,
+          resolution: 720,
+          whole: true,
+        };
+      }
+    } catch {}
+  }
+
   if (!episode.resourceId) return preview;
 
   const data = await request<{ list?: { resourceLink?: string; size?: string | number; resolution?: number }[] }>(
@@ -646,7 +691,22 @@ export async function directStream(
   );
   const found = data?.list?.[0];
   const url = found?.resourceLink;
-  if (!url) return preview;
+  if (!url || isNoticeVideo(url)) {
+    try {
+      const dramaEps = await fetchDramaEpisodes(id);
+      const targetEp = episode.episode === 0 ? 1 : episode.episode;
+      const match = dramaEps.find((e) => e.episode === targetEp) || dramaEps[0];
+      if (match?.streamUrl && !isNoticeVideo(match.streamUrl)) {
+        return {
+          url: match.streamUrl,
+          size: 0,
+          resolution: 720,
+          whole: true,
+        };
+      }
+    } catch {}
+    return preview;
+  }
   const size = Number(found?.size ?? episode.size);
   return {
     url,
@@ -720,10 +780,162 @@ export async function recommendations(subject: {
   return [...same, ...rest].slice(0, 12);
 }
 
-/** Drops the saved visitor token, so the next call signs in again. */
+const TV_HOST = 'https://tv.aoneroom.com';
+const TV_BFF = '/wefeed-tv-bff';
+const TV_TOKEN_KEY = 'moviebox-tv-token';
+
+type TvVideoAddress = {
+  url: string;
+  duration?: number;
+  width?: number;
+  height?: number;
+  size?: number;
+  resolution?: string;
+};
+
+function pickBestVideoUrl(addressList?: TvVideoAddress[]): string | null {
+  if (!addressList || addressList.length === 0) return null;
+  const priority = ['720', '1080', '480', '360'];
+  for (const res of priority) {
+    const found = addressList.find((a) => a.resolution === res && a.url && !isNoticeVideo(a.url));
+    if (found) return found.url;
+  }
+  const fallback = addressList.find((a) => a.url && !isNoticeVideo(a.url));
+  return fallback?.url || null;
+}
+
+let tvToken: string | null = null;
+let tvSigningIn: Promise<string> | null = null;
+
+async function storedTvToken(): Promise<string | null> {
+  if (tvToken) return tvToken;
+  try {
+    tvToken = await AsyncStorage.getItem(TV_TOKEN_KEY);
+  } catch {
+    tvToken = null;
+  }
+  return tvToken;
+}
+
+async function signInTv(): Promise<string> {
+  const body = await tvRequest<{ token?: string }>(
+    'POST',
+    `${TV_BFF}/user/visitor-login`,
+    [],
+    {},
+    false,
+  );
+  const fresh = body?.token;
+  if (!fresh) throw new Error('MovieBox TV would not let the app in.');
+  tvToken = fresh;
+  AsyncStorage.setItem(TV_TOKEN_KEY, fresh).catch(() => {});
+  return fresh;
+}
+
+async function getTvToken(): Promise<string> {
+  const saved = await storedTvToken();
+  if (saved) return saved;
+  if (!tvSigningIn) {
+    tvSigningIn = signInTv().finally(() => {
+      tvSigningIn = null;
+    });
+  }
+  return tvSigningIn;
+}
+
+function tvClientInfo(info: Device): string {
+  return JSON.stringify({
+    package_name: 'com.community.mbox.tv',
+    version_name: '1.1.6.0723.03',
+    version_code: 50040011,
+    os: 'android',
+    os_version: '13',
+    install_ch: 'ps',
+    device_id: info.deviceId,
+    install_store: 'ps',
+    gaid: info.gaid,
+    brand: 'Xiaomi',
+    model: 'M2012K11AG',
+    system_language: 'en',
+    net: 'NETWORK_WIFI',
+    region: 'US',
+    timezone: 'Asia/Kolkata',
+    sp_code: '40401',
+    'X-Play-Mode': '2',
+  });
+}
+
+async function tvRequest<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  params: Param[] = [],
+  body?: unknown,
+  auth = true,
+  attempt = 0,
+): Promise<T | null> {
+  const query = params.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&');
+  const fullPath = query ? `${path}?${query}` : path;
+  const payload = body === undefined ? undefined : JSON.stringify(body);
+  const ts = Date.now();
+  const info = await getDevice();
+
+  const canonical = [
+    method,
+    'application/json',
+    'application/json',
+    payload === undefined ? '' : String(utf8Bytes(payload).length),
+    String(ts),
+    payload === undefined ? '' : md5Hex(payload),
+    canonicalQuery(params) ? `${path}?${canonicalQuery(params)}` : path,
+  ].join('\n');
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    Connection: 'keep-alive',
+    'x-client-token': `${ts},${md5Hex(String(ts).split('').reverse().join(''))}`,
+    'x-tr-signature': `${ts}|2|${hmacMd5Base64(hexBytes(SECRET), canonical)}`,
+    'x-client-info': tvClientInfo(info),
+    'x-client-status': '0',
+    'x-forwarded-for': forwardedFor(),
+    'User-Agent': 'com.community.mbox.tv/50040011 (Linux; U; Android 13; en_US; M2012K11AG)',
+  };
+  if (auth) headers.Authorization = `Bearer ${await getTvToken()}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${TV_HOST}${fullPath}`, {
+      method,
+      headers,
+      body: payload,
+      signal: controller.signal,
+    });
+    if (res.status === 401 || res.status === 407) {
+      if (attempt === 0) {
+        tvToken = null;
+        AsyncStorage.removeItem(TV_TOKEN_KEY).catch(() => {});
+        return tvRequest<T>(method, path, params, body, auth, 1);
+      }
+      return null;
+    }
+    if (!res.ok) return null;
+    const json: any = await res.json();
+    if (json?.code !== 0) return null;
+    return (json?.data as T) ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Drops the saved visitor tokens, so the next call signs in again. */
 export function forgetMovieboxToken(): void {
   token = null;
+  tvToken = null;
   AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
+  AsyncStorage.removeItem(TV_TOKEN_KEY).catch(() => {});
 }
 
 /** Tab 13 is MovieBox ShortTV / Short Dramas */
@@ -746,19 +958,6 @@ export async function shortDramaSubjects(): Promise<MovieboxSubject[]> {
   return subjects;
 }
 
-/**
- * Resolves episode 1 playable stream for a short drama subject.
- */
-export async function shortDramaEpisode1(subjectId: string): Promise<string | null> {
-  try {
-    const rows = await playableRows(subjectId, 1, 1);
-    const link = rows[0]?.previewUrl;
-    return link || null;
-  } catch {
-    return null;
-  }
-}
-
 export type ShortDramaEpisode = {
   season: number;
   episode: number;
@@ -777,13 +976,83 @@ export async function fetchDramaEpisodes(subjectId: string): Promise<ShortDramaE
   if (held && held.length > 0) return held;
 
   try {
+    const data = await tvRequest<{
+      pager?: { page: number; perPage: number; totalCount: number; hasMore: boolean };
+      items?: {
+        se?: number;
+        ep: number;
+        title?: string;
+        video?: { addressList?: TvVideoAddress[] };
+        duration?: number;
+      }[];
+    }>('GET', `${TV_BFF}/shorts/mini-list`, [
+      ['page', '1'],
+      ['perPage', '50'],
+      ['subjectId', subjectId],
+    ]);
+
+    const items = data?.items ?? [];
+    const episodes: ShortDramaEpisode[] = [];
+    for (const item of items) {
+      const url = pickBestVideoUrl(item.video?.addressList);
+      if (!url || isNoticeVideo(url)) continue;
+      episodes.push({
+        season: item.se || 1,
+        episode: item.ep,
+        title: item.title || `Episode ${item.ep}`,
+        streamUrl: url,
+        duration: item.video?.addressList?.[0]?.duration ?? item.duration,
+      });
+    }
+
+    let page = 1;
+    let hasMore = Boolean(data?.pager?.hasMore);
+    while (hasMore && page < 5) {
+      page++;
+      const nextData = await tvRequest<{
+        pager?: { hasMore: boolean };
+        items?: {
+          se?: number;
+          ep: number;
+          title?: string;
+          video?: { addressList?: TvVideoAddress[] };
+          duration?: number;
+        }[];
+      }>('GET', `${TV_BFF}/shorts/mini-list`, [
+        ['page', String(page)],
+        ['perPage', '50'],
+        ['subjectId', subjectId],
+      ]);
+      const nextItems = nextData?.items ?? [];
+      for (const item of nextItems) {
+        const url = pickBestVideoUrl(item.video?.addressList);
+        if (!url || isNoticeVideo(url)) continue;
+        episodes.push({
+          season: item.se || 1,
+          episode: item.ep,
+          title: item.title || `Episode ${item.ep}`,
+          streamUrl: url,
+          duration: item.video?.addressList?.[0]?.duration ?? item.duration,
+        });
+      }
+      hasMore = Boolean(nextData?.pager?.hasMore);
+    }
+
+    if (episodes.length > 0) {
+      dramaEpisodesCache.set(subjectId, episodes);
+      return episodes;
+    }
+  } catch {}
+
+  // Legacy fallback if TV API returned nothing
+  try {
     const seasons = await seasonList(subjectId);
     const maxEp = seasons[0]?.episodes || 20;
     const season = seasons[0]?.season || 1;
     const list = await seasonEpisodes(subjectId, season, maxEp);
 
-    const episodes: ShortDramaEpisode[] = list
-      .filter((ep) => Boolean(ep.previewUrl))
+    const fallbackEpisodes: ShortDramaEpisode[] = list
+      .filter((ep) => Boolean(ep.previewUrl) && !isNoticeVideo(ep.previewUrl))
       .map((ep) => ({
         season: ep.season,
         episode: ep.episode,
@@ -792,13 +1061,45 @@ export async function fetchDramaEpisodes(subjectId: string): Promise<ShortDramaE
         duration: ep.duration,
       }));
 
-    if (episodes.length > 0) {
-      dramaEpisodesCache.set(subjectId, episodes);
+    if (fallbackEpisodes.length > 0) {
+      dramaEpisodesCache.set(subjectId, fallbackEpisodes);
     }
-    return episodes;
+    return fallbackEpisodes;
   } catch {
     return [];
   }
+}
+
+/**
+ * Resolves episode 1 playable stream for a short drama subject.
+ */
+export async function shortDramaEpisode1(subjectId: string): Promise<string | null> {
+  try {
+    const data = await tvRequest<{ firstEp?: { video?: { addressList?: TvVideoAddress[] } } }>(
+      'GET',
+      `${TV_BFF}/shorts/get-info`,
+      [['subjectId', subjectId]],
+    );
+    const list = data?.firstEp?.video?.addressList;
+    const url = pickBestVideoUrl(list);
+    if (url && !isNoticeVideo(url)) return url;
+  } catch {}
+
+  // Try drama episodes list
+  try {
+    const eps = await fetchDramaEpisodes(subjectId);
+    const first = eps.find((e) => e.episode === 1) || eps[0];
+    if (first?.streamUrl && !isNoticeVideo(first.streamUrl)) return first.streamUrl;
+  } catch {}
+
+  // Legacy fallback to playableRows if not notice video
+  try {
+    const rows = await playableRows(subjectId, 1, 1);
+    const link = rows[0]?.previewUrl;
+    if (link && !isNoticeVideo(link)) return link;
+  } catch {}
+
+  return null;
 }
 
 
