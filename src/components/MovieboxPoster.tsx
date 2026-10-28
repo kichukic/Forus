@@ -1,4 +1,5 @@
 // A film in a row or a grid: its poster with the name and year underneath.
+import { memo } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useState } from 'react';
@@ -31,7 +32,7 @@ export function posterColour(title: string): string {
   return POSTER_COLOURS[hash % POSTER_COLOURS.length];
 }
 
-export function MovieboxPoster({ subject }: { subject: MovieboxSubject }) {
+export const MovieboxPoster = memo(function MovieboxPoster({ subject }: { subject: MovieboxSubject }) {
   // A poster that does not load leaves a black tile behind, so a failed load
   // is shown the same way as a missing one: the title on a coloured field.
   const [failed, setFailed] = useState(false);
@@ -93,7 +94,7 @@ export function MovieboxPoster({ subject }: { subject: MovieboxSubject }) {
       </Text>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   poster: {

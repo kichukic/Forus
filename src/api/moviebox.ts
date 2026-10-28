@@ -470,14 +470,21 @@ export async function searchSubjects(keyword: string, page = 1): Promise<Moviebo
 }
 
 /** Everything known about one film or series. */
+const subjectDetailsCache = new Map<string, { at: number; value: { subject: MovieboxSubject; cast: MovieboxCast; resourceDetectors: RawSubject['resourceDetectors'] } }>();
+const SUBJECT_DETAILS_TTL = 5 * 60 * 1000;
+
 export async function subjectDetails(id: string): Promise<{ subject: MovieboxSubject; cast: MovieboxCast; resourceDetectors: RawSubject['resourceDetectors'] }> {
+  const held = subjectDetailsCache.get(id);
+  if (held && Date.now() - held.at < SUBJECT_DETAILS_TTL) return held.value;
   const data = await request<RawSubject>('GET', `${BFF}/subject-api/get`, [['subjectId', id]]);
   const subject = toSubject(data ?? {});
   if (!subject) throw new Error('MovieBox has nothing for this title.');
   const cast: MovieboxCast = (data?.staffList ?? [])
     .filter((person) => person?.name)
     .map((person) => ({ name: person.name ?? '', character: person.character ?? '' }));
-  return { subject, cast, resourceDetectors: data?.resourceDetectors ?? [] };
+  const value = { subject, cast, resourceDetectors: data?.resourceDetectors ?? [] };
+  subjectDetailsCache.set(id, { at: Date.now(), value });
+  return value;
 }
 
 export type MovieboxSeason = { season: number; episodes: number; resolution: number };
