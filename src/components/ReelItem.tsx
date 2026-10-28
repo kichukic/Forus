@@ -134,7 +134,10 @@ export function ReelItem({
     }
   };
 
-  const playerKey = activeSource.type === 'youtube' ? activeSource.videoId : activeSource.url;
+  const playerKey =
+    activeSource.type === 'youtube'
+      ? activeSource.videoId
+      : `${item.id}-ep${activeEpNum ?? 1}`;
   const isDrama = item.category === 'drama' || item.relatedPlayable?.kind === 'moviebox' || episodes.length > 0;
 
   // Zero-flicker poster overlay: smoothly dissolves once video playback begins
@@ -294,16 +297,16 @@ function DirectPlayer({
   const player = useVideoPlayer(url, (p) => {
     p.loop = true;
     p.muted = muted;
-    if (playing) p.play();
   });
 
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
+  const { status, error } = useEvent(player, 'statusChange', { status: player.status });
 
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying || status === 'readyToPlay') {
       onPlaying?.();
     }
-  }, [isPlaying, onPlaying]);
+  }, [isPlaying, status, onPlaying]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -317,6 +320,18 @@ function DirectPlayer({
       player.pause();
     }
   }, [player, playing]);
+
+  useEffect(() => {
+    if (playing && (status === 'readyToPlay' || player.status === 'readyToPlay')) {
+      player.play();
+    }
+  }, [player, playing, status]);
+
+  useEffect(() => {
+    if (status === 'error') {
+      console.warn('[DirectPlayer] Playback error:', error?.message);
+    }
+  }, [status, error]);
 
   return (
     <VideoView

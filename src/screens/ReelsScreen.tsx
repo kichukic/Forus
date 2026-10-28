@@ -63,11 +63,16 @@ export function ReelsScreen({ initialIndex = 0, history = [], onPlayFullMovie, o
 
   const listRef = useRef<FlatList<ReelItemType>>(null);
 
+  const historyRef = useRef(history);
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
   // Load reels for the active category, language and user watch history profile
   useEffect(() => {
     let alive = true;
 
-    fetchReels(category, language, history)
+    fetchReels(category, language, historyRef.current)
       .then((items) => {
         if (!alive) return;
         setReels(items);
@@ -83,7 +88,7 @@ export function ReelsScreen({ initialIndex = 0, history = [], onPlayFullMovie, o
     return () => {
       alive = false;
     };
-  }, [category, language, history]);
+  }, [category, language]);
 
   const selectCategory = (newCat: ReelCategory) => {
     setCategory(newCat);
