@@ -591,7 +591,8 @@ export async function playableRows(
     const details = await subjectDetails(id);
     for (const detector of details.resourceDetectors ?? []) {
       const list = detector?.resolutionList ?? [];
-      if (list.length === 0) continue;
+      // Even when the detector carries no per-resolution list, it may still
+      // hand out a direct download link, so do not skip it in that case.
       const matched = list.filter((raw) => {
         if (season > 0 && raw?.se != null && Number(raw.se) !== season) return false;
         if (episode > 0 && raw?.ep != null && Number(raw.ep) !== episode) return false;
@@ -648,6 +649,8 @@ export async function playableRows(
       ];
     }
   } catch {}
+  // Never hand back the "update your app" dummy video as if it were a real file.
+  if (rows.length > 0 && rows.every((r) => isNoticeVideo(r.previewUrl))) return [];
   return rows;
 }
 
@@ -699,21 +702,47 @@ export async function directStream(
   id: string,
   episode: MovieboxEpisode,
 ): Promise<MovieboxStream> {
-  const preview: MovieboxStream = {
-    url: episode.previewUrl,
-    size: episode.size,
-    resolution: episode.resolution,
-    whole: false,
-  };
-
   // The subject details already hand out the real, signed stream link, so when
   // the preview is not the dummy "update your app" video it can be played as is.
   if (episode.previewUrl && !isNoticeVideo(episode.previewUrl)) {
     return { url: episode.previewUrl, size: episode.size, resolution: episode.resolution, whole: true };
   }
 
-  // If the preview link is already known to be the update notice video, resolve via TV API
+  // If the preview link is already known to be the update notice video, try the
+  // subject details' resourceDetectors first: they carry the real, signed CDN
+  // links that the resource endpoints hide behind the dummy video.
   if (isNoticeVideo(episode.previewUrl)) {
+    try {
+      const details = await subjectDetails(id);
+      for (const detector of details.resourceDetectors ?? []) {
+        const list = detector?.resolutionList ?? [];
+        const matched = list.filter((raw) => {
+          if (episode.season > 0 && raw?.se != null && Number(raw.se) !== episode.season) return false;
+          if (episode.episode > 0 && raw?.ep != null && Number(raw.ep) !== episode.episode) return false;
+          return true;
+        });
+        const source = matched.length > 0 ? matched : list;
+        for (const raw of source) {
+          if (raw?.resourceLink && !isNoticeVideo(raw.resourceLink)) {
+            return {
+              url: raw.resourceLink,
+              size: Number(raw.size ?? episode.size),
+              resolution: raw.resolution ?? episode.resolution,
+              whole: true,
+            };
+          }
+        }
+        if (detector?.downloadUrl && !isNoticeVideo(detector.downloadUrl)) {
+          return {
+            url: detector.downloadUrl,
+            size: 0,
+            resolution: episode.resolution || 720,
+            whole: true,
+          };
+        }
+      }
+    } catch {}
+    // Then try the TV shorts API.
     try {
       const dramaEps = await fetchDramaEpisodes(id);
       const targetEp = episode.episode === 0 ? 1 : episode.episode;
@@ -729,7 +758,7 @@ export async function directStream(
     } catch {}
   }
 
-  if (!episode.resourceId) return preview;
+  if (!episode.resourceId) throw new Error('No playable file for this episode.');
 
   const data = await request<{ list?: { resourceLink?: string; size?: string | number; resolution?: number }[] }>(
     'GET',
@@ -759,7 +788,7 @@ export async function directStream(
         };
       }
     } catch {}
-    return preview;
+    throw new Error('No playable file for this episode.');
   }
   const size = Number(found?.size ?? episode.size);
   return {
