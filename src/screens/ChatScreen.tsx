@@ -10,6 +10,7 @@ import { ConversationView } from '../chat/ConversationView';
 import { FriendsView } from '../chat/FriendsView';
 import { ProfileView } from '../chat/ProfileView';
 import { onOpenChatRequest } from '../chat/push';
+import { maybeAskForBatteryExemption } from '../chat/background';
 import { useChat } from '../chat/store';
 import { Loader } from '../components/Loader';
 
@@ -50,6 +51,11 @@ export function ChatScreen({ onPlay, onFullScreen, ref }: Props) {
       onFullScreen(true);
     });
   }, [status, onFullScreen]);
+
+  // One-time nudge to let Android keep the app alive in the background.
+  useEffect(() => {
+    if (status === 'signedIn') void maybeAskForBatteryExemption();
+  }, [status]);
 
   useImperativeHandle(ref, () => ({
     goBack: () => {

@@ -135,13 +135,16 @@ export default function App() {
       if (u) setUpdatePrompt(u);
     });
 
-    // Active screen time heartbeat
+    // Active screen time heartbeat. The keep-alive service can hold the app in
+    // the background, so only count time while a screen is actually on.
+    let active = AppState.currentState === 'active';
     const heartbeatTimer = setInterval(() => {
-      sendScreenTimeHeartbeat(30);
+      if (active) sendScreenTimeHeartbeat(30);
     }, 30000);
 
     // Trim decoded image memory cache when app goes into background to prevent OS kills
     const appStateSub = AppState.addEventListener('change', (nextState) => {
+      active = nextState === 'active';
       if (nextState === 'background') {
         Image.clearMemoryCache().catch(() => {});
       }

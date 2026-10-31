@@ -575,7 +575,12 @@ export async function seasonEpisodes(
 
 function isNoticeVideo(url?: string): boolean {
   if (!url) return false;
-  return url.includes('80da52722ee7de7a4303290af6783424') || url.includes('/other/2026/10/10/');
+  // The dummy "update your app" video MovieBox serves to trap unofficial
+  // clients. Its filename hash is stable, and it always lives under the
+  // macdn.aoneroom.com/other/YYYY/MM/DD/ path, so both signals are checked.
+  if (url.includes('80da52722ee7de7a4303290af6783424')) return true;
+  if (/macdn\.aoneroom\.com\/other\/\d{4}\/\d{2}\/\d{2}\//.test(url)) return true;
+  return false;
 }
 
 /** The files of one film, or of one episode of a series. */

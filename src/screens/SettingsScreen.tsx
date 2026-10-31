@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,13 @@ import { TraktSetupScreen } from './TraktSetupScreen';
 import { ForUsWrappedModal } from '../components/ForUsWrappedModal';
 import { useBannerFilter } from '../data/bannerFilter';
 import { showToast } from '../data/toasts';
+import {
+  isIgnoringBatteryOptimizations,
+  keepAliveSupported,
+  keepAliveWanted,
+  openBatterySettings,
+  setKeepAlive,
+} from '../chat/background';
 import { LIVE_NEWS, MOVIES, SHOWS } from '../data/channels';
 import { GLOW, GUTTER, RADIUS, colors, isTV, sz } from '../theme';
 
@@ -44,6 +51,17 @@ export function SettingsScreen({
   const [wrappedOpen, setWrappedOpen] = useState(false);
   const downloads = useDownloads();
   const { localCount, clearLocal } = useBannerFilter();
+  const [backgroundOn, setBackgroundOn] = useState(keepAliveWanted());
+  const [batteryFree, setBatteryFree] = useState(() => isIgnoringBatteryOptimizations());
+
+  // Battery optimization is a system setting, so read it again whenever the
+  // person comes back from the settings page it opens.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setBatteryFree(isIgnoringBatteryOptimizations());
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     getTraktSession().then(setTraktSession);
@@ -125,6 +143,52 @@ export function SettingsScreen({
             first={isTV || !onOpenDownloads}
           />
         </Group>
+
+        {!isTV && (
+          <Group title="Chat">
+            <Row
+              icon="chatbubbles-outline"
+              title="Background connection"
+              detail={
+                !keepAliveSupported
+                  ? 'Not needed on this device'
+                  : backgroundOn
+                    ? 'On · messages arrive while the app is in the background'
+                    : 'Off · messages arrive when you open the app'
+              }
+              onPress={
+                keepAliveSupported
+                  ? () => {
+                      const next = !backgroundOn;
+                      setBackgroundOn(next);
+                      void setKeepAlive(next);
+                      showToast({
+                        text: next ? 'Background connection on' : 'Background connection off',
+                        icon: next ? 'moon-outline' : 'sunny-outline',
+                      });
+                    }
+                  : undefined
+              }
+              first
+            />
+            {keepAliveSupported && backgroundOn && (
+              <Row
+                icon="battery-half-outline"
+                title="Battery optimization"
+                detail={
+                  batteryFree
+                    ? 'Unrestricted — Android will leave ForUs alone'
+                    : 'Restricted — tap to stop Android killing the app'
+                }
+                onPress={() => {
+                  openBatterySettings();
+                  // The answer comes back as a system dialog; the AppState
+                  // listener above re-reads it when the app returns.
+                }}
+              />
+            )}
+          </Group>
+        )}
 
         <Group title="About">
           <Row

@@ -7,6 +7,7 @@
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { io, type Socket } from 'socket.io-client';
+import { loadKeepAlivePreference, startKeepAlive, stopKeepAlive } from './background';
 import { setupMessageNotifications, notifyIncomingMessage } from './push';
 import * as api from './api';
 import { uploadVoice } from './voice';
@@ -74,25 +75,19 @@ let started = false;
 export async function startChat() {
   if (started) return;
   started = true;
-  let bgTimeout: ReturnType<typeof setTimeout> | null = null;
+  await loadKeepAlivePreference();
   AppState.addEventListener('change', (s) => {
     if (state.status !== 'signedIn') return;
     if (s === 'active') {
-      if (bgTimeout) {
-        clearTimeout(bgTimeout);
-        bgTimeout = null;
-      }
+      // Back on screen: make sure the connection is up (Android may have
+      // stopped the service) and pick up whatever arrived in the meantime.
+      startKeepAlive();
       connect();
       refresh();
-    } else if (s === 'background') {
-      // Keep socket alive for 5 minutes in background so multitasking still delivers message notifications
-      if (!bgTimeout) {
-        bgTimeout = setTimeout(() => {
-          disconnect();
-          bgTimeout = null;
-        }, 5 * 60 * 1000);
-      }
     }
+    // Going to the background needs nothing: the keep-alive service (started
+    // while the app was visible) holds the process, and with it the socket,
+    // so messages keep arriving and still raise their notifications.
   });
   if (!(await api.loadSession())) return set({ status: 'signedOut' });
   try {
@@ -108,6 +103,7 @@ export async function startChat() {
   }
   connect();
   refresh();
+  startKeepAlive();
   setupMessageNotifications();
 }
 
@@ -115,6 +111,7 @@ async function signedIn(me: Me) {
   set({ me, status: 'signedIn', conversations: null, friends: null, threads: {} });
   connect();
   refresh();
+  startKeepAlive();
   setupMessageNotifications();
 }
 
@@ -144,6 +141,7 @@ export async function finishSignUp(ticket: string, name: string) {
 
 export async function signOut() {
   disconnect();
+  stopKeepAlive();
   await api.signOut();
   set({ status: 'signedOut', me: null, conversations: null, friends: null, threads: {} });
 }

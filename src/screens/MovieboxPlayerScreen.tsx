@@ -134,7 +134,11 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         })
         .catch(() => setCaptionOptions([]));
     } catch (e) {
-      setLinkError(e instanceof Error ? e.message : "This episode can't be played.");
+      const base = e instanceof Error ? e.message : "This episode can't be played.";
+      const hint = item.season > 0
+        ? " This series is not available for free on MovieBox - open the title and use \"Send to TorBox\" to play it."
+        : "";
+      setLinkError(base + hint);
     } finally {
       setLoading(false);
     }
