@@ -71,7 +71,7 @@ export function ConversationView({ user, onBack, onPlay }: Props) {
         title={user.name}
         subtitle={user.email}
         onBack={onBack}
-        right={<Avatar name={user.name} id={user.id} size={38} />}
+        right={<Avatar name={user.name} id={user.id} avatar={user.avatar} size={38} />}
       />
       <FlatList
         ref={listRef}

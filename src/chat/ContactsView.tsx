@@ -148,7 +148,7 @@ export function ContactsView({ onBack, onOpen }: Props) {
             const incoming = friends?.incoming.find((f) => f.user.id === item.user.id);
             return (
               <View style={styles.row}>
-                <Avatar name={item.user.name} id={item.user.id} />
+                <Avatar name={item.user.name} id={item.user.id} avatar={item.user.avatar} />
                 <View style={styles.rowText}>
                   <Text style={styles.name} numberOfLines={1}>
                     {item.contactName || item.user.name}

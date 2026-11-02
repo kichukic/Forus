@@ -104,7 +104,7 @@ function Row({ item, meId, onPress }: { item: Conversation; meId?: string; onPre
   const unread = item.unread > 0;
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <Avatar name={item.user.name} id={item.user.id} size={50} />
+      <Avatar name={item.user.name} id={item.user.id} avatar={item.user.avatar} size={50} />
       <View style={styles.rowText}>
         <View style={styles.rowTop}>
           <Text style={[styles.name, unread && styles.bold]} numberOfLines={1}>

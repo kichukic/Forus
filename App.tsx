@@ -29,7 +29,7 @@ import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
 import { ReelsScreen } from './src/screens/ReelsScreen';
 import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
-import { sendScreenTimeHeartbeat, startChat, useChatStatus } from './src/chat/store';
+import { sendScreenTimeHeartbeat, startChat, useChatStatus, publishWatching } from './src/chat/store';
 import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
 import { onOpenChatRequest } from './src/chat/push';
 import { SendToFriend } from './src/chat/SendToFriend';
@@ -177,7 +177,7 @@ export default function App() {
     clearSyncedHistory();
   };
 
-  // Watch history follows the chat account: merged with the server's on
+  // Watched titles follow the chat account: merged with the server's on
   // signing in and whenever the app comes back to the front.
   const chatStatus = useChatStatus();
   const latestHistory = useRef(history);
@@ -195,14 +195,28 @@ export default function App() {
     return () => sub.remove();
   }, [chatStatus]);
 
-  // A tapped message notification goes to the Chat tab, which opens the chat;
-  // a full-screen video steps into the corner.
+  // Tell friends what is playing, but only while the screen is actually on and
+  // someone is signed in. Backgrounding stops the card even though the
+  // keep-alive service leaves the chat connection open.
+  useEffect(() => {
+    if (isTV) return;
+    let active = AppState.currentState === 'active';
+    const sync = () => publishWatching(active && chatStatus === 'signedIn' ? playing : null);
+    sync();
+    const sub = AppState.addEventListener('change', (next) => {
+      active = next === 'active';
+      sync();
+    });
+    return () => sub.remove();
+  }, [chatStatus, playing]);
+
+  // A tapped message notification — or a friend on Home — goes to the Chat
+  // tab, which opens the chat; a full-screen video steps into the corner.
   const playingNow = useRef(playing);
   useEffect(() => {
     playingNow.current = playing;
   });
   useEffect(() => {
-    if (isTV) return;
     return onOpenChatRequest(() => {
       setScreen('chat');
       if (playingNow.current) setMini(true);

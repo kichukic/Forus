@@ -169,7 +169,7 @@ function Person({
       disabled={!onPress && !onLongPress}
       style={({ pressed }) => [styles.person, pressed && styles.personPressed]}
     >
-      <Avatar name={user.name} id={user.id} />
+      <Avatar name={user.name} id={user.id} avatar={user.avatar} />
       <View style={styles.personText}>
         <Text style={styles.name} numberOfLines={1}>
           {user.name}

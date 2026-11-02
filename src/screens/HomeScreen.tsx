@@ -35,6 +35,8 @@ import { MovieboxRow } from '../components/MovieboxRow';
 import { MovieboxRecommendationsRow } from '../components/MovieboxRecommendationsRow';
 import { CinemasRow } from '../components/CinemasRow';
 import { ReelsHomeRow } from '../components/ReelsHomeRow';
+import { FriendsOnlineRow, FriendsWatchingRow } from '../components/FriendsNow';
+import { TonightBanner, TonightModal } from '../components/TonightModal';
 import type { ReelItem } from '../api/reels';
 import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
@@ -170,6 +172,8 @@ function HomeScreenView({
   // Bumped on refresh; the rows are keyed on it, so they remount and refetch.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  // The concierge is a sheet over Home, not a page of its own.
+  const [tonightOpen, setTonightOpen] = useState(false);
 
   // Which way the content slides in: from the right when moving to a tab
   // further along, from the left when moving back.
@@ -400,6 +404,11 @@ function HomeScreenView({
           refreshKey={refreshKey}
           onPlay={playVideo}
         >
+          {/* A concierge for the evening, then the people who are around. */}
+          <TonightBanner onPress={() => setTonightOpen(true)} />
+          <FriendsOnlineRow />
+          <FriendsWatchingRow onPlay={onPlay} />
+
           {/* The news channels lead the page: they are what's on right now. */}
           {liveRow}
           <HeroCarousel
@@ -572,6 +581,13 @@ function HomeScreenView({
           onPlay={onPlay}
         />,
       )}
+
+      <TonightModal
+        visible={tonightOpen}
+        onClose={() => setTonightOpen(false)}
+        onOpenMoviebox={onOpenMoviebox}
+        recentTitles={history.slice(0, 6).map((item) => item.title)}
+      />
     </View>
   );
 }

@@ -58,7 +58,7 @@ export function SendToFriend() {
                 onPress={() => pick(item.user)}
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               >
-                <Avatar name={item.user.name} id={item.user.id} size={42} />
+                <Avatar name={item.user.name} id={item.user.id} avatar={item.user.avatar} size={42} />
                 <Text style={styles.name} numberOfLines={1}>
                   {item.user.name}
                 </Text>

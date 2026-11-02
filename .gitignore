@@ -1,8 +1,8 @@
 node_modules/
 .expo/
 dist/
-ios/
-android/
+/ios/
+/android/
 npm-debug.*
 *.jks
 *.p8
@@ -22,6 +22,10 @@ expo-env.d.ts
 # @end expo-cli
 # APKs made by build-apk.sh
 /builds/
+
+# Build output of local Expo modules (their source is tracked)
+/modules/*/android/build/
+/modules/*/android/.gradle/
 
 # Release signing key and its passwords (back these up somewhere safe)
 /signing/
