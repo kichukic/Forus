@@ -29,3 +29,6 @@ expo-env.d.ts
 
 # Release signing key and its passwords (back these up somewhere safe)
 /signing/
+
+# Claude
+.claude/
