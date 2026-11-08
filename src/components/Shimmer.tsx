@@ -5,7 +5,7 @@
 import { useEffect } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CARD_WIDTH } from '../theme';
+import { CARD_WIDTH, isTV } from '../theme';
 
 const SWEEP_MS = 1300;
 const sweep = new Animated.Value(0);
@@ -14,6 +14,7 @@ let loop: Animated.CompositeAnimation | null = null;
 
 function useSharedSweep() {
   useEffect(() => {
+    if (isTV) return;
     if (users++ === 0) {
       sweep.setValue(0);
       loop = Animated.loop(
@@ -33,6 +34,9 @@ function useSharedSweep() {
 /** Fills its parent; `width` is how far the band travels. */
 export function Shimmer({ width = CARD_WIDTH }: { width?: number }) {
   useSharedSweep();
+  if (isTV) {
+    return <View style={styles.clip} pointerEvents="none" />;
+  }
   const translateX = sweep.interpolate({ inputRange: [0, 1], outputRange: [-width * 0.6, width * 1.2] });
   return (
     <View style={styles.clip} pointerEvents="none">

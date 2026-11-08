@@ -332,8 +332,8 @@ function HomeScreenView({
 
   return (
     <View style={styles.screen}>
-      {/* The purple haze behind the header. */}
-      <LinearGradient colors={GLOW} style={styles.glow} pointerEvents="none" />
+      {/* The purple haze behind the header (mobile only to eliminate overdraw on TV). */}
+      {!isTV && <LinearGradient colors={GLOW} style={styles.glow} pointerEvents="none" />}
 
       <View style={[styles.top, { paddingTop: insets.top + (sz(8, 24)) }]}>
         {/* Frosted glass that rises behind the header as the hero collapses. */}
@@ -697,11 +697,11 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
           // An exact height on TV; see ListFrame.
           style={height ? { height } : styles.panel}
           contentContainerStyle={styles.content}
-          // On TV render enough rows initially to prevent focus traps and layout glitches.
-          initialNumToRender={isTV ? 6 : 2}
-          maxToRenderPerBatch={isTV ? 4 : 1}
-          windowSize={isTV ? 7 : 5}
-          updateCellsBatchingPeriod={50}
+          // On low-power TV keep memory footprint tight: 3 rows initial, 3 windowSize to stop GC thrashing.
+          initialNumToRender={isTV ? 3 : 2}
+          maxToRenderPerBatch={isTV ? 2 : 1}
+          windowSize={isTV ? 3 : 5}
+          updateCellsBatchingPeriod={isTV ? 80 : 50}
           // The remote's focus search needs the rows near the screen attached; mobile detaches to save memory.
           removeClippedSubviews={!isTV}
           // More themed rows once the end is a screen or so away.

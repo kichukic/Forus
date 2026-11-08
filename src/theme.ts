@@ -1,6 +1,6 @@
 import { Dimensions, Platform } from 'react-native';
 
-export const isTV = Platform.isTV;
+export const isTV = Platform.isTV || (Platform.constants as any)?.uiMode === 'tv';
 
 export const colors = {
   background: '#0c0a12',
@@ -30,15 +30,15 @@ export const UI_SCALE = isTV
 export const sz = (phone: number, tv: number) => Math.round((isTV ? tv : phone) * UI_SCALE * 2) / 2;
 
 // TVs are viewed from across the room; phones need tighter spacing. TVs also
-// crop their edges (overscan), so the TV margin never shrinks below 48.
-export const GUTTER = isTV ? 48 : sz(18, 48);
-export const CARD_WIDTH = sz(230, 230);
+// crop their edges (overscan), so the TV margin never shrinks below 36.
+export const GUTTER = isTV ? 36 : sz(18, 48);
+export const CARD_WIDTH = sz(230, 195);
 export const CARD_HEIGHT = Math.round((CARD_WIDTH * 9) / 16);
-export const CARD_GAP = sz(14, 20);
-export const RADIUS = sz(14, 16);
+export const CARD_GAP = sz(14, 16);
+export const RADIUS = sz(14, 12);
 // Room above and below a row of cards, so a focused card on TV (which grows
 // and gets a ring) isn't clipped by the row.
-export const ROW_PAD = isTV ? 18 : 2;
+export const ROW_PAD = isTV ? 14 : 2;
 
 // The darkening laid over pictures so white text on them stays readable.
 export const SCRIM = ['transparent', 'rgba(12,10,18,0.55)', 'rgba(12,10,18,0.96)'] as const;

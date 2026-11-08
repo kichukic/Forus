@@ -5,7 +5,7 @@ import { useEffect, useState, type ComponentProps } from 'react';
 import { Animated, Easing, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { CARD_GAP, RADIUS, colors } from '../theme';
+import { CARD_GAP, RADIUS, colors, isTV } from '../theme';
 import { Loader } from './Loader';
 
 type Props = {
@@ -14,17 +14,19 @@ type Props = {
   label?: string;
   icon?: ComponentProps<typeof Ionicons>['name'];
   rows?: number;
+  poster?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
 const SWEEP_MS = 1400;
 
-export function SkeletonLoader({ columns, cardWidth, label, icon = 'search', rows = 3, style }: Props) {
+export function SkeletonLoader({ columns, cardWidth, label, icon = 'search', rows = 3, poster, style }: Props) {
   const [sweep] = useState(() => new Animated.Value(0));
   const [appear] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     Animated.timing(appear, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+    if (isTV) return;
     let stopped = false;
     const runSweep = () => {
       if (stopped) return;
@@ -37,7 +39,7 @@ export function SkeletonLoader({ columns, cardWidth, label, icon = 'search', row
     return () => { stopped = true; };
   }, []);
 
-  const pictureHeight = (cardWidth * 9) / 16;
+  const pictureHeight = poster ? Math.round((cardWidth * 3) / 2) : Math.round((cardWidth * 9) / 16);
   const rowWidth = cardWidth * columns + CARD_GAP * (columns - 1);
 
   return (
@@ -48,17 +50,23 @@ export function SkeletonLoader({ columns, cardWidth, label, icon = 'search', row
         <View key={r} style={[styles.row, { width: rowWidth }]}>
           {Array.from({ length: columns }, (_, c) => {
             // Each card's shine runs a little behind the one before, so the
-            // light ripples down the grid.
+            // light ripples down the grid. On TV we skip the shining calculations.
             return (
               <View key={c} style={{ width: cardWidth, marginRight: c === columns - 1 ? 0 : CARD_GAP }}>
                 <View style={[styles.block, { height: pictureHeight, borderRadius: RADIUS }]}>
-                  <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />
+                  {!isTV && (
+                    <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />
+                  )}
                 </View>
                 <View style={[styles.block, styles.line, { width: '88%' }]}>
-                  <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />
+                  {!isTV && (
+                    <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />
+                  )}
                 </View>
                 <View style={[styles.block, styles.line, styles.lineShort]}>
-                  <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />
+                  {!isTV && (
+                    <Shine x={Animated.modulo(Animated.add(sweep, ((r * columns + c) * 0.12) % 1), 1).interpolate({ inputRange: [0, 1], outputRange: [-cardWidth, cardWidth * 1.4] })} />
+                  )}
                 </View>
               </View>
             );

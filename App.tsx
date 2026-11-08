@@ -299,14 +299,15 @@ export default function App() {
   const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!streamioSeries);
   const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox && !(screen === 'chat' && chatFull);
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
+  const TargetView = isTV ? View : BlurTargetView;
 
   return (
     <SafeAreaProvider>
       <ErrorBoundary label="App">
         <View style={styles.root}>
         <StatusBar hidden={isTV} style="light" />
-        {/* The screens, which the bottom bar's frosted glass blurs. */}
-        <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
+        {/* The screens, which the bottom bar's frosted glass blurs on phone; on TV plain View saves GPU texture capture. */}
+        <TargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
           {/* Home stays mounted so its tabs, rows and scroll position survive. */}
           <Animated.View style={[layer('home'), { opacity: homeShown, transform: [{ translateY: homeLift }] }]}>
             <HomeScreen
@@ -435,7 +436,7 @@ export default function App() {
               <TorboxSetupScreen onDone={closeTorbox} />
             </ScreenReveal>
           )}
-        </BlurTargetView>
+        </TargetView>
 
         <TransferToast
           onPlay={(transfer) => {

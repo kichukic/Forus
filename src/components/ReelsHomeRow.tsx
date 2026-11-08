@@ -10,7 +10,7 @@ import { SectionHeader } from './Section';
 import { SkeletonLoader } from './SkeletonLoader';
 import { colors, GUTTER, isTV, RADIUS, sz } from '../theme';
 
-const REEL_CARD_WIDTH = isTV ? 160 : 115;
+const REEL_CARD_WIDTH = isTV ? 120 : 115;
 const REEL_CARD_HEIGHT = Math.round((REEL_CARD_WIDTH * 16) / 9);
 
 type Props = {

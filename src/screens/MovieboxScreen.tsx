@@ -60,8 +60,8 @@ const SHELVES_PER_STEP = 3;
 // Only a few cards are built at a time. A phone with little memory cannot
 // hold fifty posters at once.
 const LIST_PERF = {
-  initialNumToRender: isTV ? 12 : 8,
-  maxToRenderPerBatch: isTV ? 12 : 8,
+  initialNumToRender: isTV ? 24 : 8,
+  maxToRenderPerBatch: isTV ? 24 : 8,
   windowSize: 7,
   updateCellsBatchingPeriod: 60,
   // Android keeps what it draws out of view; letting go of it saves memory.
@@ -212,10 +212,12 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
     }
   }, [hasMore, loadingMore, name, page, searching]);
 
-  // The grid reflows when the phone rotates.
+  // The grid reflows when the phone rotates. TV uses a high-density 6-10 column grid.
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 230 : 150)));
-  const cardWidth = Math.max(96, Math.floor((width - GUTTER * 2) / columns));
+  const columns = isTV
+    ? Math.min(10, Math.max(6, Math.floor((width - GUTTER * 2) / 128)))
+    : Math.max(2, Math.floor((width - GUTTER * 2) / 150));
+  const cardWidth = Math.floor((width - GUTTER * 2) / columns);
 
   const searchBox = (
     <View style={styles.inputWrap}>

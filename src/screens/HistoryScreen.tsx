@@ -29,9 +29,9 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
   // Scrolling the history grid down tucks the bottom bar away.
   const navScroll = useNavScrollHide();
   const { width } = useWindowDimensions();
-  // On TV as many cards as fit at the usual card size.
+  // On TV as many cards as fit at the usual card size (5 to 8 columns).
   const columns = isTV
-    ? Math.max(4, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP)))
+    ? Math.min(8, Math.max(5, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP))))
     : width > 600
       ? 3
       : 2;
@@ -89,8 +89,8 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
               numColumns={columns}
               windowSize={5}
               removeClippedSubviews={Platform.OS === 'android'}
-              maxToRenderPerBatch={4}
-              initialNumToRender={6}
+              maxToRenderPerBatch={isTV ? 12 : 4}
+              initialNumToRender={isTV ? 12 : 6}
               updateCellsBatchingPeriod={50}
               keyExtractor={playableKey}
               // An exact height on TV; see ListFrame.

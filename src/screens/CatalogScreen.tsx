@@ -46,14 +46,14 @@ const MAX_RELEASES = 60;
 // The catalog is let in a few at a time as the page is scrolled, the way the
 // All tab lets its rows in. Each card holds a poster, and a phone with little
 // memory feels every one of them.
-const FILMS_AT_START = 12;
-const FILMS_PER_STEP = 12;
+const FILMS_AT_START = isTV ? 24 : 12;
+const FILMS_PER_STEP = isTV ? 24 : 12;
 // Only a few cards are built at a time. A phone with little memory cannot
 // hold fifty posters at once, and the ones it does hold are the ones that
 // crash it.
 const LIST_PERF = {
-  initialNumToRender: isTV ? 12 : 8,
-  maxToRenderPerBatch: isTV ? 12 : 8,
+  initialNumToRender: isTV ? 24 : 8,
+  maxToRenderPerBatch: isTV ? 24 : 8,
   windowSize: 7,
   updateCellsBatchingPeriod: 60,
   // Android keeps what it draws out of view; letting go of it saves memory.
@@ -146,13 +146,13 @@ export function CatalogScreen({ onOpen, onSend, embedded, header, refreshControl
     return () => clearTimeout(timer);
   }, [query]);
 
-  // The grid reflows when the phone rotates. The posters are small enough for
-  // three to fit across a phone, so more of the catalog is seen at once.
+  // The grid reflows when the phone rotates. TV uses a high-density 6-10 column grid.
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 300 : 165)));
-  // The cards fill their column, so the grid never overflows. A width that
-  // comes out wrong (a split screen, a fold) must not reach the cards.
-  const cardWidth = Math.max(120, Math.floor((width - GUTTER * 2) / columns));
+  const columns = isTV
+    ? Math.min(10, Math.max(6, Math.floor((width - GUTTER * 2) / 128)))
+    : Math.max(2, Math.floor((width - GUTTER * 2) / 160));
+  // The cards fill their column, so the grid never overflows.
+  const cardWidth = Math.floor((width - GUTTER * 2) / columns);
 
   const movies = searching ? (results ?? []) : browse;
 

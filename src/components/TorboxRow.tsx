@@ -54,12 +54,17 @@ export const TorboxRow = memo(function TorboxRow({ version, onPlay, onOpenSettin
   // A row holds cards of the usual size, so how many fit is worked out from
   // the screen. The grid on a phone holds smaller ones, so three of them fit
   // where two did.
-  const rowColumns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP)));
-  const columns = grid ? (isTV ? rowColumns : GRID_COLUMNS) : rowColumns;
+  const rowColumns = isTV
+    ? Math.min(8, Math.max(5, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP))))
+    : Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP)));
+  const gridColumns = isTV
+    ? Math.min(8, Math.max(5, Math.floor((width - GUTTER * 2 + CARD_GAP) / (190 + CARD_GAP))))
+    : GRID_COLUMNS;
+  const columns = grid ? gridColumns : rowColumns;
   // The card fills its share of the width, and keeps the shape of a picture.
-  const gridCardWidth = Math.max(90, Math.floor((width - GUTTER * 2) / columns) - CARD_GAP);
-  const cardWidth = grid && !isTV ? gridCardWidth : CARD_WIDTH;
-  const cardHeight = grid && !isTV ? Math.round((gridCardWidth * 9) / 16) : CARD_HEIGHT;
+  const gridCardWidth = Math.max(90, Math.floor((width - GUTTER * 2 - CARD_GAP * (columns - 1)) / columns));
+  const cardWidth = grid ? gridCardWidth : CARD_WIDTH;
+  const cardHeight = Math.round((cardWidth * 9) / 16);
 
   useEffect(() => {
     let alive = true;

@@ -44,7 +44,7 @@ export const MovieboxRow = memo(function MovieboxRow({ onOpen, tabId = 1, versio
     return (
       <View style={styles.row}>
         <SectionHeader title="Trending Movies" subtitle="From MovieBox" />
-        <SkeletonLoader columns={isTV ? 7 : 3} cardWidth={POSTER_WIDTH} rows={1} style={styles.loading} />
+        <SkeletonLoader columns={isTV ? 8 : 3} cardWidth={POSTER_WIDTH} rows={1} poster style={styles.loading} />
       </View>
     );
   }

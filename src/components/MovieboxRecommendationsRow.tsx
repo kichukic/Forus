@@ -40,7 +40,7 @@ export const MovieboxRecommendationsRow = memo(function MovieboxRecommendationsR
     return (
       <View style={styles.row}>
         <SectionHeader title="Because you watched" subtitle="From MovieBox" />
-        <SkeletonLoader columns={isTV ? 7 : 3} cardWidth={POSTER_WIDTH} rows={1} style={styles.loading} />
+        <SkeletonLoader columns={isTV ? 8 : 3} cardWidth={POSTER_WIDTH} rows={1} poster style={styles.loading} />
       </View>
     );
   }

@@ -83,7 +83,7 @@ export const CinemasRow = memo(function CinemasRow({
     return (
       <View style={styles.row}>
         <SectionHeader title={title} subtitle={subtitle} />
-        <SkeletonLoader columns={isTV ? 7 : 3} cardWidth={POSTER_WIDTH} rows={1} style={styles.loading} />
+        <SkeletonLoader columns={isTV ? 8 : 3} cardWidth={POSTER_WIDTH} rows={1} poster style={styles.loading} />
       </View>
     );
   }
