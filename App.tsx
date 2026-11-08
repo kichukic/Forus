@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, AppState, BackHandler, Easing, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { BlurTargetView } from 'expo-blur';
+import { Image } from 'expo-image';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
 import { AnimatedSplash } from './src/components/AnimatedSplash';
@@ -12,6 +13,7 @@ import { PlayerShell } from './src/components/PlayerShell';
 import { installErrorHandler, subscribeErrors } from './src/data/errors';
 import { addToHistory, clearHistory, loadHistory, mergeHistories, playableKey, type HistoryEntry } from './src/data/history';
 import { askToRemind, startReminders } from './src/data/reminders';
+import { initBannerFilter } from './src/data/bannerFilter';
 import { useEvent } from './src/hooks/useEvent';
 import { addTransfer, loadTransfers, playableFrom } from './src/data/transfers';
 import { showToast } from './src/data/toasts';
@@ -25,8 +27,9 @@ import { FatalErrorScreen } from './src/screens/FatalErrorScreen';
 import { FilePlayerScreen } from './src/screens/FilePlayerScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { HomeScreen, type HomeHandle } from './src/screens/HomeScreen';
+import { ReelsScreen } from './src/screens/ReelsScreen';
 import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
-import { sendScreenTimeHeartbeat, startChat, useChatStatus } from './src/chat/store';
+import { sendScreenTimeHeartbeat, startChat, useChatStatus, publishWatching } from './src/chat/store';
 import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
 import { onOpenChatRequest } from './src/chat/push';
 import { SendToFriend } from './src/chat/SendToFriend';
@@ -60,12 +63,13 @@ type Screen = NavId | 'torbox';
 installErrorHandler();
 
 // The longest the splash waits for the home screen's data.
-const PRELOAD_TIMEOUT_MS = 8000;
+const PRELOAD_TIMEOUT_MS = 2500;
 // Fresh posters replace the saved ones once there are enough to fill the wall.
 const MIN_FRESH_POSTERS = 16;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
+  const [reelsInitialIndex, setReelsInitialIndex] = useState(0);
   const home = useRef<HomeHandle>(null);
   // Home stays mounted, so returning to it from another tab won't remount and
   // animate it. Ease its layer back in ourselves when it becomes active again;
@@ -77,7 +81,7 @@ export default function App() {
       homeShown.setValue(0);
       Animated.timing(homeShown, {
         toValue: 1,
-        duration: 280,
+        duration: 170,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }).start();
@@ -124,17 +128,32 @@ export default function App() {
     loadHistory().then(setHistory);
     loadTransfers();
     setupTransferNotices();
+    initBannerFilter();
     // Chat is for phones; the TV has no bottom bar to reach it.
     if (!isTV) startChat();
     checkForUpdate().then((u) => {
       if (u) setUpdatePrompt(u);
     });
 
-    // Active screen time heartbeat
+    // Active screen time heartbeat. The keep-alive service can hold the app in
+    // the background, so only count time while a screen is actually on.
+    let active = AppState.currentState === 'active';
     const heartbeatTimer = setInterval(() => {
-      sendScreenTimeHeartbeat(30);
+      if (active) sendScreenTimeHeartbeat(30);
     }, 30000);
-    return () => clearInterval(heartbeatTimer);
+
+    // Trim decoded image memory cache when app goes into background to prevent OS kills
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      active = nextState === 'active';
+      if (nextState === 'background') {
+        Image.clearMemoryCache().catch(() => {});
+      }
+    });
+
+    return () => {
+      clearInterval(heartbeatTimer);
+      appStateSub.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -158,7 +177,7 @@ export default function App() {
     clearSyncedHistory();
   };
 
-  // Watch history follows the chat account: merged with the server's on
+  // Watched titles follow the chat account: merged with the server's on
   // signing in and whenever the app comes back to the front.
   const chatStatus = useChatStatus();
   const latestHistory = useRef(history);
@@ -176,14 +195,28 @@ export default function App() {
     return () => sub.remove();
   }, [chatStatus]);
 
-  // A tapped message notification goes to the Chat tab, which opens the chat;
-  // a full-screen video steps into the corner.
+  // Tell friends what is playing, but only while the screen is actually on and
+  // someone is signed in. Backgrounding stops the card even though the
+  // keep-alive service leaves the chat connection open.
+  useEffect(() => {
+    if (isTV) return;
+    let active = AppState.currentState === 'active';
+    const sync = () => publishWatching(active && chatStatus === 'signedIn' ? playing : null);
+    sync();
+    const sub = AppState.addEventListener('change', (next) => {
+      active = next === 'active';
+      sync();
+    });
+    return () => sub.remove();
+  }, [chatStatus, playing]);
+
+  // A tapped message notification — or a friend on Home — goes to the Chat
+  // tab, which opens the chat; a full-screen video steps into the corner.
   const playingNow = useRef(playing);
   useEffect(() => {
     playingNow.current = playing;
   });
   useEffect(() => {
-    if (isTV) return;
     return onOpenChatRequest(() => {
       setScreen('chat');
       if (playingNow.current) setMini(true);
@@ -266,14 +299,15 @@ export default function App() {
   const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!streamioSeries);
   const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox && !(screen === 'chat' && chatFull);
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
+  const TargetView = isTV ? View : BlurTargetView;
 
   return (
     <SafeAreaProvider>
       <ErrorBoundary label="App">
         <View style={styles.root}>
         <StatusBar hidden={isTV} style="light" />
-        {/* The screens, which the bottom bar's frosted glass blurs. */}
-        <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
+        {/* The screens, which the bottom bar's frosted glass blurs on phone; on TV plain View saves GPU texture capture. */}
+        <TargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
           {/* Home stays mounted so its tabs, rows and scroll position survive. */}
           <Animated.View style={[layer('home'), { opacity: homeShown, transform: [{ translateY: homeLift }] }]}>
             <HomeScreen
@@ -288,9 +322,23 @@ export default function App() {
               onSendRelease={sendRelease}
               onOpenHistory={openHistory}
               onOpenSettings={openSettings}
+              onOpenReels={(_, index) => {
+                setReelsInitialIndex(index ?? 0);
+                setScreen('reels');
+              }}
               ref={home}
             />
           </Animated.View>
+
+          {screen === 'reels' && (
+            <ScreenReveal style={layer('reels')}>
+              <ReelsScreen
+                initialIndex={reelsInitialIndex}
+                history={history}
+                onPlayFullMovie={play}
+              />
+            </ScreenReveal>
+          )}
 
           {screen === 'search' && (
             <ScreenReveal style={layer('search')}>
@@ -388,7 +436,7 @@ export default function App() {
               <TorboxSetupScreen onDone={closeTorbox} />
             </ScreenReveal>
           )}
-        </BlurTargetView>
+        </TargetView>
 
         <TransferToast
           onPlay={(transfer) => {
@@ -425,6 +473,7 @@ export default function App() {
             active={screen as NavId}
             blurTarget={blurTarget}
             onSelect={(id) => {
+              if (id === 'reels') setReelsInitialIndex(0);
               // The bottom bar's Search looks everywhere.
               if (id === 'search') setSearchScope('all');
               setScreen(id);

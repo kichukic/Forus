@@ -3,6 +3,13 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
+config.transformer.getTransformOptions = async () => ({
+  transform: {
+    experimentalImportSupport: false,
+    inlineRequires: true,
+  },
+});
+
 // When enabled, the optional code below will allow Metro to resolve
 // and bundle source files with TV-specific extensions
 // (e.g., *.ios.tv.tsx, *.android.tv.tsx, *.tv.tsx)

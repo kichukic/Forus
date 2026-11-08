@@ -1,13 +1,24 @@
-// Your chat profile: your name, the phone number and email friends find you by
-// (each verified with a code), and signing out.
+// Your chat profile: your picture, your name, the phone number and email
+// friends find you by (each verified with a code), and signing out.
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showToast } from '../data/toasts';
-import { GUTTER, colors } from '../theme';
+import { GUTTER, colors, isTV } from '../theme';
 import { serverAddress } from './api';
-import { removeEmail, removePhone, signOut, updateName, useChat, verifyEmail, verifyPhone } from './store';
+import {
+  changeAvatar,
+  removeEmail,
+  removePhone,
+  signOut,
+  updateName,
+  useChat,
+  verifyEmail,
+  verifyPhone,
+} from './store';
 import { Avatar, Button, Field, Header, chatStyles } from './ui';
 import { Verify, type VerifyKind } from './Verify';
 
@@ -22,6 +33,7 @@ export function ProfileView({ onBack }: { onBack: () => void }) {
   const { me } = useChat();
   const [name, setName] = useState(me?.name ?? '');
   const [saving, setSaving] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [verifying, setVerifying] = useState<VerifyKind | null>(null);
   if (!me) return null;
 
@@ -53,6 +65,54 @@ export function ProfileView({ onBack }: { onBack: () => void }) {
       ],
     );
 
+  // Picks a picture from the phone, crops it square and shrinks it before
+  // sending, so the account stores a small image and the upload stays quick.
+  const pickPhoto = async () => {
+    if (photoBusy) return;
+    setPhotoBusy(true);
+    try {
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+      if (picked.canceled) return;
+      const asset = picked.assets[0];
+      const side = Math.min(asset.width, asset.height);
+      let context = ImageManipulator.manipulate(asset.uri);
+      // The editor normally crops already; this also squares pictures chosen
+      // where editing isn't available.
+      if (side > 0 && (asset.width !== asset.height)) {
+        context = context.crop({
+          originX: Math.round((asset.width - side) / 2),
+          originY: Math.round((asset.height - side) / 2),
+          width: side,
+          height: side,
+        });
+      }
+      const image = await context.resize({ width: 512, height: 512 }).renderAsync();
+      const saved = await image.saveAsync({ base64: true, compress: 0.78, format: SaveFormat.JPEG });
+      if (!saved.base64) throw new Error("That picture couldn't be read.");
+      await changeAvatar(`data:image/jpeg;base64,${saved.base64}`);
+      showToast({ text: 'Photo saved' });
+    } catch (e) {
+      showToast({ text: (e as Error).message });
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const confirmRemovePhoto = () =>
+    Alert.alert('Remove your photo?', 'Friends will see your initial instead.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => act(() => changeAvatar(null), 'Photo removed'),
+      },
+    ]);
+
   const verifyTitle =
     verifying === 'email'
       ? me.email && me.emailVerified
@@ -67,7 +127,25 @@ export function ProfileView({ onBack }: { onBack: () => void }) {
       <Header title="Profile" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.top}>
-          <Avatar name={me.name} id={me.id} size={84} />
+          <Avatar name={me.name} id={me.id} avatar={me.avatar} size={84} />
+          {isTV ? null : (
+            <View style={styles.photoRow}>
+              <Button
+                label={photoBusy ? 'Saving…' : me.avatar ? 'Change photo' : 'Add photo'}
+                kind="plain"
+                onPress={pickPhoto}
+                disabled={photoBusy || saving}
+              />
+              {me.avatar ? (
+                <Button
+                  label="Remove"
+                  kind="plain"
+                  onPress={confirmRemovePhoto}
+                  disabled={photoBusy || saving}
+                />
+              ) : null}
+            </View>
+          )}
         </View>
 
         <Text style={styles.label}>Name</Text>
@@ -180,6 +258,7 @@ function Contact({
 const styles = StyleSheet.create({
   content: { paddingHorizontal: GUTTER, paddingBottom: 160 },
   top: { alignItems: 'center', marginVertical: 12 },
+  photoRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   label: { color: colors.muted, fontSize: 12.5, fontWeight: '800', marginTop: 22, marginBottom: 8 },
   hint: { fontSize: 13, marginBottom: 12 },
   save: { marginTop: 10 },

@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+  <application>
+    <!--
+      A foreground service keeps this process (and with it the chat's
+      Socket.IO connection) alive while the app is in the background. The
+      remoteMessaging type fits a messaging app and has no time limit, unlike
+      dataSync which Android 15 stops after six hours a day.
+    -->
+    <service
+      android:name=".ChatKeepAliveService"
+      android:exported="false"
+      android:foregroundServiceType="remoteMessaging"
+      android:stopWithTask="false" />
+  </application>
+</manifest>

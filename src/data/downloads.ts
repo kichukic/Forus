@@ -57,7 +57,6 @@ export async function setupDownloadNotifications() {
       name: 'Completed Downloads',
       importance: Notifications.AndroidImportance.HIGH,
       lightColor: colors.accent,
-      sound: 'default',
       enableVibrate: true,
     });
     channelsConfigured = true;

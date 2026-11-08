@@ -43,8 +43,8 @@ const DEBOUNCE_MS = 700;
 const MIN_SEARCH = 3;
 
 const LIST_PERF = {
-  initialNumToRender: isTV ? 12 : 9,
-  maxToRenderPerBatch: isTV ? 12 : 9,
+  initialNumToRender: isTV ? 24 : 9,
+  maxToRenderPerBatch: isTV ? 24 : 9,
   windowSize: 5,
   updateCellsBatchingPeriod: 50,
   removeClippedSubviews: Platform.OS === 'android',
@@ -71,8 +71,10 @@ export function JackBoxScreen({
   const latest = useRef('');
   const searching = query.trim().length >= MIN_SEARCH;
 
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2) / (isTV ? 230 : 120)));
-  const cardWidth = Math.max(120, Math.floor((width - GUTTER * 2) / columns));
+  const columns = isTV
+    ? Math.min(10, Math.max(6, Math.floor((width - GUTTER * 2) / 128)))
+    : Math.max(2, Math.floor((width - GUTTER * 2) / 120));
+  const cardWidth = Math.floor((width - GUTTER * 2) / columns);
 
   const loadTrending = useCallback(async () => {
     setLoading(true);

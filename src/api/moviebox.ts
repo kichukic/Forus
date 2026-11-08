@@ -126,6 +126,11 @@ type RawSubject = {
   vipInfo?: { requireMemberType?: number; previewSeconds?: number };
   staffList?: { name?: string; character?: string }[];
   dubs?: { subjectId?: string; lanName?: string; lanCode?: string; original?: boolean }[];
+  resourceDetectors?: {
+    resourceId?: string;
+    resolutionList?: RawEpisode[];
+    downloadUrl?: string;
+  }[];
 };
 
 // Whether the service has marked this film as one for adults.
@@ -197,12 +202,11 @@ async function getDevice(): Promise<Device> {
   } catch {
     saved = null;
   }
-  const versionCode = 50020117;
+  const versionCode = 50020133;
   device = {
     deviceId: saved?.deviceId ?? randomHex(32),
     gaid: saved?.gaid ?? randomId(),
     userAgent:
-      saved?.userAgent ??
       `com.community.oneroom/${versionCode} (Linux; U; Android 13; en_US; M2012K11AG; Build/TQ2A.230405.003; Cronet/135.0.7012.3)`,
   };
   if (!saved) AsyncStorage.setItem(DEVICE_KEY, JSON.stringify(device)).catch(() => {});
@@ -212,8 +216,8 @@ async function getDevice(): Promise<Device> {
 function clientInfo(info: Device): string {
   return JSON.stringify({
     package_name: 'com.community.oneroom',
-    version_name: '4.0.01.0813.03',
-    version_code: 50020117,
+    version_name: '4.0.03.1020.03',
+    version_code: 50020133,
     os: 'android',
     os_version: '13',
     install_ch: 'ps',
@@ -380,12 +384,13 @@ export async function browseTabs(): Promise<{ id: number; name: string }[]> {
   for (const bottom of data?.bottomTabs ?? []) {
     for (const sub of bottom.subTabs ?? []) {
       const id = sub.tabId ?? 0;
-      // The tabs that are films, series and shows. The rest are live channels,
+      // The tabs that are films, series, shows and short dramas. The rest are live channels,
       // music, football and games, which are not this app's business.
-      if (!['TrenTab', 'OperateTab', 'SubjTab'].includes(sub.type ?? '')) continue;
+      if (!['TrenTab', 'OperateTab', 'SubjTab', 'ShortTvTab'].includes(sub.type ?? '')) continue;
       if (!id || seen.has(id) || EXCLUDED_TABS.includes(id)) continue;
       seen.add(id);
-      tabs.push({ id, name: sub.name ?? 'Films' });
+      const name = sub.name === 'ShortTV' ? 'Short Drama' : (sub.name ?? 'Films');
+      tabs.push({ id, name });
     }
   }
   return tabs;
@@ -465,14 +470,21 @@ export async function searchSubjects(keyword: string, page = 1): Promise<Moviebo
 }
 
 /** Everything known about one film or series. */
-export async function subjectDetails(id: string): Promise<{ subject: MovieboxSubject; cast: MovieboxCast }> {
+const subjectDetailsCache = new Map<string, { at: number; value: { subject: MovieboxSubject; cast: MovieboxCast; resourceDetectors: RawSubject['resourceDetectors'] } }>();
+const SUBJECT_DETAILS_TTL = 5 * 60 * 1000;
+
+export async function subjectDetails(id: string): Promise<{ subject: MovieboxSubject; cast: MovieboxCast; resourceDetectors: RawSubject['resourceDetectors'] }> {
+  const held = subjectDetailsCache.get(id);
+  if (held && Date.now() - held.at < SUBJECT_DETAILS_TTL) return held.value;
   const data = await request<RawSubject>('GET', `${BFF}/subject-api/get`, [['subjectId', id]]);
   const subject = toSubject(data ?? {});
   if (!subject) throw new Error('MovieBox has nothing for this title.');
   const cast: MovieboxCast = (data?.staffList ?? [])
     .filter((person) => person?.name)
     .map((person) => ({ name: person.name ?? '', character: person.character ?? '' }));
-  return { subject, cast };
+  const value = { subject, cast, resourceDetectors: data?.resourceDetectors ?? [] };
+  subjectDetailsCache.set(id, { at: Date.now(), value });
+  return value;
 }
 
 export type MovieboxSeason = { season: number; episodes: number; resolution: number };
@@ -561,18 +573,90 @@ export async function seasonEpisodes(
   return [...best.values()].sort((a, b) => a.episode - b.episode);
 }
 
+function isNoticeVideo(url?: string): boolean {
+  if (!url) return false;
+  // The dummy "update your app" video MovieBox serves to trap unofficial
+  // clients. Its filename hash is stable, and it always lives under the
+  // macdn.aoneroom.com/other/YYYY/MM/DD/ path, so both signals are checked.
+  if (url.includes('80da52722ee7de7a4303290af6783424')) return true;
+  if (/macdn\.aoneroom\.com\/other\/\d{4}\/\d{2}\/\d{2}\//.test(url)) return true;
+  return false;
+}
+
 /** The files of one film, or of one episode of a series. */
 export async function playableRows(
   id: string,
   season: number,
   episode: number,
 ): Promise<MovieboxEpisode[]> {
+  // The service's subject details carry the real, signed stream links for a
+  // film (its resourceDetectors). Those are not the dummy "update your app"
+  // video that the resource endpoints hand out, so they are tried first.
+  try {
+    const details = await subjectDetails(id);
+    for (const detector of details.resourceDetectors ?? []) {
+      const list = detector?.resolutionList ?? [];
+      // Even when the detector carries no per-resolution list, it may still
+      // hand out a direct download link, so do not skip it in that case.
+      const matched = list.filter((raw) => {
+        if (season > 0 && raw?.se != null && Number(raw.se) !== season) return false;
+        if (episode > 0 && raw?.ep != null && Number(raw.ep) !== episode) return false;
+        return true;
+      });
+      const source = matched.length > 0 ? matched : list;
+      const rows = source
+        .map((raw) => toEpisode(raw, season === 0 ? (raw?.se ?? 0) : season))
+        .filter((row): row is MovieboxEpisode => row !== null);
+      if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) return rows;
+      // Fall back to the detector's download URL if it is a real link.
+      if (detector?.downloadUrl && !isNoticeVideo(detector.downloadUrl)) {
+        return [
+          {
+            season: season === 0 ? 1 : season,
+            episode: episode === 0 ? 1 : episode,
+            title: '',
+            resolution: 720,
+            size: 0,
+            duration: 0,
+            resourceId: detector.resourceId ?? id,
+            previewUrl: detector.downloadUrl,
+          },
+        ];
+      }
+    }
+  } catch {}
+
   const rows = await fetchRows(id, season, episode);
-  if (rows.length > 0) return rows;
+  if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) return rows;
   // A film is sometimes filed as the first episode of a first season, so the
   // other way round is tried before giving up.
-  if (season === 0 && episode === 0) return fetchRows(id, 1, 1);
-  return [];
+  if (season === 0 && episode === 0) {
+    const s1e1 = await fetchRows(id, 1, 1);
+    if (s1e1.length > 0 && !s1e1.every((r) => isNoticeVideo(r.previewUrl))) return s1e1;
+  }
+  // If the service returned the notice video (e.g. for short dramas) or no rows, resolve via TV shorts API
+  try {
+    const dramaEps = await fetchDramaEpisodes(id);
+    const targetEp = episode === 0 ? 1 : episode;
+    const match = dramaEps.find((e) => e.episode === targetEp) || dramaEps[0];
+    if (match?.streamUrl && !isNoticeVideo(match.streamUrl)) {
+      return [
+        {
+          season: match.season || (season === 0 ? 1 : season),
+          episode: match.episode,
+          title: match.title,
+          resolution: 720,
+          size: 0,
+          duration: match.duration || 0,
+          resourceId: id,
+          previewUrl: match.streamUrl,
+        },
+      ];
+    }
+  } catch {}
+  // Never hand back the "update your app" dummy video as if it were a real file.
+  if (rows.length > 0 && rows.every((r) => isNoticeVideo(r.previewUrl))) return [];
+  return rows;
 }
 
 async function fetchRows(
@@ -623,13 +707,63 @@ export async function directStream(
   id: string,
   episode: MovieboxEpisode,
 ): Promise<MovieboxStream> {
-  const preview: MovieboxStream = {
-    url: episode.previewUrl,
-    size: episode.size,
-    resolution: episode.resolution,
-    whole: false,
-  };
-  if (!episode.resourceId) return preview;
+  // The subject details already hand out the real, signed stream link, so when
+  // the preview is not the dummy "update your app" video it can be played as is.
+  if (episode.previewUrl && !isNoticeVideo(episode.previewUrl)) {
+    return { url: episode.previewUrl, size: episode.size, resolution: episode.resolution, whole: true };
+  }
+
+  // If the preview link is already known to be the update notice video, try the
+  // subject details' resourceDetectors first: they carry the real, signed CDN
+  // links that the resource endpoints hide behind the dummy video.
+  if (isNoticeVideo(episode.previewUrl)) {
+    try {
+      const details = await subjectDetails(id);
+      for (const detector of details.resourceDetectors ?? []) {
+        const list = detector?.resolutionList ?? [];
+        const matched = list.filter((raw) => {
+          if (episode.season > 0 && raw?.se != null && Number(raw.se) !== episode.season) return false;
+          if (episode.episode > 0 && raw?.ep != null && Number(raw.ep) !== episode.episode) return false;
+          return true;
+        });
+        const source = matched.length > 0 ? matched : list;
+        for (const raw of source) {
+          if (raw?.resourceLink && !isNoticeVideo(raw.resourceLink)) {
+            return {
+              url: raw.resourceLink,
+              size: Number(raw.size ?? episode.size),
+              resolution: raw.resolution ?? episode.resolution,
+              whole: true,
+            };
+          }
+        }
+        if (detector?.downloadUrl && !isNoticeVideo(detector.downloadUrl)) {
+          return {
+            url: detector.downloadUrl,
+            size: 0,
+            resolution: episode.resolution || 720,
+            whole: true,
+          };
+        }
+      }
+    } catch {}
+    // Then try the TV shorts API.
+    try {
+      const dramaEps = await fetchDramaEpisodes(id);
+      const targetEp = episode.episode === 0 ? 1 : episode.episode;
+      const match = dramaEps.find((e) => e.episode === targetEp) || dramaEps[0];
+      if (match?.streamUrl && !isNoticeVideo(match.streamUrl)) {
+        return {
+          url: match.streamUrl,
+          size: 0,
+          resolution: 720,
+          whole: true,
+        };
+      }
+    } catch {}
+  }
+
+  if (!episode.resourceId) throw new Error('No playable file for this episode.');
 
   const data = await request<{ list?: { resourceLink?: string; size?: string | number; resolution?: number }[] }>(
     'GET',
@@ -645,7 +779,22 @@ export async function directStream(
   );
   const found = data?.list?.[0];
   const url = found?.resourceLink;
-  if (!url) return preview;
+  if (!url || isNoticeVideo(url)) {
+    try {
+      const dramaEps = await fetchDramaEpisodes(id);
+      const targetEp = episode.episode === 0 ? 1 : episode.episode;
+      const match = dramaEps.find((e) => e.episode === targetEp) || dramaEps[0];
+      if (match?.streamUrl && !isNoticeVideo(match.streamUrl)) {
+        return {
+          url: match.streamUrl,
+          size: 0,
+          resolution: 720,
+          whole: true,
+        };
+      }
+    } catch {}
+    throw new Error('No playable file for this episode.');
+  }
   const size = Number(found?.size ?? episode.size);
   return {
     url,
@@ -719,8 +868,326 @@ export async function recommendations(subject: {
   return [...same, ...rest].slice(0, 12);
 }
 
-/** Drops the saved visitor token, so the next call signs in again. */
+const TV_HOST = 'https://tv.aoneroom.com';
+const TV_BFF = '/wefeed-tv-bff';
+const TV_TOKEN_KEY = 'moviebox-tv-token';
+
+type TvVideoAddress = {
+  url: string;
+  duration?: number;
+  width?: number;
+  height?: number;
+  size?: number;
+  resolution?: string;
+};
+
+function pickBestVideoUrl(addressList?: TvVideoAddress[]): string | null {
+  if (!addressList || addressList.length === 0) return null;
+  const priority = ['720', '1080', '480', '360'];
+  for (const res of priority) {
+    const found = addressList.find((a) => a.resolution === res && a.url && !isNoticeVideo(a.url));
+    if (found) return found.url;
+  }
+  const fallback = addressList.find((a) => a.url && !isNoticeVideo(a.url));
+  return fallback?.url || null;
+}
+
+let tvToken: string | null = null;
+let tvSigningIn: Promise<string> | null = null;
+
+async function storedTvToken(): Promise<string | null> {
+  if (tvToken) return tvToken;
+  try {
+    tvToken = await AsyncStorage.getItem(TV_TOKEN_KEY);
+  } catch {
+    tvToken = null;
+  }
+  return tvToken;
+}
+
+async function signInTv(): Promise<string> {
+  const body = await tvRequest<{ token?: string }>(
+    'POST',
+    `${TV_BFF}/user/visitor-login`,
+    [],
+    {},
+    false,
+  );
+  const fresh = body?.token;
+  if (!fresh) throw new Error('MovieBox TV would not let the app in.');
+  tvToken = fresh;
+  AsyncStorage.setItem(TV_TOKEN_KEY, fresh).catch(() => {});
+  return fresh;
+}
+
+async function getTvToken(): Promise<string> {
+  const saved = await storedTvToken();
+  if (saved) return saved;
+  if (!tvSigningIn) {
+    tvSigningIn = signInTv().finally(() => {
+      tvSigningIn = null;
+    });
+  }
+  return tvSigningIn;
+}
+
+function tvClientInfo(info: Device): string {
+  return JSON.stringify({
+    package_name: 'com.community.mbox.tv',
+    version_name: '1.1.6.0723.03',
+    version_code: 50040011,
+    os: 'android',
+    os_version: '13',
+    install_ch: 'ps',
+    device_id: info.deviceId,
+    install_store: 'ps',
+    gaid: info.gaid,
+    brand: 'Xiaomi',
+    model: 'M2012K11AG',
+    system_language: 'en',
+    net: 'NETWORK_WIFI',
+    region: 'US',
+    timezone: 'Asia/Kolkata',
+    sp_code: '40401',
+    'X-Play-Mode': '2',
+  });
+}
+
+async function tvRequest<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  params: Param[] = [],
+  body?: unknown,
+  auth = true,
+  attempt = 0,
+): Promise<T | null> {
+  const query = params.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&');
+  const fullPath = query ? `${path}?${query}` : path;
+  const payload = body === undefined ? undefined : JSON.stringify(body);
+  const ts = Date.now();
+  const info = await getDevice();
+
+  const canonical = [
+    method,
+    'application/json',
+    'application/json',
+    payload === undefined ? '' : String(utf8Bytes(payload).length),
+    String(ts),
+    payload === undefined ? '' : md5Hex(payload),
+    canonicalQuery(params) ? `${path}?${canonicalQuery(params)}` : path,
+  ].join('\n');
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    Connection: 'keep-alive',
+    'x-client-token': `${ts},${md5Hex(String(ts).split('').reverse().join(''))}`,
+    'x-tr-signature': `${ts}|2|${hmacMd5Base64(hexBytes(SECRET), canonical)}`,
+    'x-client-info': tvClientInfo(info),
+    'x-client-status': '0',
+    'x-forwarded-for': forwardedFor(),
+    'User-Agent': 'com.community.mbox.tv/50040011 (Linux; U; Android 13; en_US; M2012K11AG)',
+  };
+  if (auth) headers.Authorization = `Bearer ${await getTvToken()}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${TV_HOST}${fullPath}`, {
+      method,
+      headers,
+      body: payload,
+      signal: controller.signal,
+    });
+    if (res.status === 401 || res.status === 407) {
+      if (attempt === 0) {
+        tvToken = null;
+        AsyncStorage.removeItem(TV_TOKEN_KEY).catch(() => {});
+        return tvRequest<T>(method, path, params, body, auth, 1);
+      }
+      return null;
+    }
+    if (!res.ok) return null;
+    const json: any = await res.json();
+    if (json?.code !== 0) return null;
+    return (json?.data as T) ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Drops the saved visitor tokens, so the next call signs in again. */
 export function forgetMovieboxToken(): void {
   token = null;
+  tvToken = null;
   AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
+  AsyncStorage.removeItem(TV_TOKEN_KEY).catch(() => {});
 }
+
+/** Tab 13 is MovieBox ShortTV / Short Dramas */
+export const SHORT_DRAMA_TAB_ID = 13;
+
+/**
+ * Loads short drama subjects from MovieBox ShortTV shelves.
+ */
+export async function shortDramaSubjects(): Promise<MovieboxSubject[]> {
+  const shelves = await browseShelves(SHORT_DRAMA_TAB_ID).catch(() => [] as MovieboxShelf[]);
+  const subjects: MovieboxSubject[] = [];
+  const seen = new Set<string>();
+  for (const shelf of shelves) {
+    for (const item of shelf.subjects) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      subjects.push(item);
+    }
+  }
+  return subjects;
+}
+
+export type ShortDramaEpisode = {
+  season: number;
+  episode: number;
+  title: string;
+  streamUrl: string;
+  duration?: number;
+};
+
+const dramaEpisodesCache = new Map<string, ShortDramaEpisode[]>();
+
+/**
+ * Loads all playable episodes for a drama series by its MovieBox subject ID.
+ */
+export async function fetchDramaEpisodes(subjectId: string): Promise<ShortDramaEpisode[]> {
+  const held = dramaEpisodesCache.get(subjectId);
+  if (held && held.length > 0) return held;
+
+  try {
+    const data = await tvRequest<{
+      pager?: { page: number; perPage: number; totalCount: number; hasMore: boolean };
+      items?: {
+        se?: number;
+        ep: number;
+        title?: string;
+        video?: { addressList?: TvVideoAddress[] };
+        duration?: number;
+      }[];
+    }>('GET', `${TV_BFF}/shorts/mini-list`, [
+      ['page', '1'],
+      ['perPage', '50'],
+      ['subjectId', subjectId],
+    ]);
+
+    const items = data?.items ?? [];
+    const episodes: ShortDramaEpisode[] = [];
+    for (const item of items) {
+      const url = pickBestVideoUrl(item.video?.addressList);
+      if (!url || isNoticeVideo(url)) continue;
+      episodes.push({
+        season: item.se || 1,
+        episode: item.ep,
+        title: item.title || `Episode ${item.ep}`,
+        streamUrl: url,
+        duration: item.video?.addressList?.[0]?.duration ?? item.duration,
+      });
+    }
+
+    let page = 1;
+    let hasMore = Boolean(data?.pager?.hasMore);
+    while (hasMore && page < 5) {
+      page++;
+      const nextData = await tvRequest<{
+        pager?: { hasMore: boolean };
+        items?: {
+          se?: number;
+          ep: number;
+          title?: string;
+          video?: { addressList?: TvVideoAddress[] };
+          duration?: number;
+        }[];
+      }>('GET', `${TV_BFF}/shorts/mini-list`, [
+        ['page', String(page)],
+        ['perPage', '50'],
+        ['subjectId', subjectId],
+      ]);
+      const nextItems = nextData?.items ?? [];
+      for (const item of nextItems) {
+        const url = pickBestVideoUrl(item.video?.addressList);
+        if (!url || isNoticeVideo(url)) continue;
+        episodes.push({
+          season: item.se || 1,
+          episode: item.ep,
+          title: item.title || `Episode ${item.ep}`,
+          streamUrl: url,
+          duration: item.video?.addressList?.[0]?.duration ?? item.duration,
+        });
+      }
+      hasMore = Boolean(nextData?.pager?.hasMore);
+    }
+
+    if (episodes.length > 0) {
+      dramaEpisodesCache.set(subjectId, episodes);
+      return episodes;
+    }
+  } catch {}
+
+  // Legacy fallback if TV API returned nothing
+  try {
+    const seasons = await seasonList(subjectId);
+    const maxEp = seasons[0]?.episodes || 20;
+    const season = seasons[0]?.season || 1;
+    const list = await seasonEpisodes(subjectId, season, maxEp);
+
+    const fallbackEpisodes: ShortDramaEpisode[] = list
+      .filter((ep) => Boolean(ep.previewUrl) && !isNoticeVideo(ep.previewUrl))
+      .map((ep) => ({
+        season: ep.season,
+        episode: ep.episode,
+        title: ep.title || `Episode ${ep.episode}`,
+        streamUrl: ep.previewUrl,
+        duration: ep.duration,
+      }));
+
+    if (fallbackEpisodes.length > 0) {
+      dramaEpisodesCache.set(subjectId, fallbackEpisodes);
+    }
+    return fallbackEpisodes;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolves episode 1 playable stream for a short drama subject.
+ */
+export async function shortDramaEpisode1(subjectId: string): Promise<string | null> {
+  try {
+    const data = await tvRequest<{ firstEp?: { video?: { addressList?: TvVideoAddress[] } } }>(
+      'GET',
+      `${TV_BFF}/shorts/get-info`,
+      [['subjectId', subjectId]],
+    );
+    const list = data?.firstEp?.video?.addressList;
+    const url = pickBestVideoUrl(list);
+    if (url && !isNoticeVideo(url)) return url;
+  } catch {}
+
+  // Try drama episodes list
+  try {
+    const eps = await fetchDramaEpisodes(subjectId);
+    const first = eps.find((e) => e.episode === 1) || eps[0];
+    if (first?.streamUrl && !isNoticeVideo(first.streamUrl)) return first.streamUrl;
+  } catch {}
+
+  // Legacy fallback to playableRows if not notice video
+  try {
+    const rows = await playableRows(subjectId, 1, 1);
+    const link = rows[0]?.previewUrl;
+    if (link && !isNoticeVideo(link)) return link;
+  } catch {}
+
+  return null;
+}
+
+

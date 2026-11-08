@@ -32,6 +32,12 @@ import { ListFrame } from '../components/ListFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
+import { MovieboxRecommendationsRow } from '../components/MovieboxRecommendationsRow';
+import { CinemasRow } from '../components/CinemasRow';
+import { ReelsHomeRow } from '../components/ReelsHomeRow';
+import { FriendsOnlineRow, FriendsWatchingRow } from '../components/FriendsNow';
+import { TonightBanner, TonightModal } from '../components/TonightModal';
+import type { ReelItem } from '../api/reels';
 import { SectionHeader } from '../components/Section';
 import { TorboxRow } from '../components/TorboxRow';
 import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
@@ -79,14 +85,7 @@ const HINDI_THEMES = THEMES.filter((t) => t.kind === 'hindi');
 // The All tab is a mix of everything, so it carries the themed rows of the
 // other tabs as well.
 const ALL_THEMES = [...MOVIE_THEMES, ...SHOW_THEMES, ...HINDI_THEMES];
-const HERO_ALL_SOURCES = [
-  MOVIES[0],
-  SHOWS[0],
-  MOVIES[1],
-  SHOWS[1],
-  MOVIES[2],
-  SHOWS[4],
-];
+const HERO_ALL_SOURCES = MOVIES;
 // Where each tab was left. Only the tab in front is mounted, so the place is
 // kept here instead of in the tab itself.
 const scrollPositions = new Map<string, number>();
@@ -130,6 +129,8 @@ type Props = {
   onOpenStreamioSeries: (item: StreamioItem) => void;
   // Sends a release found by searching to TorBox.
   onSendRelease: (option: TorrentOption) => void;
+  // Opens full screen reels starting at a specific reel.
+  onOpenReels?: (item?: ReelItem, index?: number) => void;
   // TV has no bottom bar, so these sit in the header there.
   onOpenHistory: () => void;
   onOpenSettings: () => void;
@@ -162,6 +163,7 @@ function HomeScreenView({
   onSendRelease,
   onOpenHistory,
   onOpenSettings,
+  onOpenReels,
   ref,
 }: Props) {
   // Keeps the header clear of a phone's status bar and notch. Zero on TVs.
@@ -170,6 +172,8 @@ function HomeScreenView({
   // Bumped on refresh; the rows are keyed on it, so they remount and refetch.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  // The concierge is a sheet over Home, not a page of its own.
+  const [tonightOpen, setTonightOpen] = useState(false);
 
   // Which way the content slides in: from the right when moving to a tab
   // further along, from the left when moving back.
@@ -224,7 +228,7 @@ function HomeScreenView({
       pillX.setValue(layout.x);
       pillWidth.setValue(layout.width);
     } else {
-      const spring = { useNativeDriver: false, speed: 18, bounciness: 7 };
+      const spring = { useNativeDriver: false, speed: 26, bounciness: 3 };
       Animated.parallel([
         Animated.spring(pillX, { toValue: layout.x, ...spring }),
         Animated.spring(pillWidth, { toValue: layout.width, ...spring }),
@@ -328,8 +332,8 @@ function HomeScreenView({
 
   return (
     <View style={styles.screen}>
-      {/* The purple haze behind the header. */}
-      <LinearGradient colors={GLOW} style={styles.glow} pointerEvents="none" />
+      {/* The purple haze behind the header (mobile only to eliminate overdraw on TV). */}
+      {!isTV && <LinearGradient colors={GLOW} style={styles.glow} pointerEvents="none" />}
 
       <View style={[styles.top, { paddingTop: insets.top + (sz(8, 24)) }]}>
         {/* Frosted glass that rises behind the header as the hero collapses. */}
@@ -400,15 +404,27 @@ function HomeScreenView({
           refreshKey={refreshKey}
           onPlay={playVideo}
         >
+          {/* A concierge for the evening, then the people who are around. */}
+          <TonightBanner onPress={() => setTonightOpen(true)} />
+          <FriendsOnlineRow />
+          <FriendsWatchingRow onPlay={onPlay} />
+
           {/* The news channels lead the page: they are what's on right now. */}
           {liveRow}
           <HeroCarousel
             key={`hero-all-${refreshKey}`}
             sources={HERO_ALL_SOURCES}
-            label="New today"
+            label="Featured movie"
             onPlay={playVideo}
             // On TV the remote starts on Watch Now, until Back sends it to the tabs.
             takeFocus={focusTabs === 0 && launchFocus}
+          />
+
+          {/* Latest cinema releases currently in theaters */}
+          <CinemasRow
+            key={`cinemas-row-${refreshKey}`}
+            version={refreshKey}
+            onOpenMovie={onOpenMovie}
           />
 
           {/* A row of films from MovieBox, so the page holds everything. */}
@@ -417,6 +433,16 @@ function HomeScreenView({
             version={refreshKey}
             onOpen={onOpenMoviebox}
           />
+
+          {/* Personalised from the last MovieBox film watched. */}
+          <MovieboxRecommendationsRow history={history} onOpen={onOpenMoviebox} />
+
+          {/* Quick-access row of vertical trending Reels & Shorts */}
+          {onOpenReels && (
+            <ReelsHomeRow
+              onOpenReel={(reel, idx) => onOpenReels(reel, idx)}
+            />
+          )}
 
           {history.length > 0 && (
             <View style={styles.row}>
@@ -449,6 +475,13 @@ function HomeScreenView({
         'movies',
         <TabScroll refreshControl={refreshControl} themes={MOVIE_THEMES} tabKey="movies" refreshKey={refreshKey} onPlay={playVideo}>
           <HeroCarousel key={`hero-movies-${refreshKey}`} sources={MOVIES} label="Trending movie" onPlay={playVideo} />
+          <CinemasRow
+            key={`cinemas-movies-${refreshKey}`}
+            title="Now In Theaters"
+            subtitle="Current box office releases"
+            version={refreshKey}
+            onOpenMovie={onOpenMovie}
+          />
           {MOVIES.map((source) => (
             <VideoRow key={`${source.channelId}-${refreshKey}`} source={source} onPlay={playVideo} />
           ))}
@@ -548,6 +581,13 @@ function HomeScreenView({
           onPlay={onPlay}
         />,
       )}
+
+      <TonightModal
+        visible={tonightOpen}
+        onClose={() => setTonightOpen(false)}
+        onOpenMoviebox={onOpenMoviebox}
+        recentTitles={history.slice(0, 6).map((item) => item.title)}
+      />
     </View>
   );
 }
@@ -657,13 +697,13 @@ function TabScroll({ children, refreshControl, themes = [], refreshKey = 0, onPl
           // An exact height on TV; see ListFrame.
           style={height ? { height } : styles.panel}
           contentContainerStyle={styles.content}
-          // On TV render enough rows initially to prevent focus traps and layout glitches.
-          initialNumToRender={isTV ? 6 : 2}
-          maxToRenderPerBatch={isTV ? 4 : 1}
-          windowSize={isTV ? 7 : 7}
-          updateCellsBatchingPeriod={60}
-          // The remote's focus search needs the rows near the screen attached.
-          removeClippedSubviews={false}
+          // On low-power TV keep memory footprint tight: 3 rows initial, 3 windowSize to stop GC thrashing.
+          initialNumToRender={isTV ? 3 : 2}
+          maxToRenderPerBatch={isTV ? 2 : 1}
+          windowSize={isTV ? 3 : 5}
+          updateCellsBatchingPeriod={isTV ? 80 : 50}
+          // The remote's focus search needs the rows near the screen attached; mobile detaches to save memory.
+          removeClippedSubviews={!isTV}
           // More themed rows once the end is a screen or so away.
           onEndReached={() => setThemeCount((n) => Math.min(n + THEMES_PER_STEP, themes.length))}
           onEndReachedThreshold={1.2}
@@ -694,7 +734,7 @@ function SlideIn({ direction, children }: { direction: number; children: ReactNo
   useEffect(() => {
     Animated.timing(progress, {
       toValue: 1,
-      duration: isTV ? 220 : 320,
+      duration: isTV ? 200 : 180,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();

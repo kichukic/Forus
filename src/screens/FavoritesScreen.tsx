@@ -1,8 +1,9 @@
 // The Favorites screen: a dedicated sanctuary for all movies, series,
 // TorBox files, and videos the user has hearted across the app.
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import {
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -17,7 +18,7 @@ import { useFavorites, type FavoriteItem } from '../data/favorites';
 import { FavoriteHeart } from '../components/FavoriteHeart';
 import { useNavScrollHide } from '../data/navChrome';
 import { posterColour } from '../components/MovieboxPoster';
-import { CARD_GAP, GUTTER, colors, sz, RADIUS } from '../theme';
+import { CARD_GAP, GUTTER, colors, isTV, sz, RADIUS } from '../theme';
 import type { Playable } from '../types';
 import type { MovieboxSubject } from '../api/moviebox';
 
@@ -103,7 +104,10 @@ export function FavoritesScreen({ onPlay, onOpenMoviebox, onGoHome }: Props) {
   };
 
   const { width } = useWindowDimensions();
-  const columns = Math.max(2, Math.floor((width - GUTTER * 2 + CARD_GAP) / (sz(150, 190) + CARD_GAP)));
+  const targetColWidth = isTV ? 128 : 150;
+  const columns = isTV
+    ? Math.min(10, Math.max(6, Math.floor((width - GUTTER * 2 + CARD_GAP) / (targetColWidth + CARD_GAP))))
+    : Math.max(2, Math.floor((width - GUTTER * 2 + CARD_GAP) / (targetColWidth + CARD_GAP)));
   const cardWidth = (width - GUTTER * 2 - CARD_GAP * (columns - 1)) / columns;
 
   const counts = useMemo(
@@ -213,6 +217,11 @@ export function FavoritesScreen({ onPlay, onOpenMoviebox, onGoHome }: Props) {
           key={columns}
           data={filtered}
           numColumns={columns}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          maxToRenderPerBatch={isTV ? 16 : 4}
+          initialNumToRender={isTV ? 16 : 6}
+          updateCellsBatchingPeriod={50}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[styles.grid, { paddingBottom: insets.bottom + 110 }]}
           onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
@@ -231,7 +240,7 @@ export function FavoritesScreen({ onPlay, onOpenMoviebox, onGoHome }: Props) {
   );
 }
 
-function FavoriteCard({
+const FavoriteCard = memo(function FavoriteCard({
   item,
   width,
   onPress,
@@ -248,71 +257,76 @@ function FavoriteCard({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
+      style={({ focused, pressed }) => [
         styles.cardWrap,
         { width, marginRight: isEndColumn ? 0 : CARD_GAP },
         pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+        focused && styles.cardFocused,
       ]}
     >
-      <View style={styles.cardPoster}>
-        {showFallback ? (
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              styles.posterFallback,
-              { backgroundColor: posterColour(item.title) },
-            ]}
-          >
-            <Ionicons
-              name={item.kind === 'file' ? 'folder-outline' : item.kind === 'video' ? 'logo-youtube' : 'film-outline'}
-              size={sz(28, 34)}
-              color="rgba(255,255,255,0.7)"
-            />
-            <Text style={styles.fallbackText} numberOfLines={2}>
-              {item.title}
-            </Text>
+      {({ focused }: { focused?: boolean }) => (
+        <>
+          <View style={[styles.cardPoster, focused && styles.cardPosterFocused]}>
+            {showFallback ? (
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  styles.posterFallback,
+                  { backgroundColor: posterColour(item.title) },
+                ]}
+              >
+                <Ionicons
+                  name={item.kind === 'file' ? 'folder-outline' : item.kind === 'video' ? 'logo-youtube' : 'film-outline'}
+                  size={sz(28, 34)}
+                  color="rgba(255,255,255,0.7)"
+                />
+                <Text style={styles.fallbackText} numberOfLines={2}>
+                  {item.title}
+                </Text>
+              </View>
+            ) : (
+              <Image
+                source={{ uri: item.poster }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                transition={150}
+                cachePolicy="memory-disk"
+                onError={() => setImgError(true)}
+              />
+            )}
+
+            {/* Rating */}
+            {item.rating ? (
+              <View style={styles.ratingBadge}>
+                <Ionicons name="star" size={sz(10, 11)} color="#ffd166" />
+                <Text style={styles.ratingText}>{item.rating}</Text>
+              </View>
+            ) : null}
+
+            {/* Heart action */}
+            <View style={styles.heartContainer}>
+              <FavoriteHeart item={item} size={sz(16, 18)} />
+            </View>
+
+            {/* Kind badge */}
+            <View style={styles.kindBadge}>
+              <Text style={styles.kindBadgeText}>
+                {item.kind === 'moviebox' ? 'MovieBox' : item.kind === 'file' ? 'TorBox' : 'Video'}
+              </Text>
+            </View>
           </View>
-        ) : (
-          <Image
-            source={{ uri: item.poster }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            transition={150}
-            cachePolicy="memory-disk"
-            onError={() => setImgError(true)}
-          />
-        )}
 
-        {/* Rating */}
-        {item.rating ? (
-          <View style={styles.ratingBadge}>
-            <Ionicons name="star" size={sz(10, 11)} color="#ffd166" />
-            <Text style={styles.ratingText}>{item.rating}</Text>
-          </View>
-        ) : null}
-
-        {/* Heart action */}
-        <View style={styles.heartContainer}>
-          <FavoriteHeart item={item} size={sz(16, 18)} />
-        </View>
-
-        {/* Kind badge */}
-        <View style={styles.kindBadge}>
-          <Text style={styles.kindBadgeText}>
-            {item.kind === 'moviebox' ? 'MovieBox' : item.kind === 'file' ? 'TorBox' : 'Video'}
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {item.title}
           </Text>
-        </View>
-      </View>
-
-      <Text style={styles.cardTitle} numberOfLines={2}>
-        {item.title}
-      </Text>
-      <Text style={styles.cardSub} numberOfLines={1}>
-        {[item.year, item.genre?.split(',')[0], item.channel].filter(Boolean).join(' · ')}
-      </Text>
+          <Text style={styles.cardSub} numberOfLines={1}>
+            {[item.year, item.genre?.split(',')[0], item.channel].filter(Boolean).join(' · ')}
+          </Text>
+        </>
+      )}
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
@@ -399,6 +413,10 @@ const styles = StyleSheet.create({
   cardWrap: {
     marginBottom: 16,
   },
+  cardFocused: {
+    transform: [{ scale: 1.05 }],
+    zIndex: 2,
+  },
   cardPoster: {
     width: '100%',
     aspectRatio: 2 / 3,
@@ -407,6 +425,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     position: 'relative',
     marginBottom: 8,
+  },
+  cardPosterFocused: {
+    borderWidth: 2,
+    borderColor: colors.accent,
   },
   posterFallback: {
     alignItems: 'center',

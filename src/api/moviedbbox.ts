@@ -87,6 +87,19 @@ export async function fetchMovieDbTrending(type: MovieDbType, page = 1): Promise
   return result;
 }
 
+export async function fetchMovieDbNowPlaying(page = 1): Promise<MovieDbItem[]> {
+  const key = `moviedb:now_playing:${page}`;
+  const cached = await getCached<MovieDbItem[]>(key);
+  if (cached) return cached;
+  const body = await getJson(`${TMDB}/movie/now_playing?api_key=${TMDB_KEY}&page=${page}`);
+  const list = (body?.results ?? []) as Raw[];
+  const result = list
+    .map((r) => toRaw({ ...r, media_type: 'movie' }, 'movie'))
+    .filter((x): x is MovieDbItem => x !== null);
+  await setCached(key, result, 10 * 60 * 1000);
+  return result;
+}
+
 export async function fetchMovieDbSearch(query: string, page = 1): Promise<MovieDbItem[]> {
   const key = `moviedb:search:${query.trim().toLowerCase()}:${page}`;
   const cached = await getCached<MovieDbItem[]>(key);

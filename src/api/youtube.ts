@@ -101,13 +101,14 @@ function ageToDate(age?: string): string {
 const VIDEOS_TAB = 'EgZ2aWRlb3PyBgQKAjoA';
 
 // A channel's latest long-form uploads from the browse endpoint: the Videos
-// tab, or the UULF list if the tab comes back empty.
+// tab, or the UULF list if the tab comes back empty or has few items.
 async function browseLatest(channelId: string): Promise<Video[]> {
-  const lockups =
-    (await browseLockups({ browseId: channelId, params: VIDEOS_TAB })) ??
-    (await browseLockups({ browseId: `VLUULF${channelId.slice(2)}` })) ??
-    [];
-  return lockups.map((l) => ({
+  let lockups = await browseLockups({ browseId: channelId, params: VIDEOS_TAB });
+  if (!lockups || lockups.length < 25) {
+    const fullList = await browseLockups({ browseId: `VLUULF${channelId.slice(2)}` });
+    if (fullList && fullList.length > (lockups?.length ?? 0)) lockups = fullList;
+  }
+  return (lockups ?? []).map((l) => ({
     id: l.id,
     title: l.title,
     published: ageToDate(l.age),
@@ -247,7 +248,7 @@ export type SearchResult = Video & { channel: string; duration?: string; live: b
 
 const SEARCH_URL = 'https://www.youtube.com/youtubei/v1/search?prettyPrint=false';
 const SEARCH_CLIENT = { clientName: 'WEB', clientVersion: '2.20250101.00.00', hl: 'en', gl: 'IN' };
-const MAX_PAGES = 3;
+const MAX_PAGES = 4;
 const ENOUGH_RESULTS = 15;
 
 export type SearchPage = { results: SearchResult[]; continuation?: string };

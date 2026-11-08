@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,7 +32,7 @@ import { posterColour, MovieboxPoster, POSTER_WIDTH } from '../components/Movieb
 import { ReleaseList } from '../components/ReleaseList';
 import { cleanTitle } from '../components/VideoRow';
 import { FULL_MOVIE, SCOPE_CHANNELS, type SearchScope } from '../data/channels';
-import { CARD_GAP, GUTTER, colors, sz } from '../theme';
+import { CARD_GAP, GUTTER, colors, isTV, sz } from '../theme';
 import type { Playable } from '../types';
 
 type Props = {
@@ -370,7 +371,10 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
 
   // The grid reflows when the phone rotates.
   const { width } = useWindowDimensions();
-  const columns = Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / ((sz(200, 230)) + CARD_GAP)));
+  const targetColWidth = isTV ? 190 : 200;
+  const columns = isTV
+    ? Math.min(6, Math.max(4, Math.floor((width - GUTTER * 2 + CARD_GAP) / (targetColWidth + CARD_GAP))))
+    : Math.max(1, Math.floor((width - GUTTER * 2 + CARD_GAP) / (targetColWidth + CARD_GAP)));
   const cardWidth = (width - GUTTER * 2 - CARD_GAP * (columns - 1)) / columns;
 
   return (
@@ -389,7 +393,6 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
           onChangeText={setQuery}
           placeholder={vibeMode ? 'Describe a mood, plot, or vibe…' : text.placeholder}
           placeholderTextColor={colors.muted}
-          autoFocus
           autoCorrect={false}
           returnKeyType="search"
           style={styles.input}
@@ -520,6 +523,11 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
           onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
           scrollEventThrottle={48}
           numColumns={columns}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          maxToRenderPerBatch={isTV ? 12 : 4}
+          initialNumToRender={isTV ? 12 : 4}
+          updateCellsBatchingPeriod={50}
           keyExtractor={(video) => `yt:${video.id}`}
           contentContainerStyle={styles.grid}
           ListHeaderComponent={

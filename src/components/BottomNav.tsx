@@ -2,8 +2,17 @@
 // blurs the screen behind it. The other tabs are just icons; the selected one
 // opens into a purple pill with its icon and name, and springs across when
 // another is chosen. TVs use the tabs at the top instead.
-import { useEffect, useMemo, useState, type RefObject } from 'react';
-import { Animated, LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import {
+  Animated,
+  type GestureResponderHandlers,
+  LayoutAnimation,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +23,7 @@ import { useNavHidden } from '../data/navChrome';
 import { Badge } from '../chat/ui';
 import { colors } from '../theme';
 
-export type NavId = 'home' | 'search' | 'favorites' | 'downloads' | 'history' | 'chat' | 'settings' | 'admin';
+export type NavId = 'home' | 'reels' | 'search' | 'favorites' | 'downloads' | 'history' | 'chat' | 'settings' | 'admin';
 
 export type NavItem = {
   id: NavId;
@@ -25,6 +34,7 @@ export type NavItem = {
 
 const BASE_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
+  { id: 'reels', label: 'Reels', icon: 'film-outline', activeIcon: 'film' },
   { id: 'search', label: 'Search', icon: 'search-outline', activeIcon: 'search' },
   { id: 'favorites', label: 'Favorites', icon: 'heart-outline', activeIcon: 'heart' },
   { id: 'downloads', label: 'Downloads', icon: 'arrow-down-circle-outline', activeIcon: 'arrow-down-circle' },
@@ -37,10 +47,10 @@ export const BOTTOM_NAV_HEIGHT = 64;
 
 // The selected tab's pill opening and the others making room, as one spring.
 const SWITCH = {
-  duration: 380,
-  create: { type: LayoutAnimation.Types.spring, property: LayoutAnimation.Properties.scaleXY, springDamping: 0.75 },
-  update: { type: LayoutAnimation.Types.spring, springDamping: 0.75 },
-  delete: { type: LayoutAnimation.Types.easeOut, property: LayoutAnimation.Properties.opacity, duration: 120 },
+  duration: 220,
+  create: { type: LayoutAnimation.Types.spring, property: LayoutAnimation.Properties.scaleXY, springDamping: 0.82 },
+  update: { type: LayoutAnimation.Types.spring, springDamping: 0.82 },
+  delete: { type: LayoutAnimation.Types.easeOut, property: LayoutAnimation.Properties.opacity, duration: 100 },
 };
 
 type Props = {
@@ -73,6 +83,7 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
   // Tucked below the screen edge while the user scrolls down through a list.
   const hidden = useNavHidden();
   const [slide] = useState(() => new Animated.Value(0));
+  const [dragX] = useState(() => new Animated.Value(0));
   // How far the bar travels to clear the edge, its padding and its shadow.
   const travel = BOTTOM_NAV_HEIGHT + insets.bottom + 34;
   useEffect(() => {
@@ -80,7 +91,7 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
     // come from one 0..1 value so they move together.
     Animated.spring(slide, {
       toValue: hidden ? 1 : 0,
-      speed: 12,
+      speed: 24,
       bounciness: 0,
       useNativeDriver: true,
     }).start();
@@ -93,12 +104,93 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
     onSelect(id);
   };
 
+  const propsRef = useRef({ active, items, onSelect });
+  useEffect(() => {
+    propsRef.current = { active, items, onSelect };
+  });
+
+  const startIndexRef = useRef<number>(0);
+  const lastSwipedIndexRef = useRef<number>(-1);
+  const hasSwitchedRef = useRef<boolean>(false);
+
+  const [panHandlers, setPanHandlers] = useState<GestureResponderHandlers | undefined>(undefined);
+
+  useEffect(() => {
+    const pan = PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gesture) => {
+        return Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy);
+      },
+      onPanResponderGrant: () => {
+        const { active: curActive, items: curItems } = propsRef.current;
+        const currentIdx = curItems.findIndex((it) => it.id === curActive);
+        startIndexRef.current = currentIdx >= 0 ? currentIdx : 0;
+        lastSwipedIndexRef.current = startIndexRef.current;
+        hasSwitchedRef.current = false;
+      },
+      onPanResponderMove: (_, gesture) => {
+        const { items: curItems, onSelect: curOnSelect } = propsRef.current;
+        const startIdx = startIndexRef.current;
+        const STEP_DISTANCE = 42;
+
+        // Subtle elastic drag translation for visual responsiveness
+        dragX.setValue(Math.min(16, Math.max(-16, gesture.dx * 0.2)));
+
+        // Swiping left (gesture.dx < 0): moves to the left tab (-1, -2...)
+        // Swiping right (gesture.dx > 0): moves to the right tab (+1, +2...)
+        const stepOffset = Math.round(gesture.dx / STEP_DISTANCE);
+        const targetIdx = Math.max(0, Math.min(curItems.length - 1, startIdx + stepOffset));
+
+        if (targetIdx !== lastSwipedIndexRef.current) {
+          lastSwipedIndexRef.current = targetIdx;
+          hasSwitchedRef.current = true;
+          LayoutAnimation.configureNext(SWITCH);
+          curOnSelect(curItems[targetIdx].id);
+        }
+      },
+      onPanResponderRelease: (_, gesture) => {
+        Animated.spring(dragX, { toValue: 0, speed: 24, bounciness: 4, useNativeDriver: true }).start();
+
+        const { items: curItems, onSelect: curOnSelect } = propsRef.current;
+        const startIdx = startIndexRef.current;
+
+        // If continuous drag hasn't stepped yet, check for a quick flick/swipe
+        if (!hasSwitchedRef.current) {
+          // Swiped right: move to right tab
+          if (gesture.dx > 25 || gesture.vx > 0.3) {
+            const nextIdx = Math.min(curItems.length - 1, startIdx + 1);
+            if (nextIdx !== startIdx) {
+              LayoutAnimation.configureNext(SWITCH);
+              curOnSelect(curItems[nextIdx].id);
+            }
+          }
+          // Swiped left: move to left tab
+          else if (gesture.dx < -25 || gesture.vx < -0.3) {
+            const prevIdx = Math.max(0, startIdx - 1);
+            if (prevIdx !== startIdx) {
+              LayoutAnimation.configureNext(SWITCH);
+              curOnSelect(curItems[prevIdx].id);
+            }
+          }
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragX, { toValue: 0, speed: 24, bounciness: 4, useNativeDriver: true }).start();
+      },
+    });
+
+    setPanHandlers(pan.panHandlers);
+  }, [dragX]);
+
   return (
     <Animated.View
       style={[styles.bar, { paddingBottom: insets.bottom + 10, opacity, transform: [{ translateY }] }]}
       pointerEvents="box-none"
     >
-      <View style={styles.shadow}>
+      <Animated.View
+        style={[styles.shadow, { transform: [{ translateX: dragX }] }]}
+        {...panHandlers}
+      >
         <BlurView
           intensity={60}
           tint="dark"
@@ -124,7 +216,7 @@ export function BottomNav({ active, onSelect, blurTarget }: Props) {
             />
           ))}
         </BlurView>
-      </View>
+      </Animated.View>
     </Animated.View>
   );
 }

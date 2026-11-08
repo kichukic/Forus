@@ -2,9 +2,11 @@
 // a text field and buttons, in the app's dark style.
 import type { ComponentProps, ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GUTTER, colors } from '../theme';
+import { avatarUri } from './api';
 
 const AVATAR_COLOURS: [string, string][] = [
   ['#9b5cff', '#5b2fd0'],
@@ -15,8 +17,33 @@ const AVATAR_COLOURS: [string, string][] = [
   ['#ff7a59', '#bf360c'],
 ];
 
-/** A round badge with someone's first letter, in a colour that stays theirs. */
-export function Avatar({ name, id, size = 44 }: { name: string; id: string; size?: number }) {
+/** A round badge with someone's picture, or else their first letter in a
+ * colour that stays theirs. */
+export function Avatar({
+  name,
+  id,
+  avatar,
+  size = 44,
+}: {
+  name: string;
+  id: string;
+  avatar?: string;
+  size?: number;
+}) {
+  const uri = avatarUri(avatar);
+  if (uri) {
+    return (
+      <Image
+        source={uri}
+        style={[styles.avatarImage, { width: size, height: size, borderRadius: size / 2 }]}
+        contentFit="cover"
+        transition={120}
+        cachePolicy="memory-disk"
+        recyclingKey={uri}
+        accessibilityIgnoresInvertColors
+      />
+    );
+  }
   let hash = 0;
   for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) | 0;
   const pair = AVATAR_COLOURS[Math.abs(hash) % AVATAR_COLOURS.length];
@@ -141,6 +168,7 @@ export const chatStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   avatar: { alignItems: 'center', justifyContent: 'center' },
+  avatarImage: { backgroundColor: colors.surface },
   avatarText: { color: '#fff', fontWeight: '900' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: GUTTER, paddingBottom: 12 },
   headerText: { flex: 1 },

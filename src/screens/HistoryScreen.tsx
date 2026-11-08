@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,9 +29,9 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
   // Scrolling the history grid down tucks the bottom bar away.
   const navScroll = useNavScrollHide();
   const { width } = useWindowDimensions();
-  // On TV as many cards as fit at the usual card size.
+  // On TV as many cards as fit at the usual card size (5 to 8 columns).
   const columns = isTV
-    ? Math.max(4, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP)))
+    ? Math.min(8, Math.max(5, Math.floor((width - GUTTER * 2 + CARD_GAP) / (CARD_WIDTH + CARD_GAP))))
     : width > 600
       ? 3
       : 2;
@@ -87,6 +87,11 @@ export function HistoryScreen({ history, onPlay, onClear }: Props) {
               onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
               scrollEventThrottle={48}
               numColumns={columns}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === 'android'}
+              maxToRenderPerBatch={isTV ? 12 : 4}
+              initialNumToRender={isTV ? 12 : 6}
+              updateCellsBatchingPeriod={50}
               keyExtractor={playableKey}
               // An exact height on TV; see ListFrame.
               style={height ? { height } : styles.list}

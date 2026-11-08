@@ -41,7 +41,21 @@ export function ConversationListView({ onOpen, onFriends, onProfile }: Props) {
         }
       />
       {conversations === null ? (
-        <Loader label="Loading your chats" icon="chatbubbles-outline" style={styles.loader} />
+        <View style={styles.loaderContainer}>
+          <Loader label="Loading your chats" icon="chatbubbles-outline" style={styles.loader} />
+          {!live && (
+            <Button
+              label={refreshing ? 'Connecting…' : 'Retry connection'}
+              kind="plain"
+              disabled={refreshing}
+              onPress={() => {
+                setRefreshing(true);
+                refresh().finally(() => setRefreshing(false));
+              }}
+              style={styles.retryButton}
+            />
+          )}
+        </View>
       ) : (
         <FlatList
           data={conversations}
@@ -90,7 +104,7 @@ function Row({ item, meId, onPress }: { item: Conversation; meId?: string; onPre
   const unread = item.unread > 0;
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <Avatar name={item.user.name} id={item.user.id} size={50} />
+      <Avatar name={item.user.name} id={item.user.id} avatar={item.user.avatar} size={50} />
       <View style={styles.rowText}>
         <View style={styles.rowTop}>
           <Text style={[styles.name, unread && styles.bold]} numberOfLines={1}>
@@ -112,6 +126,8 @@ function Row({ item, meId, onPress }: { item: Conversation; meId?: string; onPre
 
 const styles = StyleSheet.create({
   loader: { marginTop: 40, alignSelf: 'center' },
+  loaderContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  retryButton: { marginTop: 20 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: GUTTER, paddingVertical: 11 },
   pressed: { backgroundColor: colors.surface },
   rowText: { flex: 1 },

@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, GUTTER, RADIUS, colors, sz } from '../theme';
 
 // A row's heading, with an optional small line under it.
-export function SectionHeader({
+export const SectionHeader = memo(function SectionHeader({
   title,
   subtitle,
   style,
@@ -18,7 +19,7 @@ export function SectionHeader({
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </View>
   );
-}
+});
 
 // Grey stand-in cards while a row loads.
 export function SkeletonRow() {

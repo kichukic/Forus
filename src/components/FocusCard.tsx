@@ -1,5 +1,5 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { Animated, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { memo, useState, type ReactNode } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, type ViewStyle } from 'react-native';
 import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, RADIUS, colors, isTV, sz } from '../theme';
 
 type Props = {
@@ -14,12 +14,29 @@ type Props = {
 
 // A card the TV remote can land on: it grows smoothly and gets a purple ring
 // when focused. On a phone it is tapped, and shrinks slightly while pressed.
-export function FocusCard({ onPress, onLongPress, children, preferredFocus, width = CARD_WIDTH, style }: Props) {
+export const FocusCard = memo(function FocusCard({
+  onPress,
+  onLongPress,
+  children,
+  preferredFocus,
+  width = CARD_WIDTH,
+  style,
+}: Props) {
   const [focused, setFocused] = useState(false);
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = useState(() => new Animated.Value(1))[0];
 
-  const animate = (to: number) =>
-    Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 30, bounciness: 4 }).start();
+  const animate = (to: number) => {
+    if (isTV) {
+      Animated.timing(scale, {
+        toValue: to,
+        duration: 90,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 30, bounciness: 4 }).start();
+    }
+  };
 
   return (
     <Pressable
@@ -27,7 +44,7 @@ export function FocusCard({ onPress, onLongPress, children, preferredFocus, widt
       onLongPress={onLongPress}
       onFocus={() => {
         setFocused(true);
-        animate(1.07);
+        animate(1.05);
       }}
       onBlur={() => {
         setFocused(false);
@@ -44,7 +61,7 @@ export function FocusCard({ onPress, onLongPress, children, preferredFocus, widt
       </Animated.View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {
@@ -57,7 +74,7 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
     backgroundColor: colors.accentSoft,
   },
-  raised: { zIndex: 2, elevation: 2 },
+  raised: { zIndex: 2, elevation: isTV ? 0 : 2 },
 });
 
 export const cardImageStyle = { width: '100%' as const, height: CARD_HEIGHT, borderRadius: RADIUS };

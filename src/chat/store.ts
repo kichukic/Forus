@@ -1,16 +1,25 @@
 // The chat's state, shared by every chat screen and the bottom bar's unread
 // badge: who is signed in, the conversation list, friends and requests, and
-// the messages of each open conversation. While the app is in front it keeps a
-// live connection to the server, so new messages and requests arrive at once;
-// in the background the connection is closed and everything is refreshed on
-// coming back.
+// the messages of each open conversation. The connection stays open while the
+// app is in the background too (the Android keep-alive service holds the
+// process), so new messages and friend activity arrive at once.
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { io, type Socket } from 'socket.io-client';
+import { loadKeepAlivePreference, startKeepAlive, stopKeepAlive } from './background';
 import { setupMessageNotifications, notifyIncomingMessage } from './push';
 import * as api from './api';
 import { uploadVoice } from './voice';
-import type { ChatMessage, ChatUser, Conversation, FriendLists, Me } from './api';
+import type {
+  ChatMessage,
+  ChatUser,
+  Conversation,
+  FriendLists,
+  FriendWatching,
+  Me,
+  WatchingTitle,
+} from './api';
+import type { Playable } from '../types';
 
 type Thread = { messages: ChatMessage[]; more: boolean; loading: boolean };
 
@@ -20,15 +29,37 @@ export type ChatState = {
   conversations: Conversation[] | null;
   friends: FriendLists | null;
   threads: Record<string, Thread>;
+  // Friends whose app is connected, and what they are playing right now.
+  onlineFriendIds: string[];
+  watching: FriendWatching[];
   // Whether the live connection is up.
   live: boolean;
 };
 
-let state: ChatState = { status: 'loading', me: null, conversations: null, friends: null, threads: {}, live: false };
+let state: ChatState = {
+  status: 'loading',
+  me: null,
+  conversations: null,
+  friends: null,
+  threads: {},
+  onlineFriendIds: [],
+  watching: [],
+  live: false,
+};
 const listeners = new Set<() => void>();
 let socket: Socket | null = null;
 // The conversation on screen; its new messages are marked read straight away.
 let openWith: string | null = null;
+// Whether the app is on screen. A conversation left open when the app goes to
+// the background is no longer being read, so those messages still notify.
+let foreground = AppState.currentState === 'active';
+// The playback last sent to the server, so a reconnect can announce it again.
+let currentWatching: WatchingTitle | null = null;
+let currentWatchingKey = '';
+// The newest watching event seen for each friend. Socket updates are
+// asynchronous, so a start that finishes broadcasting after its stop must not
+// bring a card back.
+const watchingEventAt = new Map<string, number>();
 
 function set(patch: Partial<ChatState>) {
   state = { ...state, ...patch };
@@ -54,6 +85,16 @@ export function useUnreadCount(): number {
   return useSyncExternalStore(subscribe, () => (state.conversations ?? []).reduce((n, c) => n + c.unread, 0));
 }
 
+/** The friends whose app is connected right now. */
+export function useOnlineFriendIds(): string[] {
+  return useSyncExternalStore(subscribe, () => state.onlineFriendIds);
+}
+
+/** What each friend is playing right now, newest first. */
+export function useFriendsWatching(): FriendWatching[] {
+  return useSyncExternalStore(subscribe, () => state.watching);
+}
+
 /** Whether the signed-in user is an administrator (has isAdmin or isadmin). */
 export function useIsAdmin(): boolean {
   return useSyncExternalStore(subscribe, () => Boolean(state.me?.isAdmin || (state.me as any)?.isadmin));
@@ -74,43 +115,58 @@ let started = false;
 export async function startChat() {
   if (started) return;
   started = true;
-  let bgTimeout: ReturnType<typeof setTimeout> | null = null;
+  await loadKeepAlivePreference();
   AppState.addEventListener('change', (s) => {
+    foreground = s === 'active';
     if (state.status !== 'signedIn') return;
     if (s === 'active') {
-      if (bgTimeout) {
-        clearTimeout(bgTimeout);
-        bgTimeout = null;
-      }
+      // Back on screen: make sure the connection is up (Android may have
+      // stopped the service) and pick up whatever arrived in the meantime.
+      startKeepAlive();
       connect();
       refresh();
-    } else if (s === 'background') {
-      // Keep socket alive for 5 minutes in background so multitasking still delivers message notifications
-      if (!bgTimeout) {
-        bgTimeout = setTimeout(() => {
-          disconnect();
-          bgTimeout = null;
-        }, 5 * 60 * 1000);
+      // Messages that came in for the conversation still on screen were left
+      // unread while the app was away; they have been read now.
+      if (openWith) {
+        setUnread(openWith, 0);
+        api.markRead(openWith).catch(() => {});
       }
     }
+    // Going to the background needs nothing: the keep-alive service (started
+    // while the app was visible) holds the process, and with it the socket,
+    // so messages keep arriving and still raise their notifications.
   });
   if (!(await api.loadSession())) return set({ status: 'signedOut' });
   try {
-    set({ me: await api.getMe(), status: 'signedIn' });
-    connect();
-    refresh();
-    setupMessageNotifications();
+    const me = await api.getMe();
+    set({ me, status: 'signedIn' });
   } catch (e) {
     // An expired sign-in; anything else (offline) keeps the session for later.
-    if (e instanceof api.ChatError && e.status === 401) await signOut();
-    else set({ status: 'signedIn' });
+    if (e instanceof api.ChatError && e.status === 401) {
+      await signOut();
+      return;
+    }
+    set({ status: 'signedIn' });
   }
+  connect();
+  refresh();
+  startKeepAlive();
+  setupMessageNotifications();
 }
 
 async function signedIn(me: Me) {
-  set({ me, status: 'signedIn', conversations: null, friends: null, threads: {} });
+  set({
+    me,
+    status: 'signedIn',
+    conversations: null,
+    friends: null,
+    threads: {},
+    onlineFriendIds: [],
+    watching: [],
+  });
   connect();
   refresh();
+  startKeepAlive();
   setupMessageNotifications();
 }
 
@@ -140,12 +196,29 @@ export async function finishSignUp(ticket: string, name: string) {
 
 export async function signOut() {
   disconnect();
+  stopKeepAlive();
+  currentWatching = null;
+  currentWatchingKey = '';
+  watchingEventAt.clear();
   await api.signOut();
-  set({ status: 'signedOut', me: null, conversations: null, friends: null, threads: {} });
+  set({
+    status: 'signedOut',
+    me: null,
+    conversations: null,
+    friends: null,
+    threads: {},
+    onlineFriendIds: [],
+    watching: [],
+  });
 }
 
 export async function updateName(name: string) {
   set({ me: await api.updateName(name) });
+}
+
+/** Saves a new profile picture (a data URI), or removes it with null. */
+export async function changeAvatar(avatar: string | null) {
+  set({ me: await api.updateAvatar(avatar) });
 }
 
 export async function verifyPhone(accessToken: string) {
@@ -167,11 +240,30 @@ export async function removeEmail() {
 /** Reloads the conversation list and friends. */
 export async function refresh() {
   if (state.status !== 'signedIn') return;
+  if (!state.me) {
+    void api.getMe().then((me) => set({ me })).catch(() => {});
+  }
   const [conversations, friends] = await Promise.all([
     api.getConversations().catch(() => state.conversations),
     api.getFriends().catch(() => state.friends),
   ]);
-  set({ conversations, friends });
+  setFriends(friends);
+  set({ conversations });
+  requestSocial();
+}
+
+/** Keeps presence and watching to people who are still friends. */
+function setFriends(friends: FriendLists | null) {
+  if (!friends) {
+    set({ friends });
+    return;
+  }
+  const ids = new Set(friends.friends.map((entry) => entry.user.id));
+  set({
+    friends,
+    onlineFriendIds: state.onlineFriendIds.filter((id) => ids.has(id)),
+    watching: state.watching.filter((entry) => ids.has(entry.user.id)),
+  });
 }
 
 // ---- Live connection ----
@@ -180,11 +272,24 @@ function connect() {
   if (socket || !api.sessionToken()) return;
   socket = io(api.serverAddress(), {
     auth: { token: api.sessionToken() },
-    transports: ['websocket'],
+    transports: ['websocket', 'polling'],
     reconnectionDelayMax: 10000,
   });
-  socket.on('connect', () => set({ live: true }));
+  socket.on('connect', () => {
+    set({ live: true });
+    // A player may already be open (for example after the connection dropped
+    // while a film was playing): announce it again.
+    if (currentWatching) socket?.emit('watching:update', currentWatching);
+    requestSocial();
+    refresh();
+  });
   socket.on('disconnect', () => set({ live: false }));
+  socket.on('connect_error', (err) => {
+    set({ live: false });
+    if (err?.message === 'unauthorized') {
+      void signOut();
+    }
+  });
   socket.on('message', ({ message, from }: { message: ChatMessage; from?: ChatUser }) => received(message, from));
   socket.on('read', ({ userId, with: other, at }: { userId: string; with?: string; at: string }) => {
     if (userId === state.me?.id && other) {
@@ -198,9 +303,137 @@ function connect() {
       }));
     }
   });
-  for (const event of ['friend-request', 'friend-accepted', 'friend-removed']) {
-    socket.on(event, () => api.getFriends().then((friends) => set({ friends })).catch(() => {}));
+
+  // Friends' presence and playback. A server that predates these events simply
+  // never sends them, and the rows stay hidden.
+  socket.on('presence', receivedPresence);
+  socket.on('presence:list', receivedPresenceList);
+  socket.on('watching', receivedWatching);
+  socket.on('watching:stop', receivedWatchingStop);
+  socket.on('watching:list', receivedWatchingList);
+
+  const reload = () => {
+    api
+      .getFriends()
+      .then((friends) => {
+        setFriends(friends);
+        requestSocial();
+      })
+      .catch(() => {});
+  };
+  socket.on('friend-request', reload);
+  socket.on('friend-accepted', reload);
+  socket.on('friend-removed', (event: { userId?: unknown }) => {
+    if (typeof event?.userId === 'string') {
+      const userId = event.userId;
+      watchingEventAt.delete(userId);
+      set({
+        onlineFriendIds: state.onlineFriendIds.filter((id) => id !== userId),
+        watching: state.watching.filter((entry) => entry.user.id !== userId),
+      });
+    }
+    reload();
+  });
+}
+
+function requestSocial() {
+  if (!socket?.connected) return;
+  socket.emit('presence:list');
+  socket.emit('watching:list');
+}
+
+function receivedPresence(event: unknown) {
+  if (!event || typeof event !== 'object') return;
+  const { userId, online } = event as { userId?: unknown; online?: unknown };
+  if (typeof userId !== 'string') return;
+  if (online === true) {
+    if (!state.onlineFriendIds.includes(userId)) {
+      set({ onlineFriendIds: [...state.onlineFriendIds, userId] });
+    }
+  } else if (online === false) {
+    set({ onlineFriendIds: state.onlineFriendIds.filter((id) => id !== userId) });
   }
+}
+
+function receivedPresenceList(event: unknown) {
+  if (!event || typeof event !== 'object') return;
+  const { online } = event as { online?: unknown };
+  if (!Array.isArray(online)) return;
+  const ids = online.filter((id): id is string => typeof id === 'string');
+  set({ onlineFriendIds: [...new Set(ids)] });
+}
+
+const WATCHING_KINDS = new Set(['video', 'live', 'file', 'stream', 'web', 'moviebox']);
+
+/** Checks a payload enough that a broken or old server can't crash a card. */
+function asFriendsWatching(value: unknown): FriendWatching | null {
+  if (!value || typeof value !== 'object') return null;
+  const entry = value as { user?: unknown; watching?: unknown; at?: unknown };
+  if (!entry.user || typeof entry.user !== 'object') return null;
+  const user = entry.user as Partial<ChatUser>;
+  if (typeof user.id !== 'string' || typeof user.name !== 'string') return null;
+  if (!entry.watching || typeof entry.watching !== 'object') return null;
+  const watching = entry.watching as Partial<WatchingTitle> & { kind?: unknown };
+  if (typeof watching.title !== 'string' || !WATCHING_KINDS.has(String(watching.kind))) return null;
+  const eventAt = typeof entry.at === 'string' ? Date.parse(entry.at) : Date.now();
+  const at = new Date(Number.isFinite(eventAt) ? eventAt : Date.now()).toISOString();
+  return {
+    user: { id: user.id, name: user.name, email: typeof user.email === 'string' ? user.email : undefined },
+    watching: watching as WatchingTitle,
+    at,
+  };
+}
+
+function receivedWatching(event: unknown) {
+  const entry = asFriendsWatching(event);
+  if (!entry) return;
+  const at = Date.parse(entry.at);
+  if (at < (watchingEventAt.get(entry.user.id) ?? 0)) return;
+  watchingEventAt.set(entry.user.id, at);
+  set({ watching: [entry, ...state.watching.filter((item) => item.user.id !== entry.user.id)].slice(0, 30) });
+}
+
+function receivedWatchingStop(event: unknown) {
+  if (!event || typeof event !== 'object') return;
+  const { userId, at: rawAt } = event as { userId?: unknown; at?: unknown };
+  if (typeof userId !== 'string') return;
+  const at = typeof rawAt === 'string' ? Date.parse(rawAt) : Date.now();
+  const stamp = Number.isFinite(at) ? at : Date.now();
+  if (stamp < (watchingEventAt.get(userId) ?? 0)) return;
+  watchingEventAt.set(userId, stamp);
+  set({ watching: state.watching.filter((entry) => entry.user.id !== userId) });
+}
+
+function receivedWatchingList(event: unknown) {
+  if (!event || typeof event !== 'object') return;
+  const { items, at: snapshotAt } = event as { items?: unknown; at?: unknown };
+  if (!Array.isArray(items)) return;
+  // When the server made this list. A start received after it is newer than
+  // anything in the list, even if it is not listed yet.
+  const snapshot = typeof snapshotAt === 'string' ? Date.parse(snapshotAt) : Date.now();
+  const listed = new Map<string, FriendWatching>();
+  for (const item of items) {
+    const entry = asFriendsWatching(item);
+    if (!entry) continue;
+    const at = Date.parse(entry.at);
+    // A newer event for this friend already changed the answer.
+    if (at < (watchingEventAt.get(entry.user.id) ?? 0)) continue;
+    const existing = listed.get(entry.user.id);
+    if (!existing || Date.parse(existing.at) < at) listed.set(entry.user.id, entry);
+  }
+  // A card whose start arrived after the list was made is still current; the
+  // rest that are missing from the list have stopped.
+  for (const entry of state.watching) {
+    if (!listed.has(entry.user.id) && Date.parse(entry.at) > snapshot) listed.set(entry.user.id, entry);
+  }
+  const watching = [...listed.values()].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  // Existing stamps are kept: they also remember stops, so an old start
+  // cannot undo one.
+  for (const entry of watching) {
+    const at = Date.parse(entry.at);
+    if (Number.isFinite(at) && at > (watchingEventAt.get(entry.user.id) ?? 0)) watchingEventAt.set(entry.user.id, at);
+  }
+  set({ watching });
 }
 
 function disconnect() {
@@ -208,6 +441,48 @@ function disconnect() {
   socket?.disconnect();
   socket = null;
   set({ live: false });
+}
+
+/** Sends what this phone is playing to the server, so friends can see it. */
+export function publishWatching(item: Playable | null) {
+  const next = item ? watchingFrom(item) : null;
+  const key = next ? JSON.stringify(next) : '';
+  if (key === currentWatchingKey) return;
+  currentWatching = next;
+  currentWatchingKey = key;
+  if (!socket?.connected) return;
+  if (next) socket.emit('watching:update', next);
+  else socket.emit('watching:stop');
+}
+
+function watchingFrom(item: Playable): WatchingTitle {
+  switch (item.kind) {
+    case 'video':
+      return { kind: 'video', videoId: item.videoId, title: item.title };
+    case 'live':
+      return { kind: 'live', channelId: item.channelId, title: item.title };
+    case 'file':
+      return {
+        kind: 'file',
+        source: item.source,
+        itemId: item.itemId,
+        fileId: item.fileId,
+        title: item.title,
+      };
+    case 'stream':
+      return { kind: 'stream', url: item.url, title: item.title, poster: item.poster };
+    case 'web':
+      return { kind: 'web', url: item.url, title: item.title, poster: item.poster };
+    case 'moviebox':
+      return {
+        kind: 'moviebox',
+        subjectId: item.subjectId,
+        season: item.season,
+        episode: item.episode,
+        title: item.title,
+        poster: item.poster,
+      };
+  }
 }
 
 // ---- Conversations ----
@@ -229,7 +504,7 @@ function received(message: ChatMessage, from?: ChatUser) {
     t.messages.some((m) => m.id === message.id) ? t : { ...t, messages: [message, ...t.messages] },
   );
 
-  const open = otherId === openWith;
+  const open = foreground && otherId === openWith;
   if (!mine && open) api.markRead(otherId).catch(() => {});
   const list = state.conversations ?? [];
   const existing = list.find((c) => c.user.id === otherId);
@@ -298,7 +573,8 @@ export async function sendVoice(userId: string, fileUri: string, durationMs: num
 // ---- Friends ----
 
 async function reloadFriends() {
-  set({ friends: await api.getFriends() });
+  setFriends(await api.getFriends());
+  requestSocial();
 }
 
 export async function addFriend(userId: string) {

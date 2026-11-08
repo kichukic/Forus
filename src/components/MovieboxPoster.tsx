@@ -1,26 +1,29 @@
 // A film in a row or a grid: its poster with the name and year underneath.
+import { memo, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { MovieboxSubject } from '../api/moviebox';
 import { FavoriteHeart } from './FavoriteHeart';
-import { RADIUS, colors, isTV } from '../theme';
+import { CARD_GAP, RADIUS, colors, isTV } from '../theme';
 
 // The width of a poster in a row, which is taller than it is wide.
-export const POSTER_WIDTH = isTV ? 190 : 132;
+export const POSTER_WIDTH = isTV ? 128 : 132;
 // The height of the poster itself, and of the row of names under it.
 export const POSTER_HEIGHT = Math.round((POSTER_WIDTH * 3) / 2);
-export const POSTER_ROW_HEIGHT = POSTER_HEIGHT + 52;
+export const POSTER_ROW_HEIGHT = POSTER_HEIGHT + (isTV ? 44 : 52);
+const POSTER_ITEM = POSTER_WIDTH + CARD_GAP;
 // Only a few posters are built at a time. A phone with little memory cannot
 // hold fifty of them at once, and the ones it does hold are the ones that
 // make it lag.
 export const POSTER_ROW_PROPS = {
-  initialNumToRender: 6,
-  maxToRenderPerBatch: 6,
+  initialNumToRender: isTV ? 8 : 6,
+  maxToRenderPerBatch: isTV ? 4 : 6,
   windowSize: 3,
+  updateCellsBatchingPeriod: isTV ? 80 : 50,
   // Android keeps what it draws out of view; letting go of it saves memory.
   removeClippedSubviews: Platform.OS === 'android' && !isTV,
+  getItemLayout: (_: unknown, index: number) => ({ length: POSTER_ITEM, offset: POSTER_ITEM * index, index }),
 };
 
 // A handful of deep colours, so a missing poster is not a black square.
@@ -31,7 +34,7 @@ export function posterColour(title: string): string {
   return POSTER_COLOURS[hash % POSTER_COLOURS.length];
 }
 
-export function MovieboxPoster({ subject }: { subject: MovieboxSubject }) {
+export const MovieboxPoster = memo(function MovieboxPoster({ subject }: { subject: MovieboxSubject }) {
   // A poster that does not load leaves a black tile behind, so a failed load
   // is shown the same way as a missing one: the title on a coloured field.
   const [failed, setFailed] = useState(false);
@@ -93,7 +96,7 @@ export function MovieboxPoster({ subject }: { subject: MovieboxSubject }) {
       </Text>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   poster: {

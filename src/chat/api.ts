@@ -7,8 +7,9 @@ import * as SecureStore from 'expo-secure-store';
 import { fetchWithTimeout } from '../api/http';
 import type { Playable } from '../types';
 
-// Accounts made with a phone number alone have no email.
-export type ChatUser = { id: string; name: string; email?: string };
+// Accounts made with a phone number alone have no email. `avatar` is a short
+// path on the chat server (see avatarUri), not the picture itself.
+export type ChatUser = { id: string; name: string; email?: string; avatar?: string };
 // `phone` is always a number Phone.Email verified; `hasPassword` is false for
 // phone-only accounts.
 export type Me = ChatUser & {
@@ -29,6 +30,19 @@ export type SharedTitle =
   | { kind: 'movie'; id: string; title: string; poster?: string; year?: string }
   | { kind: 'moviebox'; subjectId: string; season?: number; episode?: number; title: string; poster?: string }
   | { kind: 'file'; source: string; itemId: number; fileId: number; title: string };
+
+// What a friend is playing right now. It is the same shape the player uses,
+// minus the kinds that only make sense on the friend's own account (a TorBox
+// file is listed, but cannot be opened from someone else's account).
+export type WatchingTitle =
+  | { kind: 'video'; videoId: string; title: string }
+  | { kind: 'live'; channelId: string; title: string }
+  | { kind: 'file'; source: 'torrents' | 'usenet' | 'webdl'; itemId: number; fileId: number; title: string }
+  | { kind: 'stream'; url: string; title: string; poster?: string }
+  | { kind: 'web'; url: string; title: string; poster?: string }
+  | { kind: 'moviebox'; subjectId: string; season?: number; episode?: number; title: string; poster?: string };
+
+export type FriendWatching = { user: ChatUser; watching: WatchingTitle; at: string };
 
 export type ChatMessage = {
   id: string;
@@ -76,6 +90,16 @@ export async function setServerAddress(address: string) {
   await AsyncStorage.setItem(SERVER_KEY, server);
 }
 
+/**
+ * The full address of a person's picture. The server returns a short path so
+ * lists stay small; a data URI or a full URL is passed through unchanged.
+ */
+export function avatarUri(path?: string): string | undefined {
+  if (!path) return undefined;
+  if (/^(https?:|data:)/i.test(path)) return path;
+  return `${server}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
 async function saveToken(value: string | null) {
   token = value;
   if (value) await SecureStore.setItemAsync(TOKEN_KEY, value);
@@ -92,7 +116,7 @@ export class ChatError extends Error {
   }
 }
 
-async function call<T>(method: string, path: string, body?: unknown, timeoutMs = 10000): Promise<T> {
+async function call<T>(method: string, path: string, body?: unknown, timeoutMs = 25000): Promise<T> {
   let res: Response;
   try {
     res = await fetchWithTimeout(
@@ -155,6 +179,10 @@ export async function signUp(ticket: string, name: string) {
 
 export const getMe = () => call<{ user: Me }>('GET', '/me').then((r) => r.user);
 export const updateName = (name: string) => call<{ user: Me }>('PATCH', '/me', { name }).then((r) => r.user);
+// The picture is a data URI; the server answers with the profile, whose
+// `avatar` is now the path of the new picture.
+export const updateAvatar = (avatar: string | null) =>
+  call<{ user: Me }>('PATCH', '/me/avatar', { avatar }, 60000).then((r) => r.user);
 /** Adds or changes your number, with the token from Phone.Email's page. */
 export const verifyPhone = (accessToken: string) =>
   call<{ user: Me }>('POST', '/me/phone', { accessToken }).then((r) => r.user);
@@ -210,6 +238,23 @@ export type AiVibeResult = { title: string; year?: number; reason?: string };
 export const aiVibeSearch = (prompt: string) =>
   call<{ results: AiVibeResult[] }>('POST', '/ai/search', { prompt }, 30000).then((r) => r.results);
 
+// The Tonight concierge: one pick, chosen from the mood and the time there is.
+export type AiTonightPick = {
+  title: string;
+  year?: number;
+  kind?: 'movie' | 'series';
+  reason?: string;
+};
+export type TonightPreferences = {
+  mood?: string;
+  minutes?: number;
+  company?: 'alone' | 'partner' | 'friends' | 'family';
+  language?: string;
+  recentTitles?: string[];
+};
+export const aiTonight = (prefs: TonightPreferences) =>
+  call<{ pick: AiTonightPick }>('POST', '/ai/tonight', prefs, 30000).then((r) => r.pick);
+
 // Admin Analytics
 export type AdminUserAnalytics = {
   id: string;
@@ -237,3 +282,30 @@ export const getAdminAnalytics = () =>
 
 export const recordScreenTimeHeartbeat = (seconds = 30) =>
   call<{ ok: boolean }>('POST', '/analytics/heartbeat', { seconds }).catch(() => ({ ok: false }));
+
+// Blocked Banners
+export type BlockedBannerItem = {
+  videoId: string;
+  title?: string;
+  channel?: string;
+  blockedByName?: string;
+  createdAt: string;
+};
+
+export const fetchGloballyBlockedBanners = () =>
+  call<{ ok: boolean; blockedVideoIds: string[]; items: BlockedBannerItem[] }>(
+    'GET',
+    '/banners/blocked',
+    undefined,
+    10000,
+  ).catch(() => ({ ok: false, blockedVideoIds: [], items: [] }));
+
+export const blockBannerGloballyApi = (data: { videoId: string; title?: string; channel?: string }) =>
+  call<{ ok: boolean; item: BlockedBannerItem }>('POST', '/admin/banners/block', data);
+
+export const unblockBannerGloballyApi = (videoId: string) =>
+  call<{ ok: boolean }>('DELETE', `/admin/banners/block/${encodeURIComponent(videoId)}`);
+
+export const getAdminBlockedBanners = () =>
+  call<{ ok: boolean; items: BlockedBannerItem[] }>('GET', '/admin/banners/blocked', undefined, 10000);
+

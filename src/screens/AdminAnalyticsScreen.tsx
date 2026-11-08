@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getAdminAnalytics, type AdminAnalyticsData, type AdminUserAnalytics } from '../chat/api';
+import { getAdminAnalytics, type AdminAnalyticsData, type AdminUserAnalytics, type BlockedBannerItem } from '../chat/api';
+import { useBannerFilter, fetchAdminBlockedBannersList } from '../data/bannerFilter';
+import { showToast } from '../data/toasts';
 import { useNavScrollHide } from '../data/navChrome';
 import { GUTTER, colors, sz } from '../theme';
 
@@ -20,7 +22,7 @@ type Props = {
   onBack: () => void;
 };
 
-type ViewMode = 'online' | 'all';
+type ViewMode = 'online' | 'all' | 'banners';
 
 function formatDuration(totalSeconds: number): string {
   if (totalSeconds < 60) return `${Math.max(0, Math.floor(totalSeconds))}s`;
@@ -51,6 +53,7 @@ export function AdminAnalyticsScreen({ onBack }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<ViewMode>('online');
+  const { globalList, unblockGlobally } = useBannerFilter();
 
   const fetchStats = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -58,6 +61,7 @@ export function AdminAnalyticsScreen({ onBack }: Props) {
     try {
       const res = await getAdminAnalytics();
       setData(res);
+      fetchAdminBlockedBannersList().catch(() => {});
     } catch (e) {
       setError((e as Error).message || 'Failed to load admin analytics');
     } finally {
@@ -148,7 +152,7 @@ export function AdminAnalyticsScreen({ onBack }: Props) {
           style={[styles.segmentBtn, mode === 'online' && styles.segmentBtnActive]}
         >
           <Text style={[styles.segmentText, mode === 'online' && styles.segmentTextActive]}>
-            Online Now ({data?.onlineCount ?? 0})
+            Active ({data?.onlineCount ?? 0})
           </Text>
         </Pressable>
         <Pressable
@@ -156,7 +160,15 @@ export function AdminAnalyticsScreen({ onBack }: Props) {
           style={[styles.segmentBtn, mode === 'all' && styles.segmentBtnActive]}
         >
           <Text style={[styles.segmentText, mode === 'all' && styles.segmentTextActive]}>
-            Screen Time ({data?.totalUsers ?? 0})
+            Users ({data?.totalUsers ?? 0})
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setMode('banners')}
+          style={[styles.segmentBtn, mode === 'banners' && styles.segmentBtnActive]}
+        >
+          <Text style={[styles.segmentText, mode === 'banners' && styles.segmentTextActive]}>
+            Blocked ({globalList.length})
           </Text>
         </Pressable>
       </View>
@@ -180,8 +192,42 @@ export function AdminAnalyticsScreen({ onBack }: Props) {
         </View>
       )}
 
-      {/* User list */}
-      {data && (
+      {/* Content list */}
+      {data && mode === 'banners' && (
+        <FlatList
+          data={globalList}
+          keyExtractor={(item) => item.videoId}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 110 }]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                fetchStats(true);
+                fetchAdminBlockedBannersList().catch(() => {});
+              }}
+              tintColor={colors.accent}
+            />
+          }
+          onScroll={(e) => navScroll(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={48}
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyText}>No banners blocked globally.</Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <BlockedBannerRow
+              item={item}
+              onUnblock={(id) => {
+                unblockGlobally(id);
+                showToast({ text: 'Banner unblocked globally', icon: 'checkmark-circle-outline' });
+              }}
+            />
+          )}
+        />
+      )}
+
+      {data && mode !== 'banners' && (
         <FlatList
           data={listData}
           keyExtractor={(item) => item.id}
@@ -259,6 +305,45 @@ function UserRow({ item, rank }: { item: AdminUserAnalytics; rank?: number }) {
         </Text>
         <Text style={styles.screenTimeLabel}>Total Screen Time</Text>
       </View>
+    </View>
+  );
+}
+
+function BlockedBannerRow({
+  item,
+  onUnblock,
+}: {
+  item: BlockedBannerItem;
+  onUnblock: (videoId: string) => void;
+}) {
+  return (
+    <View style={styles.userCard}>
+      <View style={[styles.avatarWrap, styles.bannerAvatarWrap]}>
+        <Ionicons name="eye-off-outline" size={sz(20, 24)} color="#ff6b6b" />
+      </View>
+
+      <View style={styles.userInfo}>
+        <Text style={styles.userName} numberOfLines={1}>
+          {item.title || item.videoId}
+        </Text>
+
+        <Text style={styles.userContact} numberOfLines={1}>
+          {item.channel ? `${item.channel} · ` : ''}Blocked {formatRelativeTime(item.createdAt)}
+        </Text>
+
+        {item.blockedByName ? (
+          <Text style={[styles.userContact, { color: colors.muted }]} numberOfLines={1}>
+            By {item.blockedByName}
+          </Text>
+        ) : null}
+      </View>
+
+      <Pressable
+        style={({ pressed }) => [styles.unblockBtn, pressed && styles.unblockBtnPressed]}
+        onPress={() => onUnblock(item.videoId)}
+      >
+        <Text style={styles.unblockBtnText}>Unblock</Text>
+      </Pressable>
     </View>
   );
 }
@@ -521,5 +606,24 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.muted,
     fontSize: sz(13, 15),
+  },
+  bannerAvatarWrap: {
+    backgroundColor: 'rgba(255, 107, 107, 0.12)',
+  },
+  unblockBtn: {
+    backgroundColor: 'rgba(125, 63, 240, 0.15)',
+    paddingHorizontal: sz(14, 18),
+    paddingVertical: sz(8, 10),
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(125, 63, 240, 0.3)',
+  },
+  unblockBtnPressed: {
+    backgroundColor: 'rgba(125, 63, 240, 0.35)',
+  },
+  unblockBtnText: {
+    color: colors.accent,
+    fontSize: sz(13, 14),
+    fontWeight: '800',
   },
 });
