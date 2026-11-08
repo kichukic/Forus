@@ -23,7 +23,7 @@ SIZE=$(stat -c %s "$APK")
 # The manifest carries the checksum so the in-app updater can reject a
 # truncated or tampered download before it reaches the installer.
 SHA256=$(sha256sum "$APK" | cut -d ' ' -f1)
-URL="https://github.com/$REPO/releases/latest/download/$ASSET"
+URL="https://github.com/$REPO/releases/download/$TAG/$ASSET"
 
 cat > "$MANIFEST" <<JSON
 {
@@ -36,6 +36,12 @@ cat > "$MANIFEST" <<JSON
 }
 JSON
 echo "==> manifest:"; cat "$MANIFEST"
+
+# Keep the repository version.json updated so Fastly CDN (raw.githubusercontent.com)
+# has instant, reliable manifest availability worldwide with zero 504 risk.
+git add "$MANIFEST"
+git commit -m "chore(release): manifest for $VERSION ($CODE)" || true
+git push origin HEAD || true
 
 # Rename the APK to the versioned name and copy into a staging dir.
 STAGE="$(mktemp -d)"
