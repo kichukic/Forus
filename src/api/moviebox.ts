@@ -202,7 +202,7 @@ async function getDevice(): Promise<Device> {
   } catch {
     saved = null;
   }
-  const versionCode = 50020133;
+  const versionCode = 50020134;
   device = {
     deviceId: saved?.deviceId ?? randomHex(32),
     gaid: saved?.gaid ?? randomId(),
@@ -216,8 +216,8 @@ async function getDevice(): Promise<Device> {
 function clientInfo(info: Device): string {
   return JSON.stringify({
     package_name: 'com.community.oneroom',
-    version_name: '4.0.03.1020.03',
-    version_code: 50020133,
+    version_name: '4.0.04.1112.03',
+    version_code: 50020134,
     os: 'android',
     os_version: '13',
     install_ch: 'ps',
@@ -634,6 +634,18 @@ export async function playableRows(
     const s1e1 = await fetchRows(id, 1, 1);
     if (s1e1.length > 0 && !s1e1.every((r) => isNoticeVideo(r.previewUrl))) return s1e1;
   }
+  // Check alternative audio dubs if the current version has no valid stream
+  try {
+    const details = await subjectDetails(id);
+    for (const dub of details.subject.dubs ?? []) {
+      if (dub.id && dub.id !== id) {
+        const altRows = await fetchRows(dub.id, season, episode);
+        if (altRows.length > 0 && !altRows.every((r) => isNoticeVideo(r.previewUrl))) {
+          return altRows;
+        }
+      }
+    }
+  } catch {}
   // If the service returned the notice video (e.g. for short dramas) or no rows, resolve via TV shorts API
   try {
     const dramaEps = await fetchDramaEpisodes(id);
@@ -664,27 +676,35 @@ async function fetchRows(
   season: number,
   episode: number,
 ): Promise<MovieboxEpisode[]> {
-  const data = await request<{ list?: RawEpisode[] }>(
-    'GET',
-    `${BFF}/subject-api/resource/v2`,
-    [
-      ['subjectId', id],
-      ['page', '1'],
-      ['perPage', '8'],
-      ['all', '0'],
-      ['startPosition', '1'],
-      ['endPosition', '1'],
-      ['pagerMode', '2'],
-      ['resolution', '0'],
-      ['se', String(season)],
-      ['epFrom', String(episode)],
-      ['epTo', String(episode)],
-      ['isVip', 'true'],
-    ],
-  );
-  return (data?.list ?? [])
-    .map((raw) => toEpisode(raw, season))
-    .filter((row): row is MovieboxEpisode => row !== null);
+  for (const endpoint of ['/subject-api/resource/v2', '/subject-api/resource']) {
+    try {
+      const data = await request<{ list?: RawEpisode[] }>(
+        'GET',
+        `${BFF}${endpoint}`,
+        [
+          ['subjectId', id],
+          ['page', '1'],
+          ['perPage', '8'],
+          ['all', '0'],
+          ['startPosition', '1'],
+          ['endPosition', '1'],
+          ['pagerMode', '2'],
+          ['resolution', '0'],
+          ['se', String(season)],
+          ['epFrom', String(episode)],
+          ['epTo', String(episode)],
+          ['isVip', 'true'],
+        ],
+      );
+      const rows = (data?.list ?? [])
+        .map((raw) => toEpisode(raw, season))
+        .filter((row): row is MovieboxEpisode => row !== null);
+      if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) {
+        return rows;
+      }
+    } catch {}
+  }
+  return [];
 }
 
 export type MovieboxStream = {
@@ -765,20 +785,35 @@ export async function directStream(
 
   if (!episode.resourceId) throw new Error('No playable file for this episode.');
 
-  const data = await request<{ list?: { resourceLink?: string; size?: string | number; resolution?: number }[] }>(
-    'GET',
-    `${BFF}/subject-api/resource-position/v2`,
-    [
-      ['subjectId', id],
-      ['resourceId', episode.resourceId],
-      ['failUrl', episode.previewUrl],
-      ['failCode', '404'],
-      ['resourceNum', '0'],
-      ['isVip', 'true'],
-    ],
-  );
-  const found = data?.list?.[0];
-  const url = found?.resourceLink;
+  let url: string | undefined;
+  let size = episode.size;
+  let resolution = episode.resolution;
+
+  for (const endpoint of ['/subject-api/resource-position/v2', '/subject-api/resource-position']) {
+    try {
+      const data = await request<{ list?: { resourceLink?: string; size?: string | number; resolution?: number }[] }>(
+        'GET',
+        `${BFF}${endpoint}`,
+        [
+          ['subjectId', id],
+          ['resourceId', episode.resourceId],
+          ['failUrl', episode.previewUrl],
+          ['failCode', '404'],
+          ['resourceNum', '0'],
+          ['isVip', 'true'],
+        ],
+      );
+      const found = data?.list?.[0];
+      const link = found?.resourceLink;
+      if (link && !isNoticeVideo(link)) {
+        url = link;
+        size = Number(found?.size ?? episode.size);
+        resolution = found?.resolution ?? episode.resolution;
+        break;
+      }
+    } catch {}
+  }
+
   if (!url || isNoticeVideo(url)) {
     try {
       const dramaEps = await fetchDramaEpisodes(id);
@@ -795,11 +830,10 @@ export async function directStream(
     } catch {}
     throw new Error('No playable file for this episode.');
   }
-  const size = Number(found?.size ?? episode.size);
   return {
     url,
     size,
-    resolution: found?.resolution ?? episode.resolution,
+    resolution,
     // The preview is a small file; anything bigger is the whole thing.
     whole: size > episode.size * 4,
   };

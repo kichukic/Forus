@@ -268,11 +268,16 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
       {failure && (
         <View style={styles.overlay}>
-          <Text style={styles.errorTitle}>{"Couldn&apos;t play this episode"}</Text>
+          <Text style={styles.errorTitle}>{"Couldn't play this episode"}</Text>
           <Text style={styles.overlayText}>{failure}</Text>
-          <Pressable onPress={resolve} style={styles.retry}>
-            <Text style={styles.retryText}>Try again</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
+            <Pressable onPress={resolve} style={styles.retry}>
+              <Text style={styles.retryText}>Try again</Text>
+            </Pressable>
+            <Pressable onPress={onClose} style={[styles.retry, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.retryText, { color: colors.text }]}>Back to details</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
