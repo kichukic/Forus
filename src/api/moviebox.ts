@@ -29,6 +29,47 @@ const TIMEOUT_MS = 20000;
 // football, games, and the one for adults.
 const EXCLUDED_TABS = [9, 33, 4, 11];
 
+// The MovieBox client tags every signed request with a build stamp. The stamp
+// is derived from the signing certificate of the stock mod APK and the time of
+// the request, and the service answers with a placeholder clip when the tag is
+// missing or incomplete. That is the patch the app has to send so films play.
+const STOCK_CERT_SHA256 = '03d4b741632d136bc23e2de4c6adcdb7712f1980b619c183221801730bbd0410';
+const BUILD_TAG_SALT = 'oneroom';
+const BUILD_TAG_INFO_KEY = 'X-Client-Build';
+
+// The stamp of a build tag: seconds since the epoch, the milliseconds within
+// the second padded to three places, three zeroes, and a random part of the
+// build. It is what makes a tag unique to the moment it is asked for.
+function buildTagStamp(tsMs: number, randPart: number): string {
+  const seconds = Math.floor(tsMs / 1000);
+  const millis = String(tsMs % 1000).padStart(3, '0');
+  return `${seconds}${millis}000${randPart}`;
+}
+
+function buildTagForCert(tsMs: number, randPart: number, certSha256Hex: string): string {
+  const stamp = buildTagStamp(tsMs, randPart);
+  const hash = md5Hex(`${certSha256Hex}${BUILD_TAG_SALT}${stamp}`);
+  return `${stamp}.${hash}`;
+}
+
+function generateXClientBuild(tsMs: number): string {
+  const randPart = Math.floor(Math.random() * 1000);
+  return buildTagForCert(tsMs, randPart, STOCK_CERT_SHA256);
+}
+
+// The build tag is mirrored into the client info the request is signed with,
+// exactly the way the official client writes it down.
+function withBuildTag(clientInfoJson: string, tag: string): string {
+  try {
+    const parsed = JSON.parse(clientInfoJson) as Record<string, unknown> | null;
+    if (parsed && typeof parsed === 'object') {
+      parsed[BUILD_TAG_INFO_KEY] = tag;
+      return JSON.stringify(parsed);
+    }
+  } catch {}
+  return clientInfoJson;
+}
+
 export type MovieboxSubject = {
   id: string;
   title: string;
@@ -82,6 +123,8 @@ export type MovieboxEpisode = {
   resourceId: string;
   /** The short file the API offers without a membership. */
   previewUrl: string;
+  /** Cookies the signed CDN link needs, when the link came from play-info. */
+  streamHeaders?: Record<string, string>;
 };
 
 export type MovieboxCast = { name: string; character: string }[];
@@ -307,6 +350,7 @@ async function request<T>(
   const payload = body === undefined ? undefined : JSON.stringify(body);
   const ts = Date.now();
   const info = await getDevice();
+  const buildTag = generateXClientBuild(ts);
 
   // What the service hashes: the request, the timestamp and the body.
   const canonical = [
@@ -325,7 +369,8 @@ async function request<T>(
     Connection: 'keep-alive',
     'x-client-token': `${ts},${md5Hex(String(ts).split('').reverse().join(''))}`,
     'x-tr-signature': `${ts}|2|${hmacMd5Base64(hexBytes(SECRET), canonical)}`,
-    'x-client-info': clientInfo(info),
+    'x-client-build': buildTag,
+    'x-client-info': withBuildTag(clientInfo(info), buildTag),
     'x-client-status': '0',
     'x-forwarded-for': forwardedFor(),
     'User-Agent': info.userAgent,
@@ -583,6 +628,69 @@ function isNoticeVideo(url?: string): boolean {
   return false;
 }
 
+type RawPlayInfoStream = {
+  url?: string;
+  size?: string | number;
+  resolutions?: string;
+  signCookie?: string;
+  format?: string;
+  codecName?: string;
+};
+
+function streamResolution(stream: RawPlayInfoStream): number {
+  const first = String(stream.resolutions ?? '').split(',')[0];
+  const value = Number(first);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/** The best stream from play-info, kept for a minute so one play is one call. */
+const playInfoCache = new Map<string, { at: number; value: MovieboxStream }>();
+
+/**
+ * The signed file link for one episode, from the endpoint the patched client
+ * uses. The resource endpoints now answer with an id and an empty link; the
+ * actual CDN link and the cookie that unlocks it live here.
+ */
+async function playInfoStream(
+  id: string,
+  season: number,
+  episode: number,
+): Promise<MovieboxStream | null> {
+  const key = `${id}:${season}:${episode}`;
+  const held = playInfoCache.get(key);
+  if (held && Date.now() - held.at < 60 * 1000) return held.value;
+  try {
+    const params: Param[] = [['subjectId', id]];
+    if (season > 0 && episode > 0) {
+      params.push(['se', String(season)], ['ep', String(episode)]);
+    }
+    const data = await request<{ streams?: RawPlayInfoStream[] }>(
+      'GET',
+      `${BFF}/subject-api/play-info/v2`,
+      params,
+    );
+    const streams = (data?.streams ?? []).filter(
+      (stream) => stream?.url && !isNoticeVideo(stream.url),
+    );
+    if (streams.length === 0) return null;
+    const best = streams.reduce((pick, stream) =>
+      streamResolution(stream) > streamResolution(pick) ? stream : pick,
+    );
+    const cookie = (best.signCookie ?? '').trim().replace(/;+$/, '');
+    const value: MovieboxStream = {
+      url: best.url as string,
+      size: Number(best.size ?? 0),
+      resolution: streamResolution(best),
+      whole: true,
+      headers: cookie ? { Cookie: cookie } : undefined,
+    };
+    playInfoCache.set(key, { at: Date.now(), value });
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 /** The files of one film, or of one episode of a series. */
 export async function playableRows(
   id: string,
@@ -627,6 +735,26 @@ export async function playableRows(
   } catch {}
 
   const rows = await fetchRows(id, season, episode);
+  // The resource endpoint can answer with the id but leave the link empty.
+  // When every link is missing or is the notice clip, play-info has the file.
+  if (rows.length === 0 || rows.every((row) => !row.previewUrl || isNoticeVideo(row.previewUrl))) {
+    const stream = await playInfoStream(id, season, episode);
+    if (stream) {
+      return [
+        {
+          season: season === 0 ? 1 : season,
+          episode: episode === 0 ? 1 : episode,
+          title: '',
+          resolution: stream.resolution,
+          size: stream.size,
+          duration: 0,
+          resourceId: rows[0]?.resourceId ?? id,
+          previewUrl: stream.url,
+          streamHeaders: stream.headers,
+        },
+      ];
+    }
+  }
   if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) return rows;
   // A film is sometimes filed as the first episode of a first season, so the
   // other way round is tried before giving up.
@@ -714,6 +842,8 @@ export type MovieboxStream = {
   resolution: number;
   /** True when the link is the whole film and not the short preview. */
   whole: boolean;
+  /** Headers the signed CDN link needs, such as its Edge-Cache cookie. */
+  headers?: Record<string, string>;
 };
 
 /**
@@ -730,7 +860,13 @@ export async function directStream(
   // The subject details already hand out the real, signed stream link, so when
   // the preview is not the dummy "update your app" video it can be played as is.
   if (episode.previewUrl && !isNoticeVideo(episode.previewUrl)) {
-    return { url: episode.previewUrl, size: episode.size, resolution: episode.resolution, whole: true };
+    return {
+      url: episode.previewUrl,
+      size: episode.size,
+      resolution: episode.resolution,
+      whole: true,
+      headers: episode.streamHeaders,
+    };
   }
 
   // If the preview link is already known to be the update notice video, try the
@@ -782,6 +918,11 @@ export async function directStream(
       }
     } catch {}
   }
+
+  // The resource endpoints may hand out only an id. The signed link lives in
+  // play-info, so it is asked for before the id is given up on.
+  const info = await playInfoStream(id, episode.season, episode.episode);
+  if (info) return info;
 
   if (!episode.resourceId) throw new Error('No playable file for this episode.');
 
@@ -1000,6 +1141,7 @@ async function tvRequest<T>(
   const payload = body === undefined ? undefined : JSON.stringify(body);
   const ts = Date.now();
   const info = await getDevice();
+  const buildTag = generateXClientBuild(ts);
 
   const canonical = [
     method,
@@ -1017,7 +1159,8 @@ async function tvRequest<T>(
     Connection: 'keep-alive',
     'x-client-token': `${ts},${md5Hex(String(ts).split('').reverse().join(''))}`,
     'x-tr-signature': `${ts}|2|${hmacMd5Base64(hexBytes(SECRET), canonical)}`,
-    'x-client-info': tvClientInfo(info),
+    'x-client-build': buildTag,
+    'x-client-info': withBuildTag(tvClientInfo(info), buildTag),
     'x-client-status': '0',
     'x-forwarded-for': forwardedFor(),
     'User-Agent': 'com.community.mbox.tv/50040011 (Linux; U; Android 13; en_US; M2012K11AG)',

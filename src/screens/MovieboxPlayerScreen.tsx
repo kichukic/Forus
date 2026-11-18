@@ -113,7 +113,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
       // The best quality the service has for it.
       const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
       const stream = await directStream(item.subjectId, best);
-      await player.replaceAsync({ uri: stream.url });
+      await player.replaceAsync({ uri: stream.url, headers: stream.headers });
       player.play();
       // Put the film back where it was left, once.
       if (!resumed.current) {
