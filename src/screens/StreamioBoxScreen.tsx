@@ -48,7 +48,7 @@ const LIST_PERF = {
   maxToRenderPerBatch: isTV ? 24 : 9,
   windowSize: 5,
   updateCellsBatchingPeriod: 50,
-  removeClippedSubviews: Platform.OS === 'android',
+  removeClippedSubviews: Platform.OS === 'android' && !isTV,
 };
 
 function warmPosters(urls: string[]) {
@@ -295,6 +295,7 @@ export function StreamioBoxScreen({ onOpenMovie, onOpenSeries, embedded, header,
                             contentFit="cover"
                             transition={150}
                             cachePolicy="memory-disk"
+                            recyclingKey={item.poster}
                           />
                         ) : (
                           <View style={[StyleSheet.absoluteFill, styles.posterBlank]}>
@@ -383,6 +384,7 @@ function PosterCard({ item }: { item: StreamioItem }) {
             contentFit="cover"
             transition={150}
             cachePolicy="memory-disk"
+            recyclingKey={item.poster}
             onError={() => setFailed(true)}
           />
         )}

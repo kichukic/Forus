@@ -47,7 +47,7 @@ const LIST_PERF = {
   maxToRenderPerBatch: isTV ? 24 : 9,
   windowSize: 5,
   updateCellsBatchingPeriod: 50,
-  removeClippedSubviews: Platform.OS === 'android',
+  removeClippedSubviews: Platform.OS === 'android' && !isTV,
 };
 
 export function JackBoxScreen({
@@ -327,6 +327,7 @@ function PosterCard({ item, loading }: { item: MovieDbItem; loading?: boolean })
             contentFit="cover"
             transition={150}
             cachePolicy="memory-disk"
+            recyclingKey={item.poster}
             onError={() => setFailed(true)}
           />
         )}

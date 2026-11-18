@@ -56,7 +56,7 @@ import type { SearchScope } from './src/data/channels';
 import type { Playable } from './src/types';
 
 // The screen behind the player. The player itself floats above whichever it is.
-type Screen = NavId | 'torbox';
+type Screen = NavId | 'torbox' | 'reels';
 
 // Take over the error handler before anything else can fail, so an error that
 // reaches the top shows itself instead of closing the app.
@@ -473,7 +473,6 @@ export default function App() {
             active={screen as NavId}
             blurTarget={blurTarget}
             onSelect={(id) => {
-              if (id === 'reels') setReelsInitialIndex(0);
               // The bottom bar's Search looks everywhere.
               if (id === 'search') setSearchScope('all');
               setScreen(id);
