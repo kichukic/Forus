@@ -16,6 +16,7 @@ import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { captions, directStream, playableRows, seasonList, subjectDetails, type MovieboxCaption, type MovieboxSeason } from '../api/moviebox';
+import { resolveMoviebox } from '../chat/api';
 import { shareMoviebox } from '../chat/share';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
@@ -143,6 +144,23 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
     setLoading(true);
     setLinkError(null);
     try {
+      // Prefer the server-side resolver when it is available.
+      const resolved = await resolveMoviebox(item.subjectId, item.season, item.episode).catch(() => null);
+      if (resolved?.url) {
+        await player.replaceAsync({ uri: resolved.url, headers: resolved.headers });
+        applySpeed(player, speedRef.current);
+        player.play();
+        if (!resumed.current) {
+          resumed.current = true;
+          loadProgress(item.subjectId, item.season, item.episode).then((saved) => {
+            if (saved && saved.position > 5 && player.duration > 0 && saved.position < player.duration * 0.95) {
+              player.currentTime = saved.position;
+            }
+          });
+        }
+        setLoading(false);
+        return;
+      }
       const rows = await playableRows(item.subjectId, item.season, item.episode);
       if (rows.length === 0) throw new Error('There is no file for this episode.');
       // The best quality the service has for it.

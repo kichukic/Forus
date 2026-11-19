@@ -32,6 +32,7 @@ import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
 import { sendScreenTimeHeartbeat, startChat, useChatStatus, publishWatching } from './src/chat/store';
 import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
 import { syncActivity } from './src/chat/activitySync';
+import { registerDevice } from './src/chat/api';
 import { onOpenChatRequest } from './src/chat/push';
 import { SendToFriend } from './src/chat/SendToFriend';
 import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
@@ -42,6 +43,7 @@ import { PlayerScreen } from './src/screens/PlayerScreen';
 import { StreamPlayerScreen } from './src/screens/StreamPlayerScreen';
 import { LivePlayerScreen } from './src/screens/LivePlayerScreen';
 import { LiveTvScreen } from './src/screens/LiveTvScreen';
+import { WatchPartyScreen } from './src/screens/WatchPartyScreen';
 import { WebPlayerScreen } from './src/screens/WebPlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
 import { TransferBar } from './src/components/TransferBar';
@@ -59,7 +61,7 @@ import type { SearchScope } from './src/data/channels';
 import type { Playable } from './src/types';
 
 // The screen behind the player. The player itself floats above whichever it is.
-type Screen = NavId | 'torbox' | 'reels';
+type Screen = NavId | 'torbox' | 'reels' | 'watchparty';
 
 // Take over the error handler before anything else can fail, so an error that
 // reaches the top shows itself instead of closing the app.
@@ -207,6 +209,30 @@ export default function App() {
     return () => sub.remove();
   }, [chatStatus]);
 
+  // Register this device for push notifications (best effort).
+  useEffect(() => {
+    if (chatStatus !== 'signedIn') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const Notifications = await import('expo-notifications');
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== 'granted') {
+          const req = await Notifications.requestPermissionsAsync();
+          if (req.status !== 'granted') return;
+        }
+        const token = await Notifications.getExpoPushTokenAsync();
+        if (cancelled || !token?.data) return;
+        await registerDevice(token.data, 'android');
+      } catch {
+        // Push is optional; ignore failures.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chatStatus]);
+
   // Tell friends what is playing, but only while the screen is actually on and
   // someone is signed in. Backgrounding stops the card even though the
   // keep-alive service leaves the chat connection open.
@@ -335,6 +361,7 @@ export default function App() {
               onOpenHistory={openHistory}
               onOpenSettings={openSettings}
               onOpenLive={() => setScreen('live')}
+              onOpenWatchParty={() => setScreen('watchparty')}
               onOpenReels={(_, index) => {
                 setReelsInitialIndex(index ?? 0);
                 setScreen('reels');
@@ -346,6 +373,12 @@ export default function App() {
           {screen === 'live' && (
             <ScreenReveal style={layer('live')}>
               <LiveTvScreen onPlay={play} onBack={() => setScreen('home')} />
+            </ScreenReveal>
+          )}
+
+          {screen === 'watchparty' && (
+            <ScreenReveal style={layer('watchparty')}>
+              <WatchPartyScreen onBack={() => setScreen('home')} />
             </ScreenReveal>
           )}
 

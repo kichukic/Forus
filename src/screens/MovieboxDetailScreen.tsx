@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,6 +30,7 @@ import {
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { shareMoviebox } from '../chat/share';
 import { isDownloaded, startDownload } from '../data/downloads';
+import { getRatings, rateTitle, type RemoteRatingEntry } from '../chat/api';
 import { trackOpen } from '../data/activity';
 import { showToast } from '../data/toasts';
 import { ReleaseList } from '../components/ReleaseList';
@@ -82,6 +84,11 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
     });
   }, [subject.id, subject.title]);
   const [switching, setSwitching] = useState(false);
+  const [ratings, setRatings] = useState<RemoteRatingEntry[]>([]);
+  const [ratingSummary, setRatingSummary] = useState<{ count: number; average: number } | null>(null);
+  const [myStars, setMyStars] = useState(0);
+  const [myReview, setMyReview] = useState('');
+  const [ratingBusy, setRatingBusy] = useState(false);
 
   // Whether it has episodes is asked of the service, not guessed from the
   // type: a short drama and a long series are counted apart there. Until the
@@ -144,6 +151,21 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
       alive = false;
     };
   }, [isSeries, season, seasons, currentId]);
+
+  // Ratings and reviews from the account server.
+  useEffect(() => {
+    let alive = true;
+    getRatings(`moviebox:${subject.id}:0:0`)
+      .then((r) => {
+        if (!alive) return;
+        setRatings(r.entries);
+        setRatingSummary(r.summary);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [subject.id]);
 
   // The releases the film's name has on the torrent indexes.
   useEffect(() => {
@@ -236,6 +258,29 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
   // download queue. Resolving slowly is deliberate: the API gets upset when
   // several episodes are asked for at once.
   const [seasonQueue, setSeasonQueue] = useState<{ done: number; total: number } | null>(null);
+
+  const submitRating = async () => {
+    if (ratingBusy || myStars < 1) return;
+    setRatingBusy(true);
+    try {
+      await rateTitle({
+        key: `moviebox:${subject.id}:0:0`,
+        kind: 'moviebox',
+        title: details?.title ?? subject.title,
+        poster: details?.poster ?? subject.poster,
+        stars: myStars,
+        review: myReview.trim() || undefined,
+      });
+      const r = await getRatings(`moviebox:${subject.id}:0:0`);
+      setRatings(r.entries);
+      setRatingSummary(r.summary);
+      showToast({ text: 'Thanks for your rating!' });
+    } catch (e) {
+      showToast({ text: (e as Error).message || 'Could not submit rating.' });
+    } finally {
+      setRatingBusy(false);
+    }
+  };
 
   const downloadSeason = async () => {
     if (!episodes || episodes.season !== season || seasonQueue) return;
@@ -603,6 +648,54 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
             />
           )}
         </View>
+
+        <View style={styles.block}>
+          <Text style={styles.sectionTitle}>
+            Ratings & Reviews
+            {ratingSummary && ratingSummary.count > 0
+              ? ` · ${ratingSummary.average}★ (${ratingSummary.count})`
+              : ''}
+          </Text>
+          <View style={styles.ratingRow}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Pressable key={n} onPress={() => setMyStars(n)} hitSlop={6}>
+                <Ionicons
+                  name={n <= myStars ? 'star' : 'star-outline'}
+                  size={24}
+                  color={n <= myStars ? colors.accent : colors.muted}
+                />
+              </Pressable>
+            ))}
+          </View>
+          <TextInput
+            value={myReview}
+            onChangeText={setMyReview}
+            placeholder="Write a review (optional)"
+            placeholderTextColor={colors.muted}
+            style={styles.reviewInput}
+            multiline
+          />
+          <Pressable
+            onPress={submitRating}
+            disabled={ratingBusy || myStars < 1}
+            style={({ pressed }) => [styles.reviewBtn, pressed && styles.pressed, (ratingBusy || myStars < 1) && styles.disabled]}
+          >
+            <Text style={styles.reviewBtnText}>{ratingBusy ? 'Submitting…' : 'Submit rating'}</Text>
+          </Pressable>
+          {ratings.length > 0 && (
+            <View style={{ marginTop: 12, gap: 10 }}>
+              {ratings.slice(0, 5).map((r) => (
+                <View key={r.user + r.updatedAt} style={styles.reviewCard}>
+                  <View style={styles.reviewHead}>
+                    <Text style={styles.reviewName}>{r.userName ?? 'Someone'}</Text>
+                    <Text style={styles.reviewStars}>{'★'.repeat(r.stars)}{'☆'.repeat(5 - r.stars)}</Text>
+                  </View>
+                  {r.review ? <Text style={styles.reviewText}>{r.review}</Text> : null}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -724,6 +817,33 @@ const styles = StyleSheet.create({
   },
   seasonDownloadText: { color: colors.accent, fontSize: isTV ? 14 : 12, fontWeight: '800' },
   pressed: { opacity: 0.65 },
+  ratingRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+  reviewInput: {
+    minHeight: 60,
+    borderRadius: 10,
+    padding: 10,
+    color: colors.text,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontSize: isTV ? 14 : 12,
+    textAlignVertical: 'top',
+  },
+  reviewBtn: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: colors.accent,
+  },
+  reviewBtnText: { color: '#fff', fontSize: isTV ? 13 : 11.5, fontWeight: '800' },
+  disabled: { opacity: 0.5 },
+  reviewCard: { padding: 10, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  reviewName: { color: colors.text, fontSize: isTV ? 13 : 11.5, fontWeight: '700' },
+  reviewStars: { color: colors.accent, fontSize: isTV ? 13 : 11.5 },
+  reviewText: { color: colors.muted, fontSize: isTV ? 12.5 : 11, marginTop: 4, lineHeight: 16 },
   cast: { color: colors.muted, fontSize: isTV ? 15 : 13, lineHeight: isTV ? 23 : 20 },
   dubs: { marginBottom: 16 },
   dubsHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },

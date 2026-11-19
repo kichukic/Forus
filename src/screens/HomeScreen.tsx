@@ -34,6 +34,7 @@ import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
 import { MovieboxHero } from '../components/MovieboxHero';
 import { ForYouRow } from '../components/ForYouRow';
+import { TrendingRow } from '../components/TrendingRow';
 import { MovieboxRecommendationsRow } from '../components/MovieboxRecommendationsRow';
 import { CinemasRow } from '../components/CinemasRow';
 import { ReelsHomeRow } from '../components/ReelsHomeRow';
@@ -136,6 +137,7 @@ type Props = {
   onOpenHistory: () => void;
   onOpenSettings: () => void;
   onOpenLive: () => void;
+  onOpenWatchParty: () => void;
   ref?: Ref<HomeHandle>;
 };
 
@@ -166,6 +168,7 @@ function HomeScreenView({
   onOpenHistory,
   onOpenSettings,
   onOpenLive,
+  onOpenWatchParty,
   onOpenReels,
   ref,
 }: Props) {
@@ -367,6 +370,12 @@ function HomeScreenView({
             <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' || tab === 'jackbox' ? 'all' : tab)} />
             {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
             {isTV && <RoundButton icon="tv-outline" label="Live" onPress={onOpenLive} />}
+            {isTV && <RoundButton icon="people-outline" label="Party" onPress={onOpenWatchParty} />}
+            {!isTV && (
+              <Pressable onPress={onOpenWatchParty} hitSlop={8} style={styles.partyBtn}>
+                <Ionicons name="people-outline" size={20} color={colors.accent} />
+              </Pressable>
+            )}
             {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
           </View>
         </View>
@@ -418,6 +427,12 @@ function HomeScreenView({
             key={`for-you-${refreshKey}`}
             version={refreshKey}
             onOpen={onOpenMoviebox}
+          />
+
+          <TrendingRow
+            key={`trending-${refreshKey}`}
+            version={refreshKey}
+            onOpenMoviebox={(s) => onOpenMoviebox(s as any)}
           />
 
           {/* The news channels lead the page: they are what's on right now. */}
@@ -906,4 +921,5 @@ const styles = StyleSheet.create({
   // The cards run off the right edge, as a real row's do.
   moreRows: { paddingLeft: GUTTER, marginTop: sz(4, 8), overflow: 'hidden' },
   credit: { color: colors.faint, fontSize: sz(12.5, 15), textAlign: 'center', marginTop: 8, fontWeight: '600' },
+  partyBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft },
 });
