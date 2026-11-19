@@ -32,6 +32,7 @@ import { ListFrame } from '../components/ListFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
+import { MovieboxHero } from '../components/MovieboxHero';
 import { MovieboxRecommendationsRow } from '../components/MovieboxRecommendationsRow';
 import { CinemasRow } from '../components/CinemasRow';
 import { ReelsHomeRow } from '../components/ReelsHomeRow';
@@ -85,7 +86,6 @@ const HINDI_THEMES = THEMES.filter((t) => t.kind === 'hindi');
 // The All tab is a mix of everything, so it carries the themed rows of the
 // other tabs as well.
 const ALL_THEMES = [...MOVIE_THEMES, ...SHOW_THEMES, ...HINDI_THEMES];
-const HERO_ALL_SOURCES = MOVIES;
 // Where each tab was left. Only the tab in front is mounted, so the place is
 // kept here instead of in the tab itself.
 const scrollPositions = new Map<string, number>();
@@ -414,12 +414,10 @@ function HomeScreenView({
 
           {/* The news channels lead the page: they are what's on right now. */}
           {liveRow}
-          <HeroCarousel
+          <MovieboxHero
             key={`hero-all-${refreshKey}`}
-            sources={HERO_ALL_SOURCES}
-            label="Featured movie"
-            onPlay={playVideo}
-            // On TV the remote starts on Watch Now, until Back sends it to the tabs.
+            version={refreshKey}
+            onOpen={onOpenMoviebox}
             takeFocus={focusTabs === 0 && launchFocus}
           />
 
