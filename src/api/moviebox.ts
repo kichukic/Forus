@@ -799,38 +799,50 @@ export async function playableRows(
   return rows;
 }
 
+async function fetchRowsAt(
+  endpoint: string,
+  id: string,
+  season: number,
+  episode: number,
+  resolution: number,
+): Promise<MovieboxEpisode[]> {
+  try {
+    const data = await request<{ list?: RawEpisode[] }>(
+      'GET',
+      `${BFF}${endpoint}`,
+      [
+        ['subjectId', id],
+        ['page', '1'],
+        ['perPage', '8'],
+        ['all', '0'],
+        ['startPosition', '1'],
+        ['endPosition', '1'],
+        ['pagerMode', '2'],
+        ['resolution', String(resolution)],
+        ['se', String(season)],
+        ['epFrom', String(episode)],
+        ['epTo', String(episode)],
+        ['isVip', 'true'],
+      ],
+    );
+    return (data?.list ?? [])
+      .map((raw) => toEpisode(raw, season))
+      .filter((row): row is MovieboxEpisode => row !== null);
+  } catch {
+    return [];
+  }
+}
+
 async function fetchRows(
   id: string,
   season: number,
   episode: number,
 ): Promise<MovieboxEpisode[]> {
   for (const endpoint of ['/subject-api/resource/v2', '/subject-api/resource']) {
-    try {
-      const data = await request<{ list?: RawEpisode[] }>(
-        'GET',
-        `${BFF}${endpoint}`,
-        [
-          ['subjectId', id],
-          ['page', '1'],
-          ['perPage', '8'],
-          ['all', '0'],
-          ['startPosition', '1'],
-          ['endPosition', '1'],
-          ['pagerMode', '2'],
-          ['resolution', '0'],
-          ['se', String(season)],
-          ['epFrom', String(episode)],
-          ['epTo', String(episode)],
-          ['isVip', 'true'],
-        ],
-      );
-      const rows = (data?.list ?? [])
-        .map((raw) => toEpisode(raw, season))
-        .filter((row): row is MovieboxEpisode => row !== null);
-      if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) {
-        return rows;
-      }
-    } catch {}
+    const rows = await fetchRowsAt(endpoint, id, season, episode, 0);
+    if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) {
+      return rows;
+    }
   }
   return [];
 }
@@ -978,6 +990,89 @@ export async function directStream(
     // The preview is a small file; anything bigger is the whole thing.
     whole: size > episode.size * 4,
   };
+}
+
+/** A link that is one complete file, not a DASH/HLS playlist or a web page. */
+function isDownloadFile(url?: string): boolean {
+  if (!url || isNoticeVideo(url)) return false;
+  const file = url.split('?')[0].toLowerCase();
+  if (file.endsWith('.mpd') || file.endsWith('.m3u8')) return false;
+  return /\.(mp4|mkv|webm|mov)$/.test(file);
+}
+
+function fileStream(
+  url: string | undefined,
+  size?: number,
+  resolution?: number,
+): MovieboxStream | null {
+  if (!isDownloadFile(url)) return null;
+  return {
+    url: url as string,
+    size: Number(size ?? 0),
+    resolution: Number(resolution ?? 0),
+    whole: true,
+  };
+}
+
+/**
+ * A link to a file that can be saved for offline playback.
+ *
+ * The resource listing only hands out a real MP4 when a specific resolution is
+ * asked for: the default row can carry the whole size with an empty link, or
+ * the "update your app" clip. A DASH-only title has no downloadable file, so
+ * it is reported instead of saving the manifest by mistake.
+ */
+export async function downloadStream(
+  id: string,
+  season: number,
+  episode: number,
+): Promise<MovieboxStream> {
+  // Some titles carry a complete file in their resource detectors.
+  try {
+    const details = await subjectDetails(id);
+    for (const detector of details.resourceDetectors ?? []) {
+      const list = detector?.resolutionList ?? [];
+      const matched = list.filter((raw) => {
+        if (season > 0 && raw?.se != null && Number(raw.se) !== season) return false;
+        if (episode > 0 && raw?.ep != null && Number(raw.ep) !== episode) return false;
+        return true;
+      });
+      const source = matched.length > 0 ? matched : list;
+      for (const raw of source) {
+        const stream = fileStream(raw?.resourceLink, Number(raw?.size ?? 0), raw?.resolution);
+        if (stream) return stream;
+      }
+      const direct = fileStream(detector?.downloadUrl, 0, 720);
+      if (direct) return direct;
+    }
+  } catch {}
+
+  // A film is sometimes filed as the first episode of a first season.
+  const places: [number, number][] = season === 0 && episode === 0
+    ? [[0, 0], [1, 1]]
+    : [[season, episode]];
+  for (const [se, ep] of places) {
+    for (const resolution of [1080, 720, 480, 360, 240, 0]) {
+      const rows = await fetchRowsAt('/subject-api/resource/v2', id, se, ep, resolution);
+      for (const row of rows) {
+        const stream = fileStream(row.previewUrl, row.size, row.resolution);
+        if (stream) return stream;
+      }
+    }
+  }
+
+  // If MovieBox only has a DASH stream, it cannot be saved as one file.
+  try {
+    const row = (await playableRows(id, season, episode))[0];
+    if (row) {
+      const stream = await directStream(id, row);
+      if (isDownloadFile(stream.url)) return stream;
+    }
+  } catch {}
+
+  throw new Error(
+    'This title is stream-only right now. MovieBox has no MP4 file to download, only a DASH stream.',
+  );
 }
 
 export type MovieboxCaption = {

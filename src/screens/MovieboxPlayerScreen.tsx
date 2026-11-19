@@ -12,14 +12,16 @@ import {
   View,
 } from 'react-native';
 import { useEvent, useEventListener } from 'expo';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { captions, directStream, playableRows, seasonList, type MovieboxCaption, type MovieboxSeason } from '../api/moviebox';
 import { shareMoviebox } from '../chat/share';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { VideoOverlay } from '../components/VideoOverlay';
 import { AudioTrackPicker } from '../components/AudioTrackPicker';
+import { PlaybackSettings } from '../components/PlaybackSettings';
 import { useAudioTracks, audioTrackLabel } from '../hooks/useAudioTracks';
 import { useTraktScrobble } from '../hooks/useTraktScrobble';
 import { showToast } from '../data/toasts';
@@ -41,6 +43,13 @@ type Props = {
 
 // How many times a stale link is fetched again before giving up.
 const MAX_ATTEMPTS = 3;
+const SUBTITLE_DELAY_KEY = '@forus_subtitle_delay';
+
+// The player is owned by a hook, and its speed is a plain property. Keeping
+// the write here stops the React Compiler lint from treating it as state.
+function applySpeed(player: VideoPlayer, rate: number) {
+  player.playbackRate = rate;
+}
 
 export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const { width, height } = useWindowDimensions();
@@ -74,9 +83,32 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   // The words of the subtitle being shown, kept with the language they are
   // for, so the right ones are shown while a new one is on its way.
   const [loaded, setLoaded] = useState<{ id: string; list: SubtitleCue[] } | null>(null);
+  // The speed the film is played at, and how late the subtitles are shown.
+  const [speed, setSpeed] = useState(1);
+  const [subtitleDelay, setSubtitleDelay] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const speedRef = useRef(1);
   useEffect(() => {
     latestTime.current = currentTime ?? 0;
   }, [currentTime]);
+  useEffect(() => {
+    speedRef.current = speed;
+    applySpeed(player, speed);
+  }, [player, speed]);
+  useEffect(() => {
+    AsyncStorage.getItem(SUBTITLE_DELAY_KEY)
+      .then((raw) => {
+        const value = Number(raw);
+        if (Number.isFinite(value)) {
+          setSubtitleDelay(Math.max(-5, Math.min(5, value)));
+        }
+      })
+      .catch(() => {});
+  }, []);
+  const changeSubtitleDelay = (value: number) => {
+    setSubtitleDelay(value);
+    AsyncStorage.setItem(SUBTITLE_DELAY_KEY, String(value)).catch(() => {});
+  };
   const audio = useAudioTracks(player);
   const [audioPickerOpen, setAudioPickerOpen] = useState(false);
   useTraktScrobble(item.title, currentTime ?? 0, player.duration ?? 0, player.playing);
@@ -114,6 +146,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
       const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
       const stream = await directStream(item.subjectId, best);
       await player.replaceAsync({ uri: stream.url, headers: stream.headers });
+      applySpeed(player, speedRef.current);
       player.play();
       // Put the film back where it was left, once.
       if (!resumed.current) {
@@ -216,7 +249,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const failure = linkError ?? (status === 'error' ? error?.message ?? 'This file could not be played.' : null);
   const spoken =
     loaded && loaded.id === chosen && loaded.list.length > 0
-      ? cueAt(loaded.list, currentTime ?? 0)
+      ? cueAt(loaded.list, (currentTime ?? 0) - subtitleDelay)
       : null;
 
   return (
@@ -226,6 +259,8 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         style={portraitPhone ? styles.videoPortrait : styles.video}
         // In the corner window a tap opens the player instead.
         nativeControls={!mini && !isTV}
+        allowsPictureInPicture={!mini && !isTV}
+        startsPictureInPictureAutomatically={!mini && !isTV}
         contentFit="contain"
         fullscreenOptions={{
           enable: !isTV,
@@ -247,6 +282,8 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
           onSeekBy={(seconds) => player.seekBy(seconds)}
           hasMultipleAudio={audio.hasMultiple}
           onCycleAudio={cycleAudio}
+          speed={speed}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
       )}
 
@@ -329,9 +366,27 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
                   </Text>
                 </Pressable>
               ))}
+              <Pressable
+                onPress={() => setSettingsOpen(true)}
+                style={({ pressed }) => [styles.caption, pressed && styles.captionPressed]}
+              >
+                <Text style={styles.captionText}>
+                  Sync{subtitleDelay !== 0 ? ` ${subtitleDelay > 0 ? '+' : ''}${subtitleDelay.toFixed(1)}s` : ''}
+                </Text>
+              </Pressable>
             </ScrollView>
           )}
         </RelatedPanel>
+      )}
+
+      {!isTV && !mini && (
+        <Pressable
+          onPress={() => setSettingsOpen(true)}
+          hitSlop={10}
+          style={[styles.speed, { top: (portraitPhone ? (width * 9) / 16 : 0) + 8 }]}
+        >
+          <Text style={styles.speedText}>{speed === 1 ? '1×' : `${speed}×`}</Text>
+        </Pressable>
       )}
 
       {!isTV && !mini && (
@@ -356,6 +411,16 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         selected={audio.selected}
         onSelect={audio.select}
         onClose={() => setAudioPickerOpen(false)}
+      />
+
+      <PlaybackSettings
+        visible={settingsOpen}
+        speed={speed}
+        delay={subtitleDelay}
+        captionsAvailable={captionOptions.length > 0}
+        onSpeed={setSpeed}
+        onDelay={changeSubtitleDelay}
+        onClose={() => setSettingsOpen(false)}
       />
     </View>
   );
@@ -438,6 +503,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   minimizeText: { color: '#fff', fontSize: 22, fontWeight: '800', lineHeight: 22 },
+  speed: {
+    position: 'absolute',
+    right: 56,
+    height: 36,
+    minWidth: 44,
+    paddingHorizontal: 8,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  speedText: { color: '#fff', fontSize: sz(12, 14), fontWeight: '800' },
   close: {
     position: 'absolute',
     right: 12,

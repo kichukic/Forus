@@ -3,11 +3,10 @@
 // what the user sees: a progress line and three focusable buttons.
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useEvent } from 'expo';
 import type { VideoPlayer } from 'expo-video';
 import { FocusRow } from './FocusRow';
 import { ProgressLine, type PlaybackTime } from './PlayerControls';
-import { colors, isTV, sz } from '../theme';
+import { colors, isTV } from '../theme';
 
 type Props = {
   player: VideoPlayer;
@@ -19,6 +18,8 @@ type Props = {
   onSeekBy: (seconds: number) => void;
   onCycleAudio?: () => void;
   hasMultipleAudio?: boolean;
+  speed: number;
+  onOpenSettings?: () => void;
 };
 
 const SKIP = 15;
@@ -33,6 +34,8 @@ export function VideoOverlay({
   onSeekBy,
   onCycleAudio,
   hasMultipleAudio,
+  speed,
+  onOpenSettings,
 }: Props) {
   if (!show) return null;
 
@@ -70,6 +73,15 @@ export function VideoOverlay({
             >
               <Ionicons name="volume-high" size={isTV ? 26 : 20} color={colors.accent} />
               <Text style={[styles.btnText, { color: colors.accent }]}>Audio</Text>
+            </Pressable>
+          )}
+          {onOpenSettings && (
+            <Pressable
+              onPress={onOpenSettings}
+              style={({ focused }) => [styles.btn, focused && styles.btnFocused]}
+            >
+              <Ionicons name="options-outline" size={isTV ? 26 : 20} color={colors.text} />
+              <Text style={styles.btnText}>{speed === 1 ? '1×' : `${speed}×`}</Text>
             </Pressable>
           )}
         </FocusRow>

@@ -283,6 +283,7 @@ export function FilePlayerScreen({ item, onClose, onPlay, shell }: Props) {
           onSeekBy={(seconds) => player.seekBy(seconds)}
           hasMultipleAudio={audio.hasMultiple}
           onCycleAudio={cycleAudio}
+          speed={player.playbackRate}
         />
       )}
 

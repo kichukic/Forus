@@ -32,7 +32,12 @@
           "backgroundColor": "#0c0a12"
         }
       ],
-      "expo-video",
+      [
+        "expo-video",
+        {
+          "supportsPictureInPicture": true
+        }
+      ],
       "expo-screen-orientation",
       "expo-font",
       "expo-image",

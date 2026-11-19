@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  directStream,
+  downloadStream,
   playableRows,
   searchSubjects,
   seasonEpisodes,
@@ -32,7 +32,7 @@ import { startDownload } from '../data/downloads';
 import { showToast } from '../data/toasts';
 import { ReleaseList } from '../components/ReleaseList';
 import { FavoriteHeart } from '../components/FavoriteHeart';
-import { GUTTER, RADIUS, SCRIM, colors, isTV, sz } from '../theme';
+import { GUTTER, RADIUS, SCRIM, colors, isTV } from '../theme';
 import type { Playable } from '../types';
 
 type Props = {
@@ -190,10 +190,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
     if (downloading) return;
     setDownloading(true);
     try {
-      const rows = await playableRows(currentId, 0, 0);
-      if (rows.length === 0) throw new Error('No stream available to download.');
-      const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
-      const stream = await directStream(currentId, best);
+      const stream = await downloadStream(currentId, 0, 0);
       await startDownload({
         id: `mb_${currentId}`,
         title: details?.title ?? subject.title,
@@ -211,10 +208,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
   const downloadEpisode = async (episode: MovieboxEpisode) => {
     try {
       showToast({ text: `Resolving Episode ${episode.episode} for download…` });
-      const rows = await playableRows(currentId, episode.season, episode.episode);
-      if (rows.length === 0) throw new Error(`No file found for Episode ${episode.episode}.`);
-      const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
-      const stream = await directStream(currentId, best);
+      const stream = await downloadStream(currentId, episode.season, episode.episode);
       await startDownload({
         id: `mb_${currentId}_s${episode.season}_e${episode.episode}`,
         title: `${details?.title ?? subject.title} S${episode.season}E${episode.episode}`,
