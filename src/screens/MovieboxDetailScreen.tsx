@@ -29,6 +29,7 @@ import {
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { shareMoviebox } from '../chat/share';
 import { isDownloaded, startDownload } from '../data/downloads';
+import { trackOpen } from '../data/activity';
 import { showToast } from '../data/toasts';
 import { ReleaseList } from '../components/ReleaseList';
 import { FavoriteHeart } from '../components/FavoriteHeart';
@@ -72,6 +73,14 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
   // The language version in front. A film dubbed into Hindi is a subject of
   // its own, so changing the audio means changing the film.
   const [currentId, setCurrentId] = useState(subject.id);
+
+  useEffect(() => {
+    void trackOpen({
+      id: subject.id,
+      source: 'moviebox',
+      title: subject.title,
+    });
+  }, [subject.id, subject.title]);
   const [switching, setSwitching] = useState(false);
 
   // Whether it has episodes is asked of the service, not guessed from the
@@ -197,6 +206,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
         poster: details?.poster ?? subject.poster,
         url: stream.url,
         kind: 'moviebox',
+        genre: details?.genre ?? subject.genre,
       });
     } catch (e) {
       showToast({ text: (e as Error).message || 'Could not download film.' });
@@ -215,6 +225,7 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
         poster: details?.poster ?? subject.poster,
         url: stream.url,
         kind: 'moviebox',
+        genre: details?.genre ?? subject.genre,
       });
     } catch (e) {
       showToast({ text: (e as Error).message || 'Could not download episode.' });

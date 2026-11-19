@@ -31,6 +31,7 @@ import { ReelsScreen } from './src/screens/ReelsScreen';
 import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
 import { sendScreenTimeHeartbeat, startChat, useChatStatus, publishWatching } from './src/chat/store';
 import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
+import { syncActivity } from './src/chat/activitySync';
 import { onOpenChatRequest } from './src/chat/push';
 import { SendToFriend } from './src/chat/SendToFriend';
 import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
@@ -192,6 +193,15 @@ export default function App() {
       syncHistory(latestHistory.current).then((remote) => {
         if (remote) setHistory((current) => mergeHistories(current, remote));
       });
+    sync();
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && sync());
+    return () => sub.remove();
+  }, [chatStatus]);
+
+  // Personalization activity follows the account too.
+  useEffect(() => {
+    if (chatStatus !== 'signedIn') return;
+    const sync = () => syncActivity();
     sync();
     const sub = AppState.addEventListener('change', (s) => s === 'active' && sync());
     return () => sub.remove();

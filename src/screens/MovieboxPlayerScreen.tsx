@@ -15,7 +15,7 @@ import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { captions, directStream, playableRows, seasonList, type MovieboxCaption, type MovieboxSeason } from '../api/moviebox';
+import { captions, directStream, playableRows, seasonList, subjectDetails, type MovieboxCaption, type MovieboxSeason } from '../api/moviebox';
 import { shareMoviebox } from '../chat/share';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
@@ -26,6 +26,7 @@ import { useAudioTracks, audioTrackLabel } from '../hooks/useAudioTracks';
 import { useTraktScrobble } from '../hooks/useTraktScrobble';
 import { showToast } from '../data/toasts';
 import { loadProgress, saveProgress } from '../data/movieboxProgress';
+import { trackWatch } from '../data/activity';
 import { useRemoteSeek } from '../hooks/useRemoteSeek';
 import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import type { ShellControls } from '../components/PlayerShell';
@@ -75,6 +76,8 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const resumed = useRef(false);
   // The latest time, kept for saving on the way out.
   const latestTime = useRef(0);
+  // Subject metadata, fetched once, used to record a watch event.
+  const subjectMeta = useRef<{ genre?: string; language?: string; country?: string; year?: string } | null>(null);
   // Stops the next episode from being started twice.
   const playedNext = useRef(false);
   // The subtitles the file has, and the one being shown.
@@ -189,6 +192,40 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
       if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, player.duration ?? 0);
     };
   }, [item.subjectId, item.season, item.episode, player]);
+
+  // Fetch subject metadata once and record a watch event on the way out.
+  useEffect(() => {
+    let cancelled = false;
+    subjectDetails(item.subjectId)
+      .then((d) => {
+        if (cancelled) return;
+        subjectMeta.current = {
+          genre: d?.subject?.genre,
+          language: d?.subject?.language,
+          country: d?.subject?.country,
+          year: d?.subject?.year,
+        };
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      const t = latestTime.current;
+      const dur = player.duration ?? 0;
+      const progress = dur > 0 ? Math.min(1, t / dur) : 0;
+      void trackWatch({
+        id: item.subjectId,
+        source: 'moviebox',
+        title: item.title,
+        genre: subjectMeta.current?.genre,
+        language: subjectMeta.current?.language,
+        country: subjectMeta.current?.country,
+        year: subjectMeta.current?.year,
+        progress,
+        duration: dur,
+        completed: dur > 0 && progress >= 0.9,
+      });
+    };
+  }, [item.subjectId, item.season, item.episode, player, item.title]);
 
   useEffect(() => {
     playedNext.current = false;

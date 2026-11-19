@@ -33,6 +33,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
 import { MovieboxHero } from '../components/MovieboxHero';
+import { ForYouRow } from '../components/ForYouRow';
 import { MovieboxRecommendationsRow } from '../components/MovieboxRecommendationsRow';
 import { CinemasRow } from '../components/CinemasRow';
 import { ReelsHomeRow } from '../components/ReelsHomeRow';
@@ -411,6 +412,13 @@ function HomeScreenView({
           <TonightBanner onPress={() => setTonightOpen(true)} />
           <FriendsOnlineRow />
           <FriendsWatchingRow onPlay={onPlay} />
+
+          {/* Personalized picks from what the user watches. */}
+          <ForYouRow
+            key={`for-you-${refreshKey}`}
+            version={refreshKey}
+            onOpen={onOpenMoviebox}
+          />
 
           {/* The news channels lead the page: they are what's on right now. */}
           {liveRow}

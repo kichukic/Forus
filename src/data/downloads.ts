@@ -11,6 +11,7 @@ import {
 import * as Notifications from 'expo-notifications';
 import { colors, isTV } from '../theme';
 import { showToast } from './toasts';
+import { trackDownload } from './activity';
 
 const STORAGE_KEY = '@forus_offline_downloads_v1';
 const CHANNEL_PROGRESS = 'download_progress_v3';
@@ -341,6 +342,7 @@ export async function startDownload(params: {
   poster?: string;
   url: string;
   kind: 'moviebox' | 'file' | 'stream';
+  genre?: string;
 }) {
   if (isTV) {
     showToast({ text: 'Downloads are only supported on mobile devices' });
@@ -383,6 +385,12 @@ export async function startDownload(params: {
   downloads = [item, ...downloads];
   notify();
   void persist();
+  void trackDownload({
+    id: params.id,
+    source: params.kind === 'moviebox' ? 'moviebox' : params.kind === 'file' ? 'file' : 'stream',
+    title: params.title,
+    genre: params.genre,
+  });
   showToast({ text: `Queued "${params.title}" for download` });
   queue.push(params.id);
   pump();

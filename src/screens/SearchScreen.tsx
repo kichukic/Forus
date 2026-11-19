@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { formatSize, getApiKey, listVideoFiles, type TorboxFile } from '../api/torbox';
 import { searchSubjects, type MovieboxSubject } from '../api/moviebox';
+import { trackSearch } from '../data/activity';
 import { fetchMovieDbSearch } from '../api/moviedbbox';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { searchVideos, type SearchResult } from '../api/youtube';
@@ -279,6 +280,7 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
           : Promise.resolve([[], []]);
         const [videos, [found, foundReleases]] = await Promise.all([videosPromise, sourcesPromise]);
         if (latest.current !== q) return;
+        void trackSearch(q);
         setFilms({ query: q, list: found });
         setReleases({ query: q, list: foundReleases });
         setFiles({ query: q, list: files });

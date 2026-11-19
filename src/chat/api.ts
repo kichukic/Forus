@@ -232,6 +232,44 @@ export const mergeHistory = (entries: RemoteHistoryEntry[]) =>
   call<{ entries: RemoteHistoryEntry[] }>('POST', '/history', { entries }).then((r) => r.entries);
 export const clearRemoteHistory = () => call<unknown>('DELETE', '/history');
 
+// Personalization activity, synced to the account so it follows the person.
+export type RemoteActivity = {
+  watches?: unknown[];
+  searches?: unknown[];
+  favorites?: unknown[];
+  downloads?: unknown[];
+  opens?: unknown[];
+  updatedAt?: string | null;
+};
+export const getActivity = () => call<RemoteActivity>('GET', '/activity');
+export const mergeActivity = (activity: RemoteActivity) =>
+  call<RemoteActivity>('POST', '/activity', activity);
+export const clearRemoteActivity = () => call<unknown>('DELETE', '/activity');
+
+// Trending titles (most-watched in the last 7 days).
+export type RemoteTrendingEntry = { key: string; item: Playable; count: number };
+export const getTrending = (limit = 30) =>
+  call<{ entries: RemoteTrendingEntry[] }>('GET', `/trending?limit=${limit}`).then((r) => r.entries);
+
+// Ratings & reviews.
+export type RemoteRatingSummary = { count: number; average: number };
+export type RemoteRatingEntry = { user: string; userName?: string; key: string; kind: string; title: string; poster?: string; stars: number; review?: string; createdAt: string; updatedAt: string };
+export const getRatings = (key: string, limit = 20) =>
+  call<{ entries: RemoteRatingEntry[]; summary: RemoteRatingSummary }>('GET', `/ratings?key=${encodeURIComponent(key)}&limit=${limit}`);
+export const rateTitle = (body: { key: string; kind: string; title: string; poster?: string; stars: number; review?: string }) =>
+  call<RemoteRatingEntry>('POST', '/ratings', body);
+export const deleteRating = (key: string) => call<unknown>('DELETE', `/ratings/${encodeURIComponent(key)}`);
+export const myRatings = () => call<{ entries: RemoteRatingEntry[] }>('GET', '/ratings/mine').then((r) => r.entries);
+
+// Server-side MovieBox resolve.
+export const resolveMoviebox = (subjectId: string, season = 0, episode = 0) =>
+  call<{ url: string; resolution: number; size: number; headers?: Record<string, string> }>('POST', '/moviebox/resolve', { subjectId, season, episode });
+
+// Device tokens for push.
+export const registerDevice = (token: string, platform: 'android' | 'ios' | 'web' = 'android') =>
+  call<unknown>('POST', '/devices', { token, platform });
+export const unregisterDevice = (token: string) => call<unknown>('DELETE', '/devices', { token });
+
 // AI Vibe & Mood Search via backend Gemini proxy
 export type AiVibeResult = { title: string; year?: number; reason?: string };
 // A Gemini call is slower than the chat endpoints, so it gets its own budget.
