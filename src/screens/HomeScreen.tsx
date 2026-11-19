@@ -134,6 +134,7 @@ type Props = {
   // TV has no bottom bar, so these sit in the header there.
   onOpenHistory: () => void;
   onOpenSettings: () => void;
+  onOpenLive: () => void;
   ref?: Ref<HomeHandle>;
 };
 
@@ -163,6 +164,7 @@ function HomeScreenView({
   onSendRelease,
   onOpenHistory,
   onOpenSettings,
+  onOpenLive,
   onOpenReels,
   ref,
 }: Props) {
@@ -363,6 +365,7 @@ function HomeScreenView({
             {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
             <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' || tab === 'jackbox' ? 'all' : tab)} />
             {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
+            {isTV && <RoundButton icon="tv-outline" label="Live" onPress={onOpenLive} />}
             {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
           </View>
         </View>

@@ -28,7 +28,7 @@ import {
 } from '../api/moviebox';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { shareMoviebox } from '../chat/share';
-import { startDownload } from '../data/downloads';
+import { isDownloaded, startDownload } from '../data/downloads';
 import { showToast } from '../data/toasts';
 import { ReleaseList } from '../components/ReleaseList';
 import { FavoriteHeart } from '../components/FavoriteHeart';
@@ -219,6 +219,50 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
     } catch (e) {
       showToast({ text: (e as Error).message || 'Could not download episode.' });
     }
+  };
+
+  // A whole season is resolved one episode at a time, then handed to the
+  // download queue. Resolving slowly is deliberate: the API gets upset when
+  // several episodes are asked for at once.
+  const [seasonQueue, setSeasonQueue] = useState<{ done: number; total: number } | null>(null);
+
+  const downloadSeason = async () => {
+    if (!episodes || episodes.season !== season || seasonQueue) return;
+    const list = episodes.list.filter((entry) => entry.episode > 0);
+    if (list.length === 0) return;
+    const idAtStart = currentId;
+    const titleAtStart = details?.title ?? subject.title;
+    const poster = details?.poster ?? subject.poster;
+    setSeasonQueue({ done: 0, total: list.length });
+    let added = 0;
+    let failed = 0;
+    for (let index = 0; index < list.length; index += 1) {
+      const episode = list[index];
+      const id = `mb_${idAtStart}_s${episode.season}_e${episode.episode}`;
+      try {
+        if (!(await isDownloaded(id))) {
+          const stream = await downloadStream(idAtStart, episode.season, episode.episode);
+          await startDownload({
+            id,
+            title: `${titleAtStart} S${episode.season}E${episode.episode}`,
+            poster,
+            url: stream.url,
+            kind: 'moviebox',
+          });
+          added += 1;
+        }
+      } catch {
+        failed += 1;
+      }
+      setSeasonQueue({ done: index + 1, total: list.length });
+    }
+    setSeasonQueue(null);
+    showToast({
+      text:
+        failed > 0
+          ? `Queued ${added} episodes · ${failed} could not be resolved`
+          : `Queued ${added} episodes for download`,
+    });
   };
 
   // The language versions of this film, as the service lists them.
@@ -435,7 +479,27 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
 
         {isSeries && (
           <View style={styles.block}>
-            <Text style={styles.sectionTitle}>Episodes</Text>
+            <View style={styles.episodesHead}>
+              <Text style={[styles.sectionTitle, styles.episodesTitle]}>Episodes</Text>
+              {!isTV && episodes?.season === season && episodes.list.length > 0 ? (
+                <Pressable
+                  onPress={downloadSeason}
+                  disabled={seasonQueue !== null}
+                  style={({ pressed }) => [styles.seasonDownload, pressed && styles.pressed]}
+                >
+                  <Ionicons
+                    name={seasonQueue ? 'hourglass-outline' : 'cloud-download-outline'}
+                    size={16}
+                    color={colors.accent}
+                  />
+                  <Text style={styles.seasonDownloadText}>
+                    {seasonQueue
+                      ? `Queuing ${seasonQueue.done}/${seasonQueue.total}…`
+                      : 'Download season'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
             {(seasons?.length ?? 0) > 1 && (
               <ScrollView
                 horizontal
@@ -628,6 +692,27 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 8,
   },
+  episodesHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  episodesTitle: { marginBottom: 0 },
+  seasonDownload: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(155,92,255,0.35)',
+  },
+  seasonDownloadText: { color: colors.accent, fontSize: isTV ? 14 : 12, fontWeight: '800' },
+  pressed: { opacity: 0.65 },
   cast: { color: colors.muted, fontSize: isTV ? 15 : 13, lineHeight: isTV ? 23 : 20 },
   dubs: { marginBottom: 16 },
   dubsHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },

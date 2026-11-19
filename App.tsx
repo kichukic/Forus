@@ -39,6 +39,8 @@ import { MovieboxPlayerScreen } from './src/screens/MovieboxPlayerScreen';
 import { MovieScreen } from './src/screens/MovieScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { StreamPlayerScreen } from './src/screens/StreamPlayerScreen';
+import { LivePlayerScreen } from './src/screens/LivePlayerScreen';
+import { LiveTvScreen } from './src/screens/LiveTvScreen';
 import { WebPlayerScreen } from './src/screens/WebPlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
 import { TransferBar } from './src/components/TransferBar';
@@ -322,6 +324,7 @@ export default function App() {
               onSendRelease={sendRelease}
               onOpenHistory={openHistory}
               onOpenSettings={openSettings}
+              onOpenLive={() => setScreen('live')}
               onOpenReels={(_, index) => {
                 setReelsInitialIndex(index ?? 0);
                 setScreen('reels');
@@ -329,6 +332,12 @@ export default function App() {
               ref={home}
             />
           </Animated.View>
+
+          {screen === 'live' && (
+            <ScreenReveal style={layer('live')}>
+              <LiveTvScreen onPlay={play} onBack={() => setScreen('home')} />
+            </ScreenReveal>
+          )}
 
           {screen === 'reels' && (
             <ScreenReveal style={layer('reels')}>
@@ -540,7 +549,17 @@ export default function App() {
               ) : playing.kind === 'moviebox' ? (
                 <MovieboxPlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               ) : playing.kind === 'stream' ? (
-                <StreamPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
+                playing.live ? (
+                  <LivePlayerScreen
+                    url={playing.url}
+                    title={playing.title}
+                    poster={playing.poster}
+                    headers={playing.headers}
+                    onClose={closePlayer}
+                  />
+                ) : (
+                  <StreamPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
+                )
               ) : playing.kind === 'web' ? (
                 <WebPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
               ) : (

@@ -2,7 +2,7 @@
   "expo": {
     "name": "ForUs",
     "slug": "MytvstreamApp",
-    "version": "1.0.216",
+    "version": "1.0.217",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
@@ -79,7 +79,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundImage": "./assets/images/adaptive-background.png"
       },
-      "versionCode": 217,
+      "versionCode": 218,
       "permissions": [
         "android.permission.REQUEST_INSTALL_PACKAGES",
         "android.permission.READ_CONTACTS",
