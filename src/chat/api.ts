@@ -249,7 +249,7 @@ export const clearRemoteActivity = () => call<unknown>('DELETE', '/activity');
 // Trending titles (most-watched in the last 7 days).
 export type RemoteTrendingEntry = { key: string; item: Playable; count: number };
 export const getTrending = (limit = 30) =>
-  call<{ entries: RemoteTrendingEntry[] }>('GET', `/trending?limit=${limit}`).then((r) => r.entries);
+  call<{ entries: RemoteTrendingEntry[] }>('GET', `/trending?limit=${limit}`, undefined, 40000).then((r) => r.entries);
 
 // Ratings & reviews.
 export type RemoteRatingSummary = { count: number; average: number };

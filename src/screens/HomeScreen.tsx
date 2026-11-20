@@ -422,17 +422,19 @@ function HomeScreenView({
           <FriendsOnlineRow />
           <FriendsWatchingRow onPlay={onPlay} />
 
+          {/* What everyone has been watching this week. */}
+          <TrendingRow
+            key={`trending-${refreshKey}`}
+            version={refreshKey}
+            onPlay={onPlay}
+            onOpenMoviebox={(s) => onOpenMoviebox(s as any)}
+          />
+
           {/* Personalized picks from what the user watches. */}
           <ForYouRow
             key={`for-you-${refreshKey}`}
             version={refreshKey}
             onOpen={onOpenMoviebox}
-          />
-
-          <TrendingRow
-            key={`trending-${refreshKey}`}
-            version={refreshKey}
-            onOpenMoviebox={(s) => onOpenMoviebox(s as any)}
           />
 
           {/* The news channels lead the page: they are what's on right now. */}

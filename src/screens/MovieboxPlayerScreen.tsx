@@ -15,7 +15,7 @@ import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { captions, directStream, playableRows, seasonList, subjectDetails, type MovieboxCaption, type MovieboxSeason } from '../api/moviebox';
+import { captions, directStream, playableRows, seasonList, subjectDetails, type MovieboxCaption, type MovieboxSeason, type MovieboxStream } from '../api/moviebox';
 import { resolveMoviebox } from '../chat/api';
 import { shareMoviebox } from '../chat/share';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
@@ -50,7 +50,37 @@ const SUBTITLE_DELAY_KEY = '@forus_subtitle_delay';
 // The player is owned by a hook, and its speed is a plain property. Keeping
 // the write here stops the React Compiler lint from treating it as state.
 function applySpeed(player: VideoPlayer, rate: number) {
-  player.playbackRate = rate;
+  try {
+    player.playbackRate = rate;
+  } catch {
+    // The screen is on its way out; the speed no longer matters.
+  }
+}
+
+// Put the film back where it was left, once. The duration comes from a ref, so
+// a screen that has already closed never reads a released player.
+function resumeFromSave(
+  subjectId: string,
+  season: number,
+  episode: number,
+  player: VideoPlayer,
+  resumed: { current: boolean },
+  durationRef: { current: number },
+) {
+  if (resumed.current) return;
+  resumed.current = true;
+  loadProgress(subjectId, season, episode)
+    .then((saved) => {
+      const duration = durationRef.current;
+      if (saved && saved.position > 5 && duration > 0 && saved.position < duration * 0.95) {
+        try {
+          player.currentTime = saved.position;
+        } catch {
+          // Released on the way out.
+        }
+      }
+    })
+    .catch(() => {});
 }
 
 export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
@@ -71,6 +101,12 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   });
   const [linkError, setLinkError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // The player belongs to the screen and is released when it closes. Work that
+  // is still on its way when that happens must not touch it again, or expo-video
+  // throws "shared object that was already released".
+  const alive = useRef(true);
+  // The duration as of the last update, so the way out never reads the player.
+  const durationRef = useRef(0);
   // How many times a stale link has been fetched again.
   const attempts = useRef(0);
   // Whether the saved place has already been put back.
@@ -93,8 +129,15 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const speedRef = useRef(1);
   useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  useEffect(() => {
     latestTime.current = currentTime ?? 0;
-  }, [currentTime]);
+    durationRef.current = player.duration ?? 0;
+  }, [currentTime, player]);
   useEffect(() => {
     speedRef.current = speed;
     applySpeed(player, speed);
@@ -144,57 +187,64 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
     setLoading(true);
     setLinkError(null);
     try {
-      // Prefer the server-side resolver when it is available.
-      const resolved = await resolveMoviebox(item.subjectId, item.season, item.episode).catch(() => null);
-      if (resolved?.url) {
-        await player.replaceAsync({ uri: resolved.url, headers: resolved.headers });
-        applySpeed(player, speedRef.current);
-        player.play();
-        if (!resumed.current) {
-          resumed.current = true;
-          loadProgress(item.subjectId, item.season, item.episode).then((saved) => {
-            if (saved && saved.position > 5 && player.duration > 0 && saved.position < player.duration * 0.95) {
-              player.currentTime = saved.position;
-            }
-          });
+      // The title's own signed links are the whole film. The play-info resolver
+      // on the server answers with a fifteen-minute preview for members-only
+      // titles, so it is only used when there is no file link at all.
+      let stream: MovieboxStream | null = null;
+      let resourceId: string | null = null;
+      try {
+        const rows = await playableRows(item.subjectId, item.season, item.episode);
+        if (rows.length > 0) {
+          // The best quality the service has for it.
+          const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
+          stream = await directStream(item.subjectId, best);
+          resourceId = best.resourceId;
         }
-        setLoading(false);
-        return;
+      } catch {
+        // No usable file link; the server resolver gets a turn below.
       }
-      const rows = await playableRows(item.subjectId, item.season, item.episode);
-      if (rows.length === 0) throw new Error('There is no file for this episode.');
-      // The best quality the service has for it.
-      const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
-      const stream = await directStream(item.subjectId, best);
+      if (!alive.current) return;
+      if (!stream) {
+        const resolved = await resolveMoviebox(item.subjectId, item.season, item.episode).catch(() => null);
+        if (!alive.current) return;
+        if (resolved?.url) {
+          stream = {
+            url: resolved.url,
+            headers: resolved.headers,
+            size: 0,
+            resolution: 0,
+            whole: true,
+          };
+        }
+      }
+      if (!stream) throw new Error('There is no file for this episode.');
       await player.replaceAsync({ uri: stream.url, headers: stream.headers });
+      if (!alive.current) return;
       applySpeed(player, speedRef.current);
       player.play();
       // Put the film back where it was left, once.
-      if (!resumed.current) {
-        resumed.current = true;
-        loadProgress(item.subjectId, item.season, item.episode).then((saved) => {
-          if (saved && saved.position > 5 && player.duration > 0 && saved.position < player.duration * 0.95) {
-            player.currentTime = saved.position;
-          }
-        });
-      }
+      resumeFromSave(item.subjectId, item.season, item.episode, player, resumed, durationRef);
       // The subtitles belong to the file, so they are asked for now.
-      captions(item.subjectId, best.resourceId)
-        .then((list) => {
-          setCaptionOptions(list);
-          // The first one is shown straight away, if there is one.
-          if (list.length > 0) setChosen(list[0].id);
-          else setChosen(null);
-        })
-        .catch(() => setCaptionOptions([]));
+      if (resourceId) {
+        captions(item.subjectId, resourceId)
+          .then((list) => {
+            if (!alive.current) return;
+            setCaptionOptions(list);
+            // The first one is shown straight away, if there is one.
+            if (list.length > 0) setChosen(list[0].id);
+            else setChosen(null);
+          })
+          .catch(() => alive.current && setCaptionOptions([]));
+      }
     } catch (e) {
+      if (!alive.current) return;
       const base = e instanceof Error ? e.message : "This episode can't be played.";
       const hint = item.season > 0
         ? " This series is not available for free on MovieBox - open the title and use \"Send to TorBox\" to play it."
         : "";
       setLinkError(base + hint);
     } finally {
-      setLoading(false);
+      if (alive.current) setLoading(false);
     }
   }, [item.episode, item.season, item.subjectId, player]);
 
@@ -202,12 +252,12 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
     // Remember where this film or episode was left.
     const timer = setInterval(() => {
       const t = latestTime.current;
-      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, player.duration ?? 0);
+      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, durationRef.current);
     }, 10000);
     return () => {
       clearInterval(timer);
       const t = latestTime.current;
-      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, player.duration ?? 0);
+      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, durationRef.current);
     };
   }, [item.subjectId, item.season, item.episode, player]);
 
@@ -228,7 +278,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
     return () => {
       cancelled = true;
       const t = latestTime.current;
-      const dur = player.duration ?? 0;
+      const dur = durationRef.current;
       const progress = dur > 0 ? Math.min(1, t / dur) : 0;
       void trackWatch({
         id: item.subjectId,

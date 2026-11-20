@@ -90,6 +90,8 @@ export type MovieboxSubject = {
   hasResource: boolean;
   /** Whether the full film is behind a membership in the app. */
   membersOnly: boolean;
+  /** How much of the film a free visitor gets, in seconds. Zero when there is no preview. */
+  previewSeconds?: number;
   /**
    * The other language versions of the same film, each a subject of its own.
    * A film dubbed into Hindi is listed there as "Hindi dub".
@@ -210,6 +212,7 @@ function toSubject(raw: RawSubject): MovieboxSubject | null {
     seasons: raw.seNum,
     hasResource: raw.hasResource !== false,
     membersOnly: (raw.vipInfo?.requireMemberType ?? 0) > 0,
+    previewSeconds: raw.vipInfo?.previewSeconds ?? undefined,
     dubs: (raw.dubs ?? [])
       .filter((dub) => dub.subjectId)
       .map((dub) => ({
@@ -861,9 +864,9 @@ export type MovieboxStream = {
 /**
  * The link to the file itself.
  *
- * The service offers a short preview to everyone, and keeps the whole file
- * behind one more request: the same one the patched app uses, which asks for
- * the file by its id and gets the full-length file back.
+ * The subject details carry signed CDN links to the whole film. The service
+ * also offers a shorter version through play-info, which is only a quarter of
+ * an hour for members-only titles, so that is kept as a last resort.
  */
 export async function directStream(
   id: string,
@@ -871,6 +874,8 @@ export async function directStream(
 ): Promise<MovieboxStream> {
   // The subject details already hand out the real, signed stream link, so when
   // the preview is not the dummy "update your app" video it can be played as is.
+  // These links are the whole film: the play-info request, by contrast, answers
+  // with a fifteen-minute preview for members-only titles.
   if (episode.previewUrl && !isNoticeVideo(episode.previewUrl)) {
     return {
       url: episode.previewUrl,
@@ -932,7 +937,8 @@ export async function directStream(
   }
 
   // The resource endpoints may hand out only an id. The signed link lives in
-  // play-info, so it is asked for before the id is given up on.
+  // play-info, so it is asked for before the id is given up on. For a
+  // members-only title this is the short preview, but it still plays.
   const info = await playInfoStream(id, episode.season, episode.episode);
   if (info) return info;
 

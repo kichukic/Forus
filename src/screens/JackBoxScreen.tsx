@@ -66,7 +66,8 @@ export function JackBoxScreen({
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
-  const [resolvingId, setResolvingId] = useState<number | null>(null);
+  // The title being opened, so only its card shows the busy overlay.
+  const [resolvingKey, setResolvingKey] = useState<string | null>(null);
 
   const latest = useRef('');
   const searching = query.trim().length >= MIN_SEARCH;
@@ -150,11 +151,14 @@ export function JackBoxScreen({
 
   const openItem = useCallback(
     async (item: MovieDbItem) => {
-      if (resolvingId) return;
-      setResolvingId(item.id);
+      const key = item.imdbId ?? String(item.id);
+      if (resolvingKey) return;
+      setResolvingKey(key);
       try {
         const details = await fetchMovieDbDetails(item).catch(() => null);
-        const resolvedId = details?.imdbId || `jackbox:${item.id}`;
+        // The source may already have given the IMDb id (Cinemeta does).
+        const resolvedId = details?.imdbId || item.imdbId || `jackbox:${item.id}`;
+        const genres = details?.genres ?? item.genres;
 
         if (item.mediaType === 'tv') {
           const series: StreamioItem = {
@@ -164,7 +168,7 @@ export function JackBoxScreen({
             year: item.year,
             poster: item.poster,
             background: item.backdrop,
-            genres: details?.genres,
+            genres,
             description: details?.overview || item.overview,
           };
           onOpenSeries(series);
@@ -175,7 +179,7 @@ export function JackBoxScreen({
             year: item.year,
             poster: item.poster,
             background: item.backdrop,
-            genres: details?.genres,
+            genres,
             description: details?.overview || item.overview,
             runtime: details?.runtime ? `${details.runtime} min` : undefined,
           };
@@ -184,10 +188,10 @@ export function JackBoxScreen({
       } catch {
         showToast({ text: "Couldn't load title details." });
       } finally {
-        setResolvingId(null);
+        setResolvingKey(null);
       }
     },
-    [resolvingId, onOpenMovie, onOpenSeries],
+    [resolvingKey, onOpenMovie, onOpenSeries],
   );
 
   const heading = embedded ? (
@@ -254,7 +258,7 @@ export function JackBoxScreen({
         key={columns}
         data={shown}
         numColumns={columns}
-        keyExtractor={(m) => `${m.mediaType}-${m.id}`}
+        keyExtractor={(m) => `${m.mediaType}-${m.imdbId ?? m.id}`}
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.grid}
         refreshControl={refreshControl}
@@ -282,7 +286,7 @@ export function JackBoxScreen({
               onPress={() => openItem(item)}
               onLongPress={shareOnLongPress({
                 kind: 'movie',
-                id: String(item.id),
+                id: item.imdbId ?? String(item.id),
                 title: item.title,
                 poster: item.poster,
                 year: item.year,
@@ -290,7 +294,7 @@ export function JackBoxScreen({
               width={cardWidth - 8}
               style={styles.card}
             >
-              <PosterCard item={item} loading={resolvingId === item.id} />
+              <PosterCard item={item} loading={resolvingKey === (item.imdbId ?? String(item.id))} />
             </FocusCard>
           </View>
         )}
