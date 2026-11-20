@@ -1304,6 +1304,9 @@ export function forgetMovieboxToken(): void {
   AsyncStorage.removeItem(TV_TOKEN_KEY).catch(() => {});
 }
 
+/** Tab 8 is MovieBox's Anime section. */
+export const ANIME_TAB_ID = 8;
+
 /** Tab 13 is MovieBox ShortTV / Short Dramas */
 export const SHORT_DRAMA_TAB_ID = 13;
 

@@ -10,12 +10,22 @@ type Props = {
   onOpen: (subject: MovieboxSubject) => void;
   version?: number;
   takeFocus?: boolean;
+  // A fixed MovieBox section, such as Anime, instead of the film section.
+  sectionId?: number;
+  // Which kind of subject leads the slides. Falls back to the rest.
+  prefer?: 'movie' | 'series';
 };
 
 const SLIDES = 5;
 const ROTATE_MS = 6000;
 
-export const MovieboxHero = memo(function MovieboxHero({ onOpen, version = 0, takeFocus = false }: Props) {
+export const MovieboxHero = memo(function MovieboxHero({
+  onOpen,
+  version = 0,
+  takeFocus = false,
+  sectionId,
+  prefer = 'movie',
+}: Props) {
   const { width, height } = useWindowDimensions();
   const [subjects, setSubjects] = useState<MovieboxSubject[]>([]);
   const [index, setIndex] = useState(0);
@@ -26,16 +36,19 @@ export const MovieboxHero = memo(function MovieboxHero({ onOpen, version = 0, ta
     let alive = true;
     (async () => {
       try {
-        const tabs = await browseTabs();
-        // Prefer a tab whose name is about movies/films; fall back to the first.
-        const movieTab =
-          tabs.find((t) => /movie|film/i.test(t.name)) ?? tabs[0];
-        const shelves = await browseShelves(movieTab ? movieTab.id : 1);
+        let id = sectionId;
+        if (id === undefined) {
+          const tabs = await browseTabs();
+          // Prefer a tab whose name is about movies/films; fall back to the first.
+          const movieTab =
+            tabs.find((t) => /movie|film/i.test(t.name)) ?? tabs[0];
+          id = movieTab ? movieTab.id : 1;
+        }
+        const shelves = await browseShelves(id);
         if (!alive) return;
-        const all = shelves
-          .flatMap((s) => s.subjects ?? [])
-          .filter((s) => s.kind === 'movie');
-        setSubjects((all.length ? all : shelves.flatMap((s) => s.subjects ?? [])).slice(0, SLIDES));
+        const all = shelves.flatMap((s) => s.subjects ?? []);
+        const wanted = all.filter((s) => s.kind === prefer);
+        setSubjects((wanted.length ? wanted : all).slice(0, SLIDES));
       } catch {
         if (alive) setSubjects([]);
       }
@@ -43,7 +56,7 @@ export const MovieboxHero = memo(function MovieboxHero({ onOpen, version = 0, ta
     return () => {
       alive = false;
     };
-  }, [version]);
+  }, [prefer, sectionId, version]);
 
   const slides = subjects;
   const cardWidth = width - GUTTER * 2;

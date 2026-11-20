@@ -47,6 +47,7 @@ import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
 import { CatalogScreen } from './CatalogScreen';
 import { StreamioBoxScreen } from './StreamioBoxScreen';
 import { MovieboxScreen } from './MovieboxScreen';
+import { AnimeScreen } from './AnimeScreen';
 import { JackBoxScreen } from './JackBoxScreen';
 import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
@@ -72,6 +73,7 @@ const STALE_AFTER_MS = 10 * 60 * 1000;
 const TABS = [
   { id: 'all', label: 'All' },
   { id: 'moviebox', label: 'MovieBox' },
+  { id: 'anime', label: 'Anime' },
   { id: 'streamiobox', label: 'StreamioBox' },
   { id: 'jackbox', label: 'JACKBOX' },
   { id: 'movies', label: 'Malayalam Movies' },
@@ -367,7 +369,7 @@ function HomeScreenView({
           </View>
           <View style={styles.actions}>
             {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
-            <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' || tab === 'jackbox' ? 'all' : tab)} />
+            <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'anime' || tab === 'streamiobox' || tab === 'jackbox' ? 'all' : tab)} />
             {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
             {isTV && <RoundButton icon="tv-outline" label="Live" onPress={onOpenLive} />}
             {isTV && <RoundButton icon="people-outline" label="Party" onPress={onOpenWatchParty} />}
@@ -578,6 +580,15 @@ function HomeScreenView({
         <MovieboxScreen
           key={`moviebox-${refreshKey}`}
           embedded
+          onOpen={onOpenMoviebox}
+          refreshControl={refreshControl}
+        />,
+      )}
+
+      {panel(
+        'anime',
+        <AnimeScreen
+          key={`anime-${refreshKey}`}
           onOpen={onOpenMoviebox}
           refreshControl={refreshControl}
         />,
