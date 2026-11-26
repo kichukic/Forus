@@ -1,8 +1,8 @@
 {
-  "version": "1.0.222",
-  "versionCode": 223,
-  "url": "https://github.com/kichukic/Forus/releases/download/v1.0.222/forus-1.0.222.apk",
-  "size": 50163482,
-  "sha256": "6dfc1f9be7dbb8060f03c4d38a26b4f796ea1dd99c5b2cdfc6969bca9fc0edf9",
+  "version": "1.0.225",
+  "versionCode": 226,
+  "url": "https://github.com/kichukic/Forus/releases/download/v1.0.225/forus-1.0.225.apk",
+  "size": 50172826,
+  "sha256": "6aed2b58805fa42ee4f92f6ab6d68568ca7c984de6941b4bbb395b9d635f8adb",
   "notes": "Latest release of ForUs."
 }
