@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
 import { AnimatedSplash } from './src/components/AnimatedSplash';
 import { BottomNav, BOTTOM_NAV_HEIGHT, type NavId } from './src/components/BottomNav';
+import { TVNavigationRail, TV_RAIL_COLLAPSED_WIDTH, type TVRailId } from './src/components/TVNavigationRail';
 import { ScreenReveal } from './src/components/ScreenReveal';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { PlayerShell } from './src/components/PlayerShell';
@@ -123,6 +124,7 @@ export default function App() {
   // The film open from MovieBox, in the same way.
   const [moviebox, setMoviebox] = useState<MovieboxSubject | null>(null);
   const [streamioSeries, setStreamioSeries] = useState<StreamioItem | null>(null);
+  const [currentHomeTab, setCurrentHomeTab] = useState<string>(isTV ? 'moviebox' : 'all');
   // The prompt shown on launch (and from Settings) when an update is found.
   const [updatePrompt, setUpdatePrompt] = useState<Update | null>(null);
   // Transfers now run in the background, so there is no full-screen sender.
@@ -335,7 +337,35 @@ export default function App() {
 
   // On TV nothing behind a player may keep remote focus, so it's hidden.
   const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!streamioSeries);
+  const showTVRail = isTV && !hideBackground;
   const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox && !(screen === 'chat' && chatFull);
+
+  const activeTVRailItem: TVRailId = (() => {
+    if (screen === 'search') return 'search';
+    if (screen === 'history') return 'history';
+    if (screen === 'favorites') return 'favorites';
+    if (screen === 'settings') return 'settings';
+    if (currentHomeTab === 'moviebox' || screen === 'home') return 'moviebox';
+    return 'moviebox';
+  })();
+
+  const handleTVRailSelect = (id: TVRailId) => {
+    if (id === 'moviebox') {
+      setScreen('home');
+      setCurrentHomeTab('moviebox');
+      home.current?.openTab('moviebox');
+    } else if (id === 'search') {
+      setSearchScope('all');
+      setScreen('search');
+    } else if (id === 'history') {
+      setScreen('history');
+    } else if (id === 'favorites') {
+      setScreen('favorites');
+    } else if (id === 'settings') {
+      setScreen('settings');
+    }
+  };
+
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
   const TargetView = isTV ? View : BlurTargetView;
 
@@ -344,8 +374,14 @@ export default function App() {
       <ErrorBoundary label="App">
         <View style={styles.root}>
         <StatusBar hidden={isTV} style="light" />
+        {showTVRail && (
+          <TVNavigationRail
+            active={activeTVRailItem}
+            onSelect={handleTVRailSelect}
+          />
+        )}
         {/* The screens, which the bottom bar's frosted glass blurs on phone; on TV plain View saves GPU texture capture. */}
-        <TargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
+        <TargetView ref={blurTarget} style={[StyleSheet.absoluteFill, showTVRail && styles.tvContentPad]}>
           {/* Home stays mounted so its tabs, rows and scroll position survive. */}
           <Animated.View style={[layer('home'), { opacity: homeShown, transform: [{ translateY: homeLift }] }]}>
             <HomeScreen
@@ -366,6 +402,7 @@ export default function App() {
                 setReelsInitialIndex(index ?? 0);
                 setScreen('reels');
               }}
+              onTabChange={setCurrentHomeTab}
               ref={home}
             />
           </Animated.View>
@@ -635,4 +672,5 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   hidden: { display: 'none' },
+  tvContentPad: { paddingLeft: TV_RAIL_COLLAPSED_WIDTH },
 });

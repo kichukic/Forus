@@ -362,6 +362,308 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
 
   const shown = details ?? subject;
 
+  const leftPane = (
+    <>
+      <View style={styles.head}>
+        {shown.poster ? (
+          <Image source={{ uri: shown.poster }} style={styles.poster} resizeMode="cover" />
+        ) : null}
+        <View style={styles.headText}>
+          <Text style={styles.title}>{shown.title}</Text>
+          <Text style={styles.meta}>
+            {[
+              shown.year,
+              shown.duration,
+              shown.contentRating,
+              shown.rating ? `${shown.rating}` : undefined,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+          {shown.genre ? <Text style={styles.meta}>{shown.genre}</Text> : null}
+          {shown.country ? <Text style={styles.meta}>{shown.country}</Text> : null}
+        </View>
+      </View>
+
+      {(dubs.length > 1 || !alreadyHindi) && (
+        <View style={styles.dubs}>
+          <View style={styles.dubsHead}>
+            <Text style={styles.dubsLabel}>Audio</Text>
+            {switching ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dubRow}
+          >
+            {dubs.map((dub) => {
+              const active = dub.id === currentId;
+              return (
+                <Pressable
+                  key={dub.id}
+                  onPress={() => switchDub(dub.id)}
+                  style={({ focused, pressed }) => [
+                    styles.dub,
+                    active && styles.dubActive,
+                    (focused || pressed) && styles.dubFocused,
+                  ]}
+                >
+                  <Text style={[styles.dubText, active && styles.dubTextActive]}>
+                    {dubLabel(dub)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {dubs.length <= 1 && hindiLookup !== 'none' && (
+              <Pressable
+                onPress={findHindi}
+                disabled={hindiLookup === 'busy'}
+                style={({ focused, pressed }) => [
+                  styles.dub,
+                  (focused || pressed) && styles.dubFocused,
+                ]}
+              >
+                {hindiLookup === 'busy' ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <Text style={styles.dubText}>Hindi</Text>
+                )}
+              </Pressable>
+            )}
+          </ScrollView>
+          {hindiLookup === 'none' ? (
+            <Text style={styles.note}>No Hindi audio for this film.</Text>
+          ) : null}
+        </View>
+      )}
+
+      {shown.description ? <Text style={styles.description}>{shown.description}</Text> : null}
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <View style={styles.actionRow}>
+        {hasSeasons && !isSeries && (
+          <Pressable
+            onPress={playFilm}
+            disabled={preparing}
+            style={({ focused, pressed }) => [
+              styles.play,
+              (focused || pressed) && styles.playActive,
+              preparing && styles.playBusy,
+            ]}
+          >
+            {preparing ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Ionicons name="play-circle" size={isTV ? 30 : 24} color="#fff" />
+            )}
+            <Text style={styles.playText}>Play now</Text>
+          </Pressable>
+        )}
+
+        {!isTV && (
+          <Pressable
+            onPress={() => shareMoviebox({ id: currentId, title: shown.title, poster: shown.poster })}
+            style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
+          >
+            <Ionicons name="paper-plane-outline" size={18} color={colors.text} />
+            <Text style={styles.shareBtnText}>Send to a friend</Text>
+          </Pressable>
+        )}
+
+        {!isTV && hasSeasons && !isSeries && (
+          <Pressable
+            onPress={downloadFilm}
+            disabled={downloading}
+            style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
+          >
+            {downloading ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <Ionicons name="cloud-download-outline" size={18} color={colors.text} />
+            )}
+            <Text style={styles.shareBtnText}>{downloading ? 'Preparing…' : 'Download'}</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {cast.length > 0 && (
+        <View style={styles.block}>
+          <Text style={styles.sectionTitle}>Cast</Text>
+          <Text style={styles.cast}>{cast.map((person) => person.name).join(' · ')}</Text>
+        </View>
+      )}
+    </>
+  );
+
+  const rightPane = (
+    <>
+      {isSeries && (
+        <View style={styles.block}>
+          <View style={styles.episodesHead}>
+            <Text style={[styles.sectionTitle, styles.episodesTitle]}>Episodes</Text>
+            {!isTV && episodes?.season === season && episodes.list.length > 0 ? (
+              <Pressable
+                onPress={downloadSeason}
+                disabled={seasonQueue !== null}
+                style={({ pressed }) => [styles.seasonDownload, pressed && styles.pressed]}
+              >
+                <Ionicons
+                  name={seasonQueue ? 'hourglass-outline' : 'cloud-download-outline'}
+                  size={16}
+                  color={colors.accent}
+                />
+                <Text style={styles.seasonDownloadText}>
+                  {seasonQueue
+                    ? `Queuing ${seasonQueue.done}/${seasonQueue.total}…`
+                    : 'Download season'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {(seasons?.length ?? 0) > 1 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.seasons}
+            >
+              {(seasons ?? []).map((entry) => (
+                <Pressable
+                  key={entry.season}
+                  onPress={() => setSeason(entry.season)}
+                  style={({ focused, pressed }) => [
+                    styles.season,
+                    season === entry.season && styles.seasonActive,
+                    (focused || pressed) && styles.seasonFocused,
+                  ]}
+                >
+                  <Text
+                    style={[styles.seasonText, season === entry.season && styles.seasonTextActive]}
+                  >
+                    S{entry.season}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+          {episodes === null || episodes.season !== season ? (
+            <ActivityIndicator color={colors.accent} style={styles.spinner} />
+          ) : episodes.list.length === 0 ? (
+            <Text style={styles.note}>No episodes in this season.</Text>
+          ) : (
+            <FlatList
+              data={episodes.list}
+              keyExtractor={(episode) => `${episode.season}-${episode.episode}`}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => playEpisode(item)}
+                  style={({ focused, pressed }) => [
+                    styles.episode,
+                    (focused || pressed) && styles.episodeActive,
+                  ]}
+                >
+                  <View style={styles.episodeMain}>
+                    <Text style={styles.episodeName} numberOfLines={1}>
+                      {item.title || `Episode ${item.episode}`}
+                    </Text>
+                    <Text style={styles.episodeMeta}>
+                      {[
+                        `Episode ${item.episode}`,
+                        item.resolution ? `${item.resolution}p` : undefined,
+                        item.duration ? `${Math.round(item.duration / 60)} min` : undefined,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                    {!isTV && (
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          downloadEpisode(item);
+                        }}
+                        hitSlop={10}
+                      >
+                        <Ionicons name="cloud-download-outline" size={22} color={colors.muted} />
+                      </Pressable>
+                    )}
+                    <Ionicons name="play-circle-outline" size={24} color={colors.accent} />
+                  </View>
+                </Pressable>
+              )}
+            />
+          )}
+        </View>
+      )}
+
+      <View style={styles.block}>
+        <Text style={styles.sectionTitle}>Send to TorBox</Text>
+        <Text style={styles.note}>
+          The same film as a downloadable release, sent to your TorBox and played from there.
+        </Text>
+        {plainTitle(subject.title).length < 2 ? (
+          <Text style={styles.note}>There is nothing to look up by name.</Text>
+        ) : (
+          <ReleaseList
+            releases={releases}
+            onSend={onSendRelease}
+            emptyText="No releases found for this film."
+          />
+        )}
+      </View>
+
+      <View style={styles.block}>
+        <Text style={styles.sectionTitle}>
+          Ratings & Reviews
+          {ratingSummary && ratingSummary.count > 0
+            ? ` · ${ratingSummary.average}★ (${ratingSummary.count})`
+            : ''}
+        </Text>
+        <View style={styles.ratingRow}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <Pressable key={n} onPress={() => setMyStars(n)} hitSlop={6}>
+              <Ionicons
+                name={n <= myStars ? 'star' : 'star-outline'}
+                size={24}
+                color={n <= myStars ? colors.accent : colors.muted}
+              />
+            </Pressable>
+          ))}
+        </View>
+        <TextInput
+          value={myReview}
+          onChangeText={setMyReview}
+          placeholder="Write a review (optional)"
+          placeholderTextColor={colors.muted}
+          style={styles.reviewInput}
+          multiline
+        />
+        <Pressable
+          onPress={submitRating}
+          disabled={ratingBusy || myStars < 1}
+          style={({ pressed }) => [styles.reviewBtn, pressed && styles.pressed, (ratingBusy || myStars < 1) && styles.disabled]}
+        >
+          <Text style={styles.reviewBtnText}>{ratingBusy ? 'Submitting…' : 'Submit rating'}</Text>
+        </Pressable>
+        {ratings.length > 0 && (
+          <View style={{ marginTop: 12, gap: 10 }}>
+            {ratings.slice(0, 5).map((r) => (
+              <View key={r.user + r.updatedAt} style={styles.reviewCard}>
+                <View style={styles.reviewHead}>
+                  <Text style={styles.reviewName}>{r.userName ?? 'Someone'}</Text>
+                  <Text style={styles.reviewStars}>{'★'.repeat(r.stars)}{'☆'.repeat(5 - r.stars)}</Text>
+                </View>
+                {r.review ? <Text style={styles.reviewText}>{r.review}</Text> : null}
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    </>
+  );
+
   return (
     <View style={styles.screen}>
       {shown.backdrop ? (
@@ -402,301 +704,29 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.head}>
-          {shown.poster ? (
-            <Image source={{ uri: shown.poster }} style={styles.poster} resizeMode="cover" />
-          ) : null}
-          <View style={styles.headText}>
-            <Text style={styles.title}>{shown.title}</Text>
-            <Text style={styles.meta}>
-              {[
-                shown.year,
-                shown.duration,
-                shown.contentRating,
-                shown.rating ? `${shown.rating}` : undefined,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </Text>
-            {shown.genre ? <Text style={styles.meta}>{shown.genre}</Text> : null}
-            {shown.country ? <Text style={styles.meta}>{shown.country}</Text> : null}
-          </View>
-        </View>
-
-        {(dubs.length > 1 || !alreadyHindi) && (
-          <View style={styles.dubs}>
-            <View style={styles.dubsHead}>
-              <Text style={styles.dubsLabel}>Audio</Text>
-              {switching ? <ActivityIndicator size="small" color={colors.accent} /> : null}
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.dubRow}
-            >
-              {dubs.map((dub) => {
-                const active = dub.id === currentId;
-                return (
-                  <Pressable
-                    key={dub.id}
-                    onPress={() => switchDub(dub.id)}
-                    style={({ focused, pressed }) => [
-                      styles.dub,
-                      active && styles.dubActive,
-                      (focused || pressed) && styles.dubFocused,
-                    ]}
-                  >
-                    <Text style={[styles.dubText, active && styles.dubTextActive]}>
-                      {dubLabel(dub)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              {dubs.length <= 1 && hindiLookup !== 'none' && (
-                <Pressable
-                  onPress={findHindi}
-                  disabled={hindiLookup === 'busy'}
-                  style={({ focused, pressed }) => [
-                    styles.dub,
-                    (focused || pressed) && styles.dubFocused,
-                  ]}
-                >
-                  {hindiLookup === 'busy' ? (
-                    <ActivityIndicator size="small" color={colors.accent} />
-                  ) : (
-                    <Text style={styles.dubText}>Hindi</Text>
-                  )}
-                </Pressable>
-              )}
-            </ScrollView>
-            {hindiLookup === 'none' ? (
-              <Text style={styles.note}>No Hindi audio for this film.</Text>
-            ) : null}
-          </View>
-        )}
-
-        {shown.description ? <Text style={styles.description}>{shown.description}</Text> : null}
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <View style={styles.actionRow}>
-          {hasSeasons && !isSeries && (
-            <Pressable
-              onPress={playFilm}
-              disabled={preparing}
-              style={({ focused, pressed }) => [
-                styles.play,
-                (focused || pressed) && styles.playActive,
-                preparing && styles.playBusy,
-              ]}
-            >
-              {preparing ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Ionicons name="play-circle" size={isTV ? 30 : 24} color="#fff" />
-              )}
-              <Text style={styles.playText}>Play now</Text>
-            </Pressable>
-          )}
-
-          {!isTV && (
-            <Pressable
-              onPress={() => shareMoviebox({ id: currentId, title: shown.title, poster: shown.poster })}
-              style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
-            >
-              <Ionicons name="paper-plane-outline" size={18} color={colors.text} />
-              <Text style={styles.shareBtnText}>Send to a friend</Text>
-            </Pressable>
-          )}
-
-          {!isTV && hasSeasons && !isSeries && (
-            <Pressable
-              onPress={downloadFilm}
-              disabled={downloading}
-              style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
-            >
-              {downloading ? (
-                <ActivityIndicator size="small" color={colors.accent} />
-              ) : (
-                <Ionicons name="cloud-download-outline" size={18} color={colors.text} />
-              )}
-              <Text style={styles.shareBtnText}>{downloading ? 'Preparing…' : 'Download'}</Text>
-            </Pressable>
-          )}
-        </View>
-
-        {cast.length > 0 && (
-          <View style={styles.block}>
-            <Text style={styles.sectionTitle}>Cast</Text>
-            <Text style={styles.cast}>{cast.map((person) => person.name).join(' · ')}</Text>
-          </View>
-        )}
-
-        {isSeries && (
-          <View style={styles.block}>
-            <View style={styles.episodesHead}>
-              <Text style={[styles.sectionTitle, styles.episodesTitle]}>Episodes</Text>
-              {!isTV && episodes?.season === season && episodes.list.length > 0 ? (
-                <Pressable
-                  onPress={downloadSeason}
-                  disabled={seasonQueue !== null}
-                  style={({ pressed }) => [styles.seasonDownload, pressed && styles.pressed]}
-                >
-                  <Ionicons
-                    name={seasonQueue ? 'hourglass-outline' : 'cloud-download-outline'}
-                    size={16}
-                    color={colors.accent}
-                  />
-                  <Text style={styles.seasonDownloadText}>
-                    {seasonQueue
-                      ? `Queuing ${seasonQueue.done}/${seasonQueue.total}…`
-                      : 'Download season'}
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-            {(seasons?.length ?? 0) > 1 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.seasons}
-              >
-                {(seasons ?? []).map((entry) => (
-                  <Pressable
-                    key={entry.season}
-                    onPress={() => setSeason(entry.season)}
-                    style={({ focused, pressed }) => [
-                      styles.season,
-                      season === entry.season && styles.seasonActive,
-                      (focused || pressed) && styles.seasonFocused,
-                    ]}
-                  >
-                    <Text
-                      style={[styles.seasonText, season === entry.season && styles.seasonTextActive]}
-                    >
-                      S{entry.season}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            )}
-            {episodes === null || episodes.season !== season ? (
-              <ActivityIndicator color={colors.accent} style={styles.spinner} />
-            ) : episodes.list.length === 0 ? (
-              <Text style={styles.note}>No episodes in this season.</Text>
-            ) : (
-              <FlatList
-                data={episodes.list}
-                keyExtractor={(episode) => `${episode.season}-${episode.episode}`}
-                scrollEnabled={false}
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => playEpisode(item)}
-                    style={({ focused, pressed }) => [
-                      styles.episode,
-                      (focused || pressed) && styles.episodeActive,
-                    ]}
-                  >
-                    <View style={styles.episodeMain}>
-                      <Text style={styles.episodeName} numberOfLines={1}>
-                        {item.title || `Episode ${item.episode}`}
-                      </Text>
-                      <Text style={styles.episodeMeta}>
-                        {[
-                          `Episode ${item.episode}`,
-                          item.resolution ? `${item.resolution}p` : undefined,
-                          item.duration ? `${Math.round(item.duration / 60)} min` : undefined,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                      {!isTV && (
-                        <Pressable
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            downloadEpisode(item);
-                          }}
-                          hitSlop={10}
-                        >
-                          <Ionicons name="cloud-download-outline" size={22} color={colors.muted} />
-                        </Pressable>
-                      )}
-                      <Ionicons name="play-circle-outline" size={24} color={colors.accent} />
-                    </View>
-                  </Pressable>
-                )}
-              />
-            )}
-          </View>
-        )}
-
-        <View style={styles.block}>
-          <Text style={styles.sectionTitle}>Send to TorBox</Text>
-          <Text style={styles.note}>
-            The same film as a downloadable release, sent to your TorBox and played from there.
-          </Text>
-          {plainTitle(subject.title).length < 2 ? (
-            <Text style={styles.note}>There is nothing to look up by name.</Text>
-          ) : (
-            <ReleaseList
-              releases={releases}
-              onSend={onSendRelease}
-              emptyText="No releases found for this film."
-            />
-          )}
-        </View>
-
-        <View style={styles.block}>
-          <Text style={styles.sectionTitle}>
-            Ratings & Reviews
-            {ratingSummary && ratingSummary.count > 0
-              ? ` · ${ratingSummary.average}★ (${ratingSummary.count})`
-              : ''}
-          </Text>
-          <View style={styles.ratingRow}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Pressable key={n} onPress={() => setMyStars(n)} hitSlop={6}>
-                <Ionicons
-                  name={n <= myStars ? 'star' : 'star-outline'}
-                  size={24}
-                  color={n <= myStars ? colors.accent : colors.muted}
-                />
-              </Pressable>
-            ))}
-          </View>
-          <TextInput
-            value={myReview}
-            onChangeText={setMyReview}
-            placeholder="Write a review (optional)"
-            placeholderTextColor={colors.muted}
-            style={styles.reviewInput}
-            multiline
-          />
-          <Pressable
-            onPress={submitRating}
-            disabled={ratingBusy || myStars < 1}
-            style={({ pressed }) => [styles.reviewBtn, pressed && styles.pressed, (ratingBusy || myStars < 1) && styles.disabled]}
+      {isTV ? (
+        <View style={styles.tvSplit}>
+          <ScrollView
+            style={styles.tvLeftPane}
+            contentContainerStyle={styles.tvLeftContent}
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.reviewBtnText}>{ratingBusy ? 'Submitting…' : 'Submit rating'}</Text>
-          </Pressable>
-          {ratings.length > 0 && (
-            <View style={{ marginTop: 12, gap: 10 }}>
-              {ratings.slice(0, 5).map((r) => (
-                <View key={r.user + r.updatedAt} style={styles.reviewCard}>
-                  <View style={styles.reviewHead}>
-                    <Text style={styles.reviewName}>{r.userName ?? 'Someone'}</Text>
-                    <Text style={styles.reviewStars}>{'★'.repeat(r.stars)}{'☆'.repeat(5 - r.stars)}</Text>
-                  </View>
-                  {r.review ? <Text style={styles.reviewText}>{r.review}</Text> : null}
-                </View>
-              ))}
-            </View>
-          )}
+            {leftPane}
+          </ScrollView>
+          <ScrollView
+            style={styles.tvRightPane}
+            contentContainerStyle={styles.tvRightContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {rightPane}
+          </ScrollView>
         </View>
-      </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {leftPane}
+          {rightPane}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -892,10 +922,37 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  episodeActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  episodeActive: {
+    borderColor: isTV ? '#ffffff' : colors.accent,
+    backgroundColor: isTV ? 'rgba(155, 92, 255, 0.32)' : colors.accentSoft,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: isTV ? 0.9 : 0,
+    shadowRadius: isTV ? 12 : 0,
+    elevation: isTV ? 8 : 0,
+  },
   episodeMain: { flex: 1 },
   episodeName: { color: colors.text, fontSize: isTV ? 15 : 13.5, fontWeight: '700' },
   episodeMeta: { color: colors.muted, fontSize: isTV ? 13 : 12, marginTop: 3 },
   note: { color: colors.muted, fontSize: isTV ? 15 : 13, marginTop: 10, marginBottom: 8 },
   spinner: { marginTop: 24 },
+  tvSplit: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingHorizontal: GUTTER,
+    gap: 32,
+    paddingBottom: 24,
+  },
+  tvLeftPane: {
+    flex: 4,
+  },
+  tvLeftContent: {
+    paddingBottom: 40,
+  },
+  tvRightPane: {
+    flex: 6,
+  },
+  tvRightContent: {
+    paddingBottom: 60,
+  },
 });

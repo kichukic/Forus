@@ -140,6 +140,7 @@ type Props = {
   onOpenSettings: () => void;
   onOpenLive: () => void;
   onOpenWatchParty: () => void;
+  onTabChange?: (tab: Tab) => void;
   ref?: Ref<HomeHandle>;
 };
 
@@ -172,11 +173,12 @@ function HomeScreenView({
   onOpenLive,
   onOpenWatchParty,
   onOpenReels,
+  onTabChange,
   ref,
 }: Props) {
   // Keeps the header clear of a phone's status bar and notch. Zero on TVs.
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<Tab>('all');
+  const [tab, setTab] = useState<Tab>(isTV ? 'moviebox' : 'all');
   // Bumped on refresh; the rows are keyed on it, so they remount and refetch.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -196,18 +198,20 @@ function HomeScreenView({
     setLaunchFocus(false);
     setDirection(TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1);
     setTab(t);
+    onTabChange?.(t);
   };
   // Bumped to hand the remote's focus back to the tab bar.
   const [focusTabs, setFocusTabs] = useState(0);
 
   useImperativeHandle(ref, () => ({
     goTop: () => {
+      const defaultTab = isTV ? 'moviebox' : 'all';
       if ((scrollPositions.get(tab) ?? 0) > 40) {
         activePage.current?.scrollToOffset({ offset: 0, animated: true });
         scrollPositions.set(tab, 0);
         resetHeroScroll();
-      } else if (tab !== 'all') {
-        open('all');
+      } else if (tab !== defaultTab) {
+        open(defaultTab);
       } else {
         return false;
       }
@@ -215,7 +219,7 @@ function HomeScreenView({
       return true;
     },
     openTab: (id) => {
-      setTab(id);
+      open(id);
       activePage.current?.scrollToOffset({ offset: 0, animated: true });
     },
   }));
@@ -363,51 +367,56 @@ function HomeScreenView({
             </Text>
             <Animated.View style={{ height: greetHeight, opacity: greetOpacity, overflow: 'hidden' }}>
               <Text style={styles.greeting} numberOfLines={1}>
-                {greet}
+                {isTV ? 'MovieBox · Trending Movies & Series' : greet}
               </Text>
             </Animated.View>
           </View>
           <View style={styles.actions}>
             {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
-            <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'anime' || tab === 'streamiobox' || tab === 'jackbox' ? 'all' : tab)} />
-            {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
-            {isTV && <RoundButton icon="tv-outline" label="Live" onPress={onOpenLive} />}
-            {isTV && <RoundButton icon="people-outline" label="Party" onPress={onOpenWatchParty} />}
+            {!isTV && (
+              <RoundButton
+                icon="search"
+                label="Search"
+                onPress={() =>
+                  onOpenSearch(
+                    tab === 'moviebox' || tab === 'anime' || tab === 'streamiobox' || tab === 'jackbox'
+                      ? 'all'
+                      : tab,
+                  )
+                }
+              />
+            )}
             {!isTV && (
               <Pressable onPress={onOpenWatchParty} hitSlop={8} style={styles.partyBtn}>
                 <Ionicons name="people-outline" size={20} color={colors.accent} />
               </Pressable>
             )}
-            {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
           </View>
         </View>
-        {/* On TV the row remembers the last tab, so Up from the page lands on it. */}
-        <FocusRow>
-          <ScrollView ref={tabBar} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-            <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]}>
-              <LinearGradient
-                colors={PILL_GRADIENT}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-            </Animated.View>
-            {TABS.map((t) => (
-              <TabButton
-                // Remounting is what hands the active tab the remote's focus on
-                // Back. The key must not change when a tab opens: that would
-                // remount the focused tab, and the TV would drop its focus onto
-                // another tab, which then opens.
-                key={`${t.id}-${focusTabs}`}
-                label={t.label}
-                active={tab === t.id}
-                takeFocus={focusTabs > 0 && tab === t.id}
-                onPress={() => open(t.id)}
-                onLayout={(x, width) => onTabLayout(t.id, x, width)}
-              />
-            ))}
-          </ScrollView>
-        </FocusRow>
+        {!isTV && (
+          <FocusRow>
+            <ScrollView ref={tabBar} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+              <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]}>
+                <LinearGradient
+                  colors={PILL_GRADIENT}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
+              {TABS.map((t) => (
+                <TabButton
+                  key={`${t.id}-${focusTabs}`}
+                  label={t.label}
+                  active={tab === t.id}
+                  takeFocus={focusTabs > 0 && tab === t.id}
+                  onPress={() => open(t.id)}
+                  onLayout={(x, width) => onTabLayout(t.id, x, width)}
+                />
+              ))}
+            </ScrollView>
+          </FocusRow>
+        )}
       </View>
 
       {panel(

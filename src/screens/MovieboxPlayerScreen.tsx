@@ -28,7 +28,7 @@ import { useTraktScrobble } from '../hooks/useTraktScrobble';
 import { showToast } from '../data/toasts';
 import { loadProgress, saveProgress } from '../data/movieboxProgress';
 import { trackWatch } from '../data/activity';
-import { useRemoteSeek } from '../hooks/useRemoteSeek';
+import { useRemoteSeek, type SeekState } from '../hooks/useRemoteSeek';
 import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import type { ShellControls } from '../components/PlayerShell';
 import { colors, isTV, sz } from '../theme';
@@ -175,7 +175,12 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   // native controls are switched off (they eat the D-pad). The overlay below
   // gives the same buttons for anyone who prefers the remote to focus them.
   const [showOverlay, setShowOverlay] = useState(true);
-  useRemoteSeek(player, () => setShowOverlay(true));
+  const [seekState, setSeekState] = useState<SeekState | null>(null);
+  useRemoteSeek(
+    player,
+    () => setShowOverlay(true),
+    setSeekState,
+  );
   useEffect(() => {
     if (!showOverlay) return;
     const timer = setTimeout(() => setShowOverlay(false), 4000);
@@ -380,7 +385,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         <VideoOverlay
           player={player}
           paused={!player.playing}
-          time={{ t: currentTime ?? 0, d: player.duration ?? 0 }}
+          time={{ t: seekState ? seekState.targetTime : (currentTime ?? 0), d: player.duration ?? 0 }}
           buffering={loading || status !== 'readyToPlay'}
           show={showOverlay}
           onToggle={() => (player.playing ? player.pause() : player.play())}
@@ -390,6 +395,20 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
           speed={speed}
           onOpenSettings={() => setSettingsOpen(true)}
         />
+      )}
+
+      {/* Instant TV Seek feedback badge */}
+      {isTV && seekState && (
+        <View style={styles.seekToast} pointerEvents="none">
+          <Ionicons
+            name={seekState.delta > 0 ? 'play-forward' : 'play-back'}
+            size={32}
+            color="#ffffff"
+          />
+          <Text style={styles.seekToastText}>
+            {seekState.delta > 0 ? `+${seekState.delta}s` : `${seekState.delta}s`}
+          </Text>
+        </View>
       )}
 
       {/* The words being said, over the video. */}
@@ -631,4 +650,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  seekToast: {
+    position: 'absolute',
+    top: '40%',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 20,
+    backgroundColor: 'rgba(15, 12, 22, 0.94)',
+    borderWidth: 2,
+    borderColor: colors.accent,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
+    elevation: 12,
+    zIndex: 100,
+  },
+  seekToastText: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
 });

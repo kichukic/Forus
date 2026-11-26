@@ -72,6 +72,68 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease, onPlay }
   const videos = meta?.videos ?? [];
   const seasons = Array.from(new Set(videos.map((v) => v.season).filter((s) => s != null))).sort((a, b) => a - b);
 
+  const leftPane = (
+    <View style={styles.leftWrapper}>
+      <View style={styles.head}>
+        {item.poster ? <Image source={{ uri: item.poster }} style={styles.poster} resizeMode="cover" /> : null}
+        <View style={styles.headText}>
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.meta}>{[item.year, item.runtime, item.genres?.slice(0, 3).join(', ')].filter(Boolean).join(' · ')}</Text>
+          {!isTV && (
+            <Pressable
+              onPress={() => shareMovie({ id: item.id, title: item.title, poster: item.poster, year: item.year })}
+              style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
+            >
+              <Ionicons name="paper-plane-outline" size={16} color={colors.text} />
+              <Text style={styles.shareBtnText}>Send to a friend</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+      {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
+    </View>
+  );
+
+  const rightPane = (
+    <View style={styles.rightWrapper}>
+      {loading ? <Text style={styles.note}>Loading episodes…</Text> : null}
+      {seasons.map((s) => (
+        <View key={s} style={styles.seasonBlock}>
+          <Text style={styles.sectionTitle}>Season {s}</Text>
+          {videos
+            .filter((v) => v.season === s)
+            .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))
+            .map((v) => {
+              const key = v.id ?? `${v.season}:${v.episode}`;
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => playOrSendEpisode(v)}
+                  disabled={sending === key}
+                  style={({ focused, pressed }) => [styles.episode, (focused || pressed) && styles.episodeActive]}
+                >
+                  <View style={styles.episodeMain}>
+                    <Text style={styles.episodeTitle} numberOfLines={1}>
+                      {v.episode}. {v.name ?? `Episode ${v.episode}`}
+                    </Text>
+                    <Text style={styles.episodeMeta}>
+                      {sending === key ? 'Starting…' : 'Play in Player'}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="play-circle"
+                    size={22}
+                    color={colors.accent}
+                  />
+                </Pressable>
+              );
+            })}
+        </View>
+      ))}
+      {!loading && seasons.length === 0 ? <Text style={styles.note}>No episodes found.</Text> : null}
+    </View>
+  );
+
   return (
     <View style={styles.screen}>
       {item.background ? <Image source={{ uri: item.background }} style={styles.backdrop} resizeMode="cover" /> : null}
@@ -103,60 +165,21 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease, onPlay }
           )}
         </View>
       </View>
-      <ScrollView contentContainerStyle={styles.list}>
-        <View style={styles.head}>
-          {item.poster ? <Image source={{ uri: item.poster }} style={styles.poster} resizeMode="cover" /> : null}
-          <View style={styles.headText}>
-            <Text style={styles.title}>{item.title}</Text>
-            <Text style={styles.meta}>{[item.year, item.runtime, item.genres?.slice(0, 3).join(', ')].filter(Boolean).join(' · ')}</Text>
-            {!isTV && (
-              <Pressable
-                onPress={() => shareMovie({ id: item.id, title: item.title, poster: item.poster, year: item.year })}
-                style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
-              >
-                <Ionicons name="paper-plane-outline" size={16} color={colors.text} />
-                <Text style={styles.shareBtnText}>Send to a friend</Text>
-              </Pressable>
-            )}
-          </View>
+      {isTV ? (
+        <View style={styles.tvSplit}>
+          <ScrollView style={styles.tvLeftPane} contentContainerStyle={styles.tvLeftContent} showsVerticalScrollIndicator={false}>
+            {leftPane}
+          </ScrollView>
+          <ScrollView style={styles.tvRightPane} contentContainerStyle={styles.tvRightContent} showsVerticalScrollIndicator={false}>
+            {rightPane}
+          </ScrollView>
         </View>
-        {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
-        {loading ? <Text style={styles.note}>Loading episodes…</Text> : null}
-        {seasons.map((s) => (
-          <View key={s} style={styles.seasonBlock}>
-            <Text style={styles.sectionTitle}>Season {s}</Text>
-            {videos
-              .filter((v) => v.season === s)
-              .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))
-              .map((v) => {
-                const key = v.id ?? `${v.season}:${v.episode}`;
-                return (
-                  <Pressable
-                    key={key}
-                    onPress={() => playOrSendEpisode(v)}
-                    disabled={sending === key}
-                    style={({ focused, pressed }) => [styles.episode, (focused || pressed) && styles.episodeActive]}
-                  >
-                    <View style={styles.episodeMain}>
-                      <Text style={styles.episodeTitle} numberOfLines={1}>
-                        {v.episode}. {v.name ?? `Episode ${v.episode}`}
-                      </Text>
-                      <Text style={styles.episodeMeta}>
-                        {sending === key ? 'Starting…' : 'Play in Player'}
-                      </Text>
-                    </View>
-                    <Ionicons
-                      name="play-circle"
-                      size={22}
-                      color={colors.accent}
-                    />
-                  </Pressable>
-                );
-              })}
-          </View>
-        ))}
-        {!loading && seasons.length === 0 ? <Text style={styles.note}>No episodes found.</Text> : null}
-      </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={styles.list}>
+          {leftPane}
+          {rightPane}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -170,6 +193,13 @@ const styles = StyleSheet.create({
   topActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topShare: { width: isTV ? 44 : 38, height: isTV ? 44 : 38, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   list: { paddingHorizontal: GUTTER, paddingBottom: 120 },
+  leftWrapper: {},
+  rightWrapper: {},
+  tvSplit: { flex: 1, flexDirection: 'row', paddingHorizontal: GUTTER, gap: 32, paddingBottom: 24 },
+  tvLeftPane: { flex: 4 },
+  tvLeftContent: { paddingBottom: 40 },
+  tvRightPane: { flex: 6 },
+  tvRightContent: { paddingBottom: 60 },
   head: { flexDirection: 'row', gap: 18, marginTop: 10, marginBottom: 14 },
   poster: { width: isTV ? 150 : 116, aspectRatio: 2 / 3, borderRadius: RADIUS, backgroundColor: colors.surface },
   headText: { flex: 1, justifyContent: 'center' },
@@ -204,7 +234,15 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  episodeActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  episodeActive: {
+    borderColor: isTV ? '#ffffff' : colors.accent,
+    backgroundColor: isTV ? 'rgba(155, 92, 255, 0.32)' : colors.accentSoft,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: isTV ? 0.9 : 0,
+    shadowRadius: isTV ? 12 : 0,
+    elevation: isTV ? 8 : 0,
+  },
   episodeMain: { flex: 1 },
   episodeTitle: { color: colors.text, fontSize: isTV ? 16 : 14, fontWeight: '700' },
   episodeMeta: { color: colors.muted, fontSize: isTV ? 13 : 12, marginTop: 3 },

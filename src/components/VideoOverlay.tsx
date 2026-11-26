@@ -1,7 +1,7 @@
 // The controls shown over a video on a TV, where the remote drives everything.
 // The native controls are switched off on TV (they eat the D-pad), so this is
 // what the user sees: a progress line and three focusable buttons.
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { VideoPlayer } from 'expo-video';
 import { FocusRow } from './FocusRow';
@@ -41,7 +41,6 @@ export function VideoOverlay({
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
-      {buffering && <ActivityIndicator size="large" color={colors.accent} style={styles.spinner} />}
       <View style={styles.bar}>
         <ProgressLine time={time} live={false} />
         <FocusRow style={styles.row}>
@@ -92,7 +91,6 @@ export function VideoOverlay({
 
 const styles = StyleSheet.create({
   wrap: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end' },
-  spinner: { position: 'absolute', top: '42%', alignSelf: 'center' },
   bar: { paddingHorizontal: 32, paddingBottom: 24, gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24 },
   btn: {
