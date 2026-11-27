@@ -29,6 +29,47 @@ const TIMEOUT_MS = 20000;
 // football, games, and the one for adults.
 const EXCLUDED_TABS = [9, 33, 4, 11];
 
+// The MovieBox client tags every signed request with a build stamp. The stamp
+// is derived from the signing certificate of the stock mod APK and the time of
+// the request, and the service answers with a placeholder clip when the tag is
+// missing or incomplete. That is the patch the app has to send so films play.
+const STOCK_CERT_SHA256 = '03d4b741632d136bc23e2de4c6adcdb7712f1980b619c183221801730bbd0410';
+const BUILD_TAG_SALT = 'oneroom';
+const BUILD_TAG_INFO_KEY = 'X-Client-Build';
+
+// The stamp of a build tag: seconds since the epoch, the milliseconds within
+// the second padded to three places, three zeroes, and a random part of the
+// build. It is what makes a tag unique to the moment it is asked for.
+function buildTagStamp(tsMs: number, randPart: number): string {
+  const seconds = Math.floor(tsMs / 1000);
+  const millis = String(tsMs % 1000).padStart(3, '0');
+  return `${seconds}${millis}000${randPart}`;
+}
+
+function buildTagForCert(tsMs: number, randPart: number, certSha256Hex: string): string {
+  const stamp = buildTagStamp(tsMs, randPart);
+  const hash = md5Hex(`${certSha256Hex}${BUILD_TAG_SALT}${stamp}`);
+  return `${stamp}.${hash}`;
+}
+
+function generateXClientBuild(tsMs: number): string {
+  const randPart = Math.floor(Math.random() * 1000);
+  return buildTagForCert(tsMs, randPart, STOCK_CERT_SHA256);
+}
+
+// The build tag is mirrored into the client info the request is signed with,
+// exactly the way the official client writes it down.
+function withBuildTag(clientInfoJson: string, tag: string): string {
+  try {
+    const parsed = JSON.parse(clientInfoJson) as Record<string, unknown> | null;
+    if (parsed && typeof parsed === 'object') {
+      parsed[BUILD_TAG_INFO_KEY] = tag;
+      return JSON.stringify(parsed);
+    }
+  } catch {}
+  return clientInfoJson;
+}
+
 export type MovieboxSubject = {
   id: string;
   title: string;
@@ -49,6 +90,8 @@ export type MovieboxSubject = {
   hasResource: boolean;
   /** Whether the full film is behind a membership in the app. */
   membersOnly: boolean;
+  /** How much of the film a free visitor gets, in seconds. Zero when there is no preview. */
+  previewSeconds?: number;
   /**
    * The other language versions of the same film, each a subject of its own.
    * A film dubbed into Hindi is listed there as "Hindi dub".
@@ -82,6 +125,8 @@ export type MovieboxEpisode = {
   resourceId: string;
   /** The short file the API offers without a membership. */
   previewUrl: string;
+  /** Cookies the signed CDN link needs, when the link came from play-info. */
+  streamHeaders?: Record<string, string>;
 };
 
 export type MovieboxCast = { name: string; character: string }[];
@@ -167,6 +212,7 @@ function toSubject(raw: RawSubject): MovieboxSubject | null {
     seasons: raw.seNum,
     hasResource: raw.hasResource !== false,
     membersOnly: (raw.vipInfo?.requireMemberType ?? 0) > 0,
+    previewSeconds: raw.vipInfo?.previewSeconds ?? undefined,
     dubs: (raw.dubs ?? [])
       .filter((dub) => dub.subjectId)
       .map((dub) => ({
@@ -202,7 +248,7 @@ async function getDevice(): Promise<Device> {
   } catch {
     saved = null;
   }
-  const versionCode = 50020133;
+  const versionCode = 50020134;
   device = {
     deviceId: saved?.deviceId ?? randomHex(32),
     gaid: saved?.gaid ?? randomId(),
@@ -216,8 +262,8 @@ async function getDevice(): Promise<Device> {
 function clientInfo(info: Device): string {
   return JSON.stringify({
     package_name: 'com.community.oneroom',
-    version_name: '4.0.03.1020.03',
-    version_code: 50020133,
+    version_name: '4.0.04.1112.03',
+    version_code: 50020134,
     os: 'android',
     os_version: '13',
     install_ch: 'ps',
@@ -307,6 +353,7 @@ async function request<T>(
   const payload = body === undefined ? undefined : JSON.stringify(body);
   const ts = Date.now();
   const info = await getDevice();
+  const buildTag = generateXClientBuild(ts);
 
   // What the service hashes: the request, the timestamp and the body.
   const canonical = [
@@ -325,7 +372,8 @@ async function request<T>(
     Connection: 'keep-alive',
     'x-client-token': `${ts},${md5Hex(String(ts).split('').reverse().join(''))}`,
     'x-tr-signature': `${ts}|2|${hmacMd5Base64(hexBytes(SECRET), canonical)}`,
-    'x-client-info': clientInfo(info),
+    'x-client-build': buildTag,
+    'x-client-info': withBuildTag(clientInfo(info), buildTag),
     'x-client-status': '0',
     'x-forwarded-for': forwardedFor(),
     'User-Agent': info.userAgent,
@@ -583,6 +631,69 @@ function isNoticeVideo(url?: string): boolean {
   return false;
 }
 
+type RawPlayInfoStream = {
+  url?: string;
+  size?: string | number;
+  resolutions?: string;
+  signCookie?: string;
+  format?: string;
+  codecName?: string;
+};
+
+function streamResolution(stream: RawPlayInfoStream): number {
+  const first = String(stream.resolutions ?? '').split(',')[0];
+  const value = Number(first);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/** The best stream from play-info, kept for a minute so one play is one call. */
+const playInfoCache = new Map<string, { at: number; value: MovieboxStream }>();
+
+/**
+ * The signed file link for one episode, from the endpoint the patched client
+ * uses. The resource endpoints now answer with an id and an empty link; the
+ * actual CDN link and the cookie that unlocks it live here.
+ */
+async function playInfoStream(
+  id: string,
+  season: number,
+  episode: number,
+): Promise<MovieboxStream | null> {
+  const key = `${id}:${season}:${episode}`;
+  const held = playInfoCache.get(key);
+  if (held && Date.now() - held.at < 60 * 1000) return held.value;
+  try {
+    const params: Param[] = [['subjectId', id]];
+    if (season > 0 && episode > 0) {
+      params.push(['se', String(season)], ['ep', String(episode)]);
+    }
+    const data = await request<{ streams?: RawPlayInfoStream[] }>(
+      'GET',
+      `${BFF}/subject-api/play-info/v2`,
+      params,
+    );
+    const streams = (data?.streams ?? []).filter(
+      (stream) => stream?.url && !isNoticeVideo(stream.url),
+    );
+    if (streams.length === 0) return null;
+    const best = streams.reduce((pick, stream) =>
+      streamResolution(stream) > streamResolution(pick) ? stream : pick,
+    );
+    const cookie = (best.signCookie ?? '').trim().replace(/;+$/, '');
+    const value: MovieboxStream = {
+      url: best.url as string,
+      size: Number(best.size ?? 0),
+      resolution: streamResolution(best),
+      whole: true,
+      headers: cookie ? { Cookie: cookie } : undefined,
+    };
+    playInfoCache.set(key, { at: Date.now(), value });
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 /** The files of one film, or of one episode of a series. */
 export async function playableRows(
   id: string,
@@ -627,6 +738,26 @@ export async function playableRows(
   } catch {}
 
   const rows = await fetchRows(id, season, episode);
+  // The resource endpoint can answer with the id but leave the link empty.
+  // When every link is missing or is the notice clip, play-info has the file.
+  if (rows.length === 0 || rows.every((row) => !row.previewUrl || isNoticeVideo(row.previewUrl))) {
+    const stream = await playInfoStream(id, season, episode);
+    if (stream) {
+      return [
+        {
+          season: season === 0 ? 1 : season,
+          episode: episode === 0 ? 1 : episode,
+          title: '',
+          resolution: stream.resolution,
+          size: stream.size,
+          duration: 0,
+          resourceId: rows[0]?.resourceId ?? id,
+          previewUrl: stream.url,
+          streamHeaders: stream.headers,
+        },
+      ];
+    }
+  }
   if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) return rows;
   // A film is sometimes filed as the first episode of a first season, so the
   // other way round is tried before giving up.
@@ -634,6 +765,18 @@ export async function playableRows(
     const s1e1 = await fetchRows(id, 1, 1);
     if (s1e1.length > 0 && !s1e1.every((r) => isNoticeVideo(r.previewUrl))) return s1e1;
   }
+  // Check alternative audio dubs if the current version has no valid stream
+  try {
+    const details = await subjectDetails(id);
+    for (const dub of details.subject.dubs ?? []) {
+      if (dub.id && dub.id !== id) {
+        const altRows = await fetchRows(dub.id, season, episode);
+        if (altRows.length > 0 && !altRows.every((r) => isNoticeVideo(r.previewUrl))) {
+          return altRows;
+        }
+      }
+    }
+  } catch {}
   // If the service returned the notice video (e.g. for short dramas) or no rows, resolve via TV shorts API
   try {
     const dramaEps = await fetchDramaEpisodes(id);
@@ -659,32 +802,52 @@ export async function playableRows(
   return rows;
 }
 
+async function fetchRowsAt(
+  endpoint: string,
+  id: string,
+  season: number,
+  episode: number,
+  resolution: number,
+): Promise<MovieboxEpisode[]> {
+  try {
+    const data = await request<{ list?: RawEpisode[] }>(
+      'GET',
+      `${BFF}${endpoint}`,
+      [
+        ['subjectId', id],
+        ['page', '1'],
+        ['perPage', '8'],
+        ['all', '0'],
+        ['startPosition', '1'],
+        ['endPosition', '1'],
+        ['pagerMode', '2'],
+        ['resolution', String(resolution)],
+        ['se', String(season)],
+        ['epFrom', String(episode)],
+        ['epTo', String(episode)],
+        ['isVip', 'true'],
+      ],
+    );
+    return (data?.list ?? [])
+      .map((raw) => toEpisode(raw, season))
+      .filter((row): row is MovieboxEpisode => row !== null);
+  } catch {
+    return [];
+  }
+}
+
 async function fetchRows(
   id: string,
   season: number,
   episode: number,
 ): Promise<MovieboxEpisode[]> {
-  const data = await request<{ list?: RawEpisode[] }>(
-    'GET',
-    `${BFF}/subject-api/resource/v2`,
-    [
-      ['subjectId', id],
-      ['page', '1'],
-      ['perPage', '8'],
-      ['all', '0'],
-      ['startPosition', '1'],
-      ['endPosition', '1'],
-      ['pagerMode', '2'],
-      ['resolution', '0'],
-      ['se', String(season)],
-      ['epFrom', String(episode)],
-      ['epTo', String(episode)],
-      ['isVip', 'true'],
-    ],
-  );
-  return (data?.list ?? [])
-    .map((raw) => toEpisode(raw, season))
-    .filter((row): row is MovieboxEpisode => row !== null);
+  for (const endpoint of ['/subject-api/resource/v2', '/subject-api/resource']) {
+    const rows = await fetchRowsAt(endpoint, id, season, episode, 0);
+    if (rows.length > 0 && !rows.every((r) => isNoticeVideo(r.previewUrl))) {
+      return rows;
+    }
+  }
+  return [];
 }
 
 export type MovieboxStream = {
@@ -694,14 +857,16 @@ export type MovieboxStream = {
   resolution: number;
   /** True when the link is the whole film and not the short preview. */
   whole: boolean;
+  /** Headers the signed CDN link needs, such as its Edge-Cache cookie. */
+  headers?: Record<string, string>;
 };
 
 /**
  * The link to the file itself.
  *
- * The service offers a short preview to everyone, and keeps the whole file
- * behind one more request: the same one the patched app uses, which asks for
- * the file by its id and gets the full-length file back.
+ * The subject details carry signed CDN links to the whole film. The service
+ * also offers a shorter version through play-info, which is only a quarter of
+ * an hour for members-only titles, so that is kept as a last resort.
  */
 export async function directStream(
   id: string,
@@ -709,8 +874,16 @@ export async function directStream(
 ): Promise<MovieboxStream> {
   // The subject details already hand out the real, signed stream link, so when
   // the preview is not the dummy "update your app" video it can be played as is.
+  // These links are the whole film: the play-info request, by contrast, answers
+  // with a fifteen-minute preview for members-only titles.
   if (episode.previewUrl && !isNoticeVideo(episode.previewUrl)) {
-    return { url: episode.previewUrl, size: episode.size, resolution: episode.resolution, whole: true };
+    return {
+      url: episode.previewUrl,
+      size: episode.size,
+      resolution: episode.resolution,
+      whole: true,
+      headers: episode.streamHeaders,
+    };
   }
 
   // If the preview link is already known to be the update notice video, try the
@@ -763,22 +936,43 @@ export async function directStream(
     } catch {}
   }
 
+  // The resource endpoints may hand out only an id. The signed link lives in
+  // play-info, so it is asked for before the id is given up on. For a
+  // members-only title this is the short preview, but it still plays.
+  const info = await playInfoStream(id, episode.season, episode.episode);
+  if (info) return info;
+
   if (!episode.resourceId) throw new Error('No playable file for this episode.');
 
-  const data = await request<{ list?: { resourceLink?: string; size?: string | number; resolution?: number }[] }>(
-    'GET',
-    `${BFF}/subject-api/resource-position/v2`,
-    [
-      ['subjectId', id],
-      ['resourceId', episode.resourceId],
-      ['failUrl', episode.previewUrl],
-      ['failCode', '404'],
-      ['resourceNum', '0'],
-      ['isVip', 'true'],
-    ],
-  );
-  const found = data?.list?.[0];
-  const url = found?.resourceLink;
+  let url: string | undefined;
+  let size = episode.size;
+  let resolution = episode.resolution;
+
+  for (const endpoint of ['/subject-api/resource-position/v2', '/subject-api/resource-position']) {
+    try {
+      const data = await request<{ list?: { resourceLink?: string; size?: string | number; resolution?: number }[] }>(
+        'GET',
+        `${BFF}${endpoint}`,
+        [
+          ['subjectId', id],
+          ['resourceId', episode.resourceId],
+          ['failUrl', episode.previewUrl],
+          ['failCode', '404'],
+          ['resourceNum', '0'],
+          ['isVip', 'true'],
+        ],
+      );
+      const found = data?.list?.[0];
+      const link = found?.resourceLink;
+      if (link && !isNoticeVideo(link)) {
+        url = link;
+        size = Number(found?.size ?? episode.size);
+        resolution = found?.resolution ?? episode.resolution;
+        break;
+      }
+    } catch {}
+  }
+
   if (!url || isNoticeVideo(url)) {
     try {
       const dramaEps = await fetchDramaEpisodes(id);
@@ -795,14 +989,96 @@ export async function directStream(
     } catch {}
     throw new Error('No playable file for this episode.');
   }
-  const size = Number(found?.size ?? episode.size);
   return {
     url,
     size,
-    resolution: found?.resolution ?? episode.resolution,
+    resolution,
     // The preview is a small file; anything bigger is the whole thing.
     whole: size > episode.size * 4,
   };
+}
+
+/** A link that is one complete file, not a DASH/HLS playlist or a web page. */
+function isDownloadFile(url?: string): boolean {
+  if (!url || isNoticeVideo(url)) return false;
+  const file = url.split('?')[0].toLowerCase();
+  if (file.endsWith('.mpd') || file.endsWith('.m3u8')) return false;
+  return /\.(mp4|mkv|webm|mov)$/.test(file);
+}
+
+function fileStream(
+  url: string | undefined,
+  size?: number,
+  resolution?: number,
+): MovieboxStream | null {
+  if (!isDownloadFile(url)) return null;
+  return {
+    url: url as string,
+    size: Number(size ?? 0),
+    resolution: Number(resolution ?? 0),
+    whole: true,
+  };
+}
+
+/**
+ * A link to a file that can be saved for offline playback.
+ *
+ * The resource listing only hands out a real MP4 when a specific resolution is
+ * asked for: the default row can carry the whole size with an empty link, or
+ * the "update your app" clip. A DASH-only title has no downloadable file, so
+ * it is reported instead of saving the manifest by mistake.
+ */
+export async function downloadStream(
+  id: string,
+  season: number,
+  episode: number,
+): Promise<MovieboxStream> {
+  // Some titles carry a complete file in their resource detectors.
+  try {
+    const details = await subjectDetails(id);
+    for (const detector of details.resourceDetectors ?? []) {
+      const list = detector?.resolutionList ?? [];
+      const matched = list.filter((raw) => {
+        if (season > 0 && raw?.se != null && Number(raw.se) !== season) return false;
+        if (episode > 0 && raw?.ep != null && Number(raw.ep) !== episode) return false;
+        return true;
+      });
+      const source = matched.length > 0 ? matched : list;
+      for (const raw of source) {
+        const stream = fileStream(raw?.resourceLink, Number(raw?.size ?? 0), raw?.resolution);
+        if (stream) return stream;
+      }
+      const direct = fileStream(detector?.downloadUrl, 0, 720);
+      if (direct) return direct;
+    }
+  } catch {}
+
+  // A film is sometimes filed as the first episode of a first season.
+  const places: [number, number][] = season === 0 && episode === 0
+    ? [[0, 0], [1, 1]]
+    : [[season, episode]];
+  for (const [se, ep] of places) {
+    for (const resolution of [1080, 720, 480, 360, 240, 0]) {
+      const rows = await fetchRowsAt('/subject-api/resource/v2', id, se, ep, resolution);
+      for (const row of rows) {
+        const stream = fileStream(row.previewUrl, row.size, row.resolution);
+        if (stream) return stream;
+      }
+    }
+  }
+
+  // If MovieBox only has a DASH stream, it cannot be saved as one file.
+  try {
+    const row = (await playableRows(id, season, episode))[0];
+    if (row) {
+      const stream = await directStream(id, row);
+      if (isDownloadFile(stream.url)) return stream;
+    }
+  } catch {}
+
+  throw new Error(
+    'This title is stream-only right now. MovieBox has no MP4 file to download, only a DASH stream.',
+  );
 }
 
 export type MovieboxCaption = {
@@ -966,6 +1242,7 @@ async function tvRequest<T>(
   const payload = body === undefined ? undefined : JSON.stringify(body);
   const ts = Date.now();
   const info = await getDevice();
+  const buildTag = generateXClientBuild(ts);
 
   const canonical = [
     method,
@@ -983,7 +1260,8 @@ async function tvRequest<T>(
     Connection: 'keep-alive',
     'x-client-token': `${ts},${md5Hex(String(ts).split('').reverse().join(''))}`,
     'x-tr-signature': `${ts}|2|${hmacMd5Base64(hexBytes(SECRET), canonical)}`,
-    'x-client-info': tvClientInfo(info),
+    'x-client-build': buildTag,
+    'x-client-info': withBuildTag(tvClientInfo(info), buildTag),
     'x-client-status': '0',
     'x-forwarded-for': forwardedFor(),
     'User-Agent': 'com.community.mbox.tv/50040011 (Linux; U; Android 13; en_US; M2012K11AG)',
@@ -1025,6 +1303,9 @@ export function forgetMovieboxToken(): void {
   AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
   AsyncStorage.removeItem(TV_TOKEN_KEY).catch(() => {});
 }
+
+/** Tab 8 is MovieBox's Anime section. */
+export const ANIME_TAB_ID = 8;
 
 /** Tab 13 is MovieBox ShortTV / Short Dramas */
 export const SHORT_DRAMA_TAB_ID = 13;

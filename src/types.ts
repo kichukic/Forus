@@ -14,7 +14,15 @@ export type Playable =
   | { kind: 'video'; videoId: string; title: string }
   | { kind: 'live'; channelId: string; title: string }
   | { kind: 'file'; source: TorboxSource; itemId: number; fileId: number; title: string }
-  | { kind: 'stream'; url: string; title: string; poster?: string }
+  | {
+      kind: 'stream';
+      url: string;
+      title: string;
+      poster?: string;
+      /** An IPTV channel: no duration, resume point, or scrobbling. */
+      live?: boolean;
+      headers?: Record<string, string>;
+    }
   | { kind: 'web'; url: string; title: string; poster?: string }
   | MovieboxPlayable;
 

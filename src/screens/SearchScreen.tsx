@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { formatSize, getApiKey, listVideoFiles, type TorboxFile } from '../api/torbox';
 import { searchSubjects, type MovieboxSubject } from '../api/moviebox';
+import { trackSearch } from '../data/activity';
 import { fetchMovieDbSearch } from '../api/moviedbbox';
 import { searchTorrents, type TorrentOption } from '../api/torrents';
 import { searchVideos, type SearchResult } from '../api/youtube';
@@ -274,11 +275,14 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
         const sourcesPromise: Promise<[MovieboxSubject[], TorrentOption[]]> = searchesEverywhere
           ? Promise.all([
               searchSubjects(q, 1).then((r) => r.subjects).catch(() => [] as MovieboxSubject[]),
-              searchTorrents(q).catch(() => [] as TorrentOption[]),
+              isTV
+                ? Promise.resolve([] as TorrentOption[])
+                : searchTorrents(q).catch(() => [] as TorrentOption[]),
             ])
           : Promise.resolve([[], []]);
         const [videos, [found, foundReleases]] = await Promise.all([videosPromise, sourcesPromise]);
         if (latest.current !== q) return;
+        void trackSearch(q);
         setFilms({ query: q, list: found });
         setReleases({ query: q, list: foundReleases });
         setFiles({ query: q, list: files });
@@ -561,8 +565,8 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                   </View>
                 )}
 
-                {/* The releases: they are downloaded to the TorBox and played from there. */}
-                {releaseList.length > 0 && (
+                {/* The releases: they are downloaded to the TorBox and played from there (mobile only). */}
+                {!isTV && releaseList.length > 0 && (
                   <View style={styles.block}>
                     <Text style={styles.blockTitle}>
                       Releases to send to your TorBox
@@ -572,8 +576,8 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                   </View>
                 )}
 
-                {/* The files that are already in the TorBox. */}
-                {fileList.length > 0 && (
+                {/* The files that are already in the TorBox (mobile only). */}
+                {!isTV && fileList.length > 0 && (
                   <View style={styles.block}>
                     <Text style={styles.blockTitle}>In your TorBox</Text>
                     <ScrollView

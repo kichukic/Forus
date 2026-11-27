@@ -15,7 +15,7 @@ import { findTorrents, magnetFor, type TorrentOption } from '../api/torrents';
 import { getApiKey, createTorrent, getTorrent, getStreamUrl, mainVideoFile } from '../api/torbox';
 import { getAllStreams, type StreamResult } from '../api/addons';
 import { resolveDirectMovieStreams, type DirectStreamOption } from '../api/directStreams';
-import { playableRows, directStream } from '../api/moviebox';
+import { downloadStream } from '../api/moviebox';
 import { shareMovie } from '../chat/share';
 import { startDownload } from '../data/downloads';
 import { ReleaseList } from '../components/ReleaseList';
@@ -132,10 +132,7 @@ export function MovieScreen({ movie, onClose, onPlay, onOpenTorbox }: Props) {
     try {
       if (primaryStream.playable.kind === 'moviebox') {
         const mb = primaryStream.playable;
-        const rows = await playableRows(mb.subjectId, mb.season, mb.episode);
-        if (rows.length === 0) throw new Error('No stream available to download.');
-        const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
-        const stream = await directStream(mb.subjectId, best);
+        const stream = await downloadStream(mb.subjectId, mb.season, mb.episode);
         await startDownload({
           id: `mb_${mb.subjectId}`,
           title: movie.title,

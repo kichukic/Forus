@@ -2,7 +2,15 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { deleteDownload, formatBytes, useDownloads, type DownloadItem } from '../data/downloads';
+import {
+  deleteDownload,
+  formatBytes,
+  pauseDownload,
+  resumeDownload,
+  retryDownload,
+  useDownloads,
+  type DownloadItem,
+} from '../data/downloads';
 import { useNavScrollHide } from '../data/navChrome';
 import { colors, isTV } from '../theme';
 import type { Playable } from '../types';
@@ -15,6 +23,9 @@ type Props = {
 export function DownloadsScreen({ onBack, onPlay }: Props) {
   const insets = useSafeAreaInsets();
   const downloads = useDownloads();
+  const activeCount = downloads.filter((d) => d.status === 'downloading').length;
+  const queuedCount = downloads.filter((d) => d.status === 'queued').length;
+  const pausedCount = downloads.filter((d) => d.status === 'paused').length;
   // Scrolling the download list down tucks the bottom bar away.
   const navScroll = useNavScrollHide();
 
@@ -31,6 +42,9 @@ export function DownloadsScreen({ onBack, onPlay }: Props) {
     const isCompleted = item.status === 'completed';
     const isDownloading = item.status === 'downloading';
     const isFailed = item.status === 'failed';
+    const isQueued = item.status === 'queued';
+    const isPaused = item.status === 'paused';
+    const isBusy = isDownloading || isQueued || isPaused;
 
     return (
       <View style={styles.card}>
@@ -67,15 +81,19 @@ export function DownloadsScreen({ onBack, onPlay }: Props) {
             </View>
           )}
 
-          {isDownloading && (
+          {isBusy && (
             <View style={styles.progressWrap}>
               <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${item.progress}%` }]} />
+                <View style={[styles.progressFill, { width: `${Math.max(3, item.progress)}%` }]} />
               </View>
               <View style={styles.metaRow}>
-                <Text style={styles.progressText}>{item.progress}%</Text>
+                <Text style={[styles.progressText, isPaused && styles.pausedText]}>
+                  {isQueued ? 'Queued' : isPaused ? 'Paused' : `${item.progress}%`}
+                </Text>
                 <Text style={styles.sizeText}>
-                  {formatBytes(item.downloadedBytes)} / {formatBytes(item.totalBytes)}
+                  {isQueued
+                    ? 'Waiting for a download slot…'
+                    : `${formatBytes(item.downloadedBytes)} / ${formatBytes(item.totalBytes)}`}
                 </Text>
               </View>
             </View>
@@ -100,16 +118,55 @@ export function DownloadsScreen({ onBack, onPlay }: Props) {
           {isCompleted ? (
             <Pressable
               onPress={() => handlePlayOffline(item)}
+              hitSlop={8}
               style={({ pressed }) => [styles.btnPlay, pressed && styles.btnPressed]}
             >
               <Ionicons name="play-circle" size={24} color={colors.accent} />
             </Pressable>
           ) : null}
 
+          {isDownloading ? (
+            <Pressable
+              onPress={() => pauseDownload(item.id)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.btnPlay, pressed && styles.btnPressed]}
+              accessibilityLabel="Pause download"
+            >
+              <Ionicons name="pause-circle" size={24} color={colors.text} />
+            </Pressable>
+          ) : null}
+
+          {isPaused ? (
+            <Pressable
+              onPress={() => resumeDownload(item.id)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.btnPlay, pressed && styles.btnPressed]}
+              accessibilityLabel="Resume download"
+            >
+              <Ionicons name="play-circle" size={24} color={colors.accent} />
+            </Pressable>
+          ) : null}
+
+          {isFailed ? (
+            <Pressable
+              onPress={() => retryDownload(item.id)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.btnPlay, pressed && styles.btnPressed]}
+              accessibilityLabel="Retry download"
+            >
+              <Ionicons name="refresh-circle" size={24} color={colors.accent} />
+            </Pressable>
+          ) : null}
+
+          {isQueued ? (
+            <Ionicons name="time-outline" size={22} color={colors.muted} />
+          ) : null}
+
           <Pressable
             onPress={() => deleteDownload(item.id)}
             hitSlop={10}
             style={({ pressed }) => [styles.btnDelete, pressed && styles.btnPressed]}
+            accessibilityLabel="Delete download"
           >
             <Ionicons name="trash-outline" size={20} color={colors.muted} />
           </Pressable>
@@ -131,7 +188,10 @@ export function DownloadsScreen({ onBack, onPlay }: Props) {
           {downloads.length > 0 && (
             <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
               {downloads.length} {downloads.length === 1 ? 'item' : 'items'}
-              {downloads.some((d) => d.status === 'downloading') ? ' · Downloading…' : ' · Ready for offline'}
+              {activeCount > 0 ? ` · ${activeCount} downloading` : ''}
+              {queuedCount > 0 ? ` · ${queuedCount} queued` : ''}
+              {pausedCount > 0 ? ` · ${pausedCount} paused` : ''}
+              {activeCount + queuedCount + pausedCount === 0 ? ' · Ready for offline' : ''}
             </Text>
           )}
         </View>
@@ -305,6 +365,9 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 12,
     fontWeight: '800',
+  },
+  pausedText: {
+    color: colors.muted,
   },
   actions: {
     alignItems: 'center',

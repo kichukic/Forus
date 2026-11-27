@@ -32,6 +32,9 @@ import { ListFrame } from '../components/ListFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { MovieboxRow } from '../components/MovieboxRow';
+import { MovieboxHero } from '../components/MovieboxHero';
+import { ForYouRow } from '../components/ForYouRow';
+import { TrendingRow } from '../components/TrendingRow';
 import { MovieboxRecommendationsRow } from '../components/MovieboxRecommendationsRow';
 import { CinemasRow } from '../components/CinemasRow';
 import { ReelsHomeRow } from '../components/ReelsHomeRow';
@@ -44,6 +47,7 @@ import { NewRow, ThemeRow, VideoRow, cleanTitle } from '../components/VideoRow';
 import { CatalogScreen } from './CatalogScreen';
 import { StreamioBoxScreen } from './StreamioBoxScreen';
 import { MovieboxScreen } from './MovieboxScreen';
+import { AnimeScreen } from './AnimeScreen';
 import { JackBoxScreen } from './JackBoxScreen';
 import { HINDI_DRAMAS, HINDI_MOVIES, LIVE_NEWS, MOVIES, SHOWS, type SearchScope } from '../data/channels';
 import { playableKey } from '../data/history';
@@ -69,6 +73,7 @@ const STALE_AFTER_MS = 10 * 60 * 1000;
 const TABS = [
   { id: 'all', label: 'All' },
   { id: 'moviebox', label: 'MovieBox' },
+  { id: 'anime', label: 'Anime' },
   { id: 'streamiobox', label: 'StreamioBox' },
   { id: 'jackbox', label: 'JACKBOX' },
   { id: 'movies', label: 'Malayalam Movies' },
@@ -85,7 +90,6 @@ const HINDI_THEMES = THEMES.filter((t) => t.kind === 'hindi');
 // The All tab is a mix of everything, so it carries the themed rows of the
 // other tabs as well.
 const ALL_THEMES = [...MOVIE_THEMES, ...SHOW_THEMES, ...HINDI_THEMES];
-const HERO_ALL_SOURCES = MOVIES;
 // Where each tab was left. Only the tab in front is mounted, so the place is
 // kept here instead of in the tab itself.
 const scrollPositions = new Map<string, number>();
@@ -134,6 +138,9 @@ type Props = {
   // TV has no bottom bar, so these sit in the header there.
   onOpenHistory: () => void;
   onOpenSettings: () => void;
+  onOpenLive: () => void;
+  onOpenWatchParty: () => void;
+  onTabChange?: (tab: Tab) => void;
   ref?: Ref<HomeHandle>;
 };
 
@@ -163,12 +170,15 @@ function HomeScreenView({
   onSendRelease,
   onOpenHistory,
   onOpenSettings,
+  onOpenLive,
+  onOpenWatchParty,
   onOpenReels,
+  onTabChange,
   ref,
 }: Props) {
   // Keeps the header clear of a phone's status bar and notch. Zero on TVs.
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<Tab>('all');
+  const [tab, setTab] = useState<Tab>(isTV ? 'moviebox' : 'all');
   // Bumped on refresh; the rows are keyed on it, so they remount and refetch.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -188,18 +198,20 @@ function HomeScreenView({
     setLaunchFocus(false);
     setDirection(TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? 1 : -1);
     setTab(t);
+    onTabChange?.(t);
   };
   // Bumped to hand the remote's focus back to the tab bar.
   const [focusTabs, setFocusTabs] = useState(0);
 
   useImperativeHandle(ref, () => ({
     goTop: () => {
+      const defaultTab = isTV ? 'moviebox' : 'all';
       if ((scrollPositions.get(tab) ?? 0) > 40) {
         activePage.current?.scrollToOffset({ offset: 0, animated: true });
         scrollPositions.set(tab, 0);
         resetHeroScroll();
-      } else if (tab !== 'all') {
-        open('all');
+      } else if (tab !== defaultTab) {
+        open(defaultTab);
       } else {
         return false;
       }
@@ -207,7 +219,7 @@ function HomeScreenView({
       return true;
     },
     openTab: (id) => {
-      setTab(id);
+      open(id);
       activePage.current?.scrollToOffset({ offset: 0, animated: true });
     },
   }));
@@ -355,44 +367,56 @@ function HomeScreenView({
             </Text>
             <Animated.View style={{ height: greetHeight, opacity: greetOpacity, overflow: 'hidden' }}>
               <Text style={styles.greeting} numberOfLines={1}>
-                {greet}
+                {isTV ? 'MovieBox · Trending Movies & Series' : greet}
               </Text>
             </Animated.View>
           </View>
           <View style={styles.actions}>
             {isTV && <RoundButton icon="refresh" label="Refresh" onPress={refresh} />}
-            <RoundButton icon="search" label="Search" onPress={() => onOpenSearch(tab === 'moviebox' || tab === 'streamiobox' || tab === 'jackbox' ? 'all' : tab)} />
-            {isTV && <RoundButton icon="time-outline" label="History" onPress={onOpenHistory} />}
-            {isTV && <RoundButton icon="settings-outline" label="Settings" onPress={onOpenSettings} />}
+            {!isTV && (
+              <RoundButton
+                icon="search"
+                label="Search"
+                onPress={() =>
+                  onOpenSearch(
+                    tab === 'moviebox' || tab === 'anime' || tab === 'streamiobox' || tab === 'jackbox'
+                      ? 'all'
+                      : tab,
+                  )
+                }
+              />
+            )}
+            {!isTV && (
+              <Pressable onPress={onOpenWatchParty} hitSlop={8} style={styles.partyBtn}>
+                <Ionicons name="people-outline" size={20} color={colors.accent} />
+              </Pressable>
+            )}
           </View>
         </View>
-        {/* On TV the row remembers the last tab, so Up from the page lands on it. */}
-        <FocusRow>
-          <ScrollView ref={tabBar} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-            <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]}>
-              <LinearGradient
-                colors={PILL_GRADIENT}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-            </Animated.View>
-            {TABS.map((t) => (
-              <TabButton
-                // Remounting is what hands the active tab the remote's focus on
-                // Back. The key must not change when a tab opens: that would
-                // remount the focused tab, and the TV would drop its focus onto
-                // another tab, which then opens.
-                key={`${t.id}-${focusTabs}`}
-                label={t.label}
-                active={tab === t.id}
-                takeFocus={focusTabs > 0 && tab === t.id}
-                onPress={() => open(t.id)}
-                onLayout={(x, width) => onTabLayout(t.id, x, width)}
-              />
-            ))}
-          </ScrollView>
-        </FocusRow>
+        {!isTV && (
+          <FocusRow>
+            <ScrollView ref={tabBar} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+              <Animated.View style={[styles.pill, { left: pillX, width: pillWidth }]}>
+                <LinearGradient
+                  colors={PILL_GRADIENT}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
+              {TABS.map((t) => (
+                <TabButton
+                  key={`${t.id}-${focusTabs}`}
+                  label={t.label}
+                  active={tab === t.id}
+                  takeFocus={focusTabs > 0 && tab === t.id}
+                  onPress={() => open(t.id)}
+                  onLayout={(x, width) => onTabLayout(t.id, x, width)}
+                />
+              ))}
+            </ScrollView>
+          </FocusRow>
+        )}
       </View>
 
       {panel(
@@ -409,14 +433,27 @@ function HomeScreenView({
           <FriendsOnlineRow />
           <FriendsWatchingRow onPlay={onPlay} />
 
+          {/* What everyone has been watching this week. */}
+          <TrendingRow
+            key={`trending-${refreshKey}`}
+            version={refreshKey}
+            onPlay={onPlay}
+            onOpenMoviebox={(s) => onOpenMoviebox(s as any)}
+          />
+
+          {/* Personalized picks from what the user watches. */}
+          <ForYouRow
+            key={`for-you-${refreshKey}`}
+            version={refreshKey}
+            onOpen={onOpenMoviebox}
+          />
+
           {/* The news channels lead the page: they are what's on right now. */}
           {liveRow}
-          <HeroCarousel
+          <MovieboxHero
             key={`hero-all-${refreshKey}`}
-            sources={HERO_ALL_SOURCES}
-            label="Featured movie"
-            onPlay={playVideo}
-            // On TV the remote starts on Watch Now, until Back sends it to the tabs.
+            version={refreshKey}
+            onOpen={onOpenMoviebox}
             takeFocus={focusTabs === 0 && launchFocus}
           />
 
@@ -552,6 +589,15 @@ function HomeScreenView({
         <MovieboxScreen
           key={`moviebox-${refreshKey}`}
           embedded
+          onOpen={onOpenMoviebox}
+          refreshControl={refreshControl}
+        />,
+      )}
+
+      {panel(
+        'anime',
+        <AnimeScreen
+          key={`anime-${refreshKey}`}
           onOpen={onOpenMoviebox}
           refreshControl={refreshControl}
         />,
@@ -897,4 +943,5 @@ const styles = StyleSheet.create({
   // The cards run off the right edge, as a real row's do.
   moreRows: { paddingLeft: GUTTER, marginTop: sz(4, 8), overflow: 'hidden' },
   credit: { color: colors.faint, fontSize: sz(12.5, 15), textAlign: 'center', marginTop: 8, fontWeight: '600' },
+  partyBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft },
 });

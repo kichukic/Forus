@@ -1,13 +1,12 @@
 // The controls shown over a video on a TV, where the remote drives everything.
 // The native controls are switched off on TV (they eat the D-pad), so this is
 // what the user sees: a progress line and three focusable buttons.
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useEvent } from 'expo';
 import type { VideoPlayer } from 'expo-video';
 import { FocusRow } from './FocusRow';
 import { ProgressLine, type PlaybackTime } from './PlayerControls';
-import { colors, isTV, sz } from '../theme';
+import { colors, isTV } from '../theme';
 
 type Props = {
   player: VideoPlayer;
@@ -19,6 +18,8 @@ type Props = {
   onSeekBy: (seconds: number) => void;
   onCycleAudio?: () => void;
   hasMultipleAudio?: boolean;
+  speed: number;
+  onOpenSettings?: () => void;
 };
 
 const SKIP = 15;
@@ -33,12 +34,13 @@ export function VideoOverlay({
   onSeekBy,
   onCycleAudio,
   hasMultipleAudio,
+  speed,
+  onOpenSettings,
 }: Props) {
   if (!show) return null;
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
-      {buffering && <ActivityIndicator size="large" color={colors.accent} style={styles.spinner} />}
       <View style={styles.bar}>
         <ProgressLine time={time} live={false} />
         <FocusRow style={styles.row}>
@@ -72,6 +74,15 @@ export function VideoOverlay({
               <Text style={[styles.btnText, { color: colors.accent }]}>Audio</Text>
             </Pressable>
           )}
+          {onOpenSettings && (
+            <Pressable
+              onPress={onOpenSettings}
+              style={({ focused }) => [styles.btn, focused && styles.btnFocused]}
+            >
+              <Ionicons name="options-outline" size={isTV ? 26 : 20} color={colors.text} />
+              <Text style={styles.btnText}>{speed === 1 ? '1×' : `${speed}×`}</Text>
+            </Pressable>
+          )}
         </FocusRow>
       </View>
     </View>
@@ -80,7 +91,6 @@ export function VideoOverlay({
 
 const styles = StyleSheet.create({
   wrap: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end' },
-  spinner: { position: 'absolute', top: '42%', alignSelf: 'center' },
   bar: { paddingHorizontal: 32, paddingBottom: 24, gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24 },
   btn: {

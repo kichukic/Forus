@@ -12,19 +12,23 @@ import {
   View,
 } from 'react-native';
 import { useEvent, useEventListener } from 'expo';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
-import { captions, directStream, playableRows, seasonList, type MovieboxCaption, type MovieboxSeason } from '../api/moviebox';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { captions, directStream, playableRows, seasonList, subjectDetails, type MovieboxCaption, type MovieboxSeason, type MovieboxStream } from '../api/moviebox';
+import { resolveMoviebox } from '../chat/api';
 import { shareMoviebox } from '../chat/share';
 import { cueAt, parseSrt, type SubtitleCue } from '../api/subtitles';
 import { RelatedPanel } from '../components/RelatedPanel';
 import { VideoOverlay } from '../components/VideoOverlay';
 import { AudioTrackPicker } from '../components/AudioTrackPicker';
+import { PlaybackSettings } from '../components/PlaybackSettings';
 import { useAudioTracks, audioTrackLabel } from '../hooks/useAudioTracks';
 import { useTraktScrobble } from '../hooks/useTraktScrobble';
 import { showToast } from '../data/toasts';
 import { loadProgress, saveProgress } from '../data/movieboxProgress';
-import { useRemoteSeek } from '../hooks/useRemoteSeek';
+import { trackWatch } from '../data/activity';
+import { useRemoteSeek, type SeekState } from '../hooks/useRemoteSeek';
 import { useFullscreenOrientation } from '../hooks/useFullscreenOrientation';
 import type { ShellControls } from '../components/PlayerShell';
 import { colors, isTV, sz } from '../theme';
@@ -41,6 +45,43 @@ type Props = {
 
 // How many times a stale link is fetched again before giving up.
 const MAX_ATTEMPTS = 3;
+const SUBTITLE_DELAY_KEY = '@forus_subtitle_delay';
+
+// The player is owned by a hook, and its speed is a plain property. Keeping
+// the write here stops the React Compiler lint from treating it as state.
+function applySpeed(player: VideoPlayer, rate: number) {
+  try {
+    player.playbackRate = rate;
+  } catch {
+    // The screen is on its way out; the speed no longer matters.
+  }
+}
+
+// Put the film back where it was left, once. The duration comes from a ref, so
+// a screen that has already closed never reads a released player.
+function resumeFromSave(
+  subjectId: string,
+  season: number,
+  episode: number,
+  player: VideoPlayer,
+  resumed: { current: boolean },
+  durationRef: { current: number },
+) {
+  if (resumed.current) return;
+  resumed.current = true;
+  loadProgress(subjectId, season, episode)
+    .then((saved) => {
+      const duration = durationRef.current;
+      if (saved && saved.position > 5 && duration > 0 && saved.position < duration * 0.95) {
+        try {
+          player.currentTime = saved.position;
+        } catch {
+          // Released on the way out.
+        }
+      }
+    })
+    .catch(() => {});
+}
 
 export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const { width, height } = useWindowDimensions();
@@ -60,12 +101,20 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   });
   const [linkError, setLinkError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // The player belongs to the screen and is released when it closes. Work that
+  // is still on its way when that happens must not touch it again, or expo-video
+  // throws "shared object that was already released".
+  const alive = useRef(true);
+  // The duration as of the last update, so the way out never reads the player.
+  const durationRef = useRef(0);
   // How many times a stale link has been fetched again.
   const attempts = useRef(0);
   // Whether the saved place has already been put back.
   const resumed = useRef(false);
   // The latest time, kept for saving on the way out.
   const latestTime = useRef(0);
+  // Subject metadata, fetched once, used to record a watch event.
+  const subjectMeta = useRef<{ genre?: string; language?: string; country?: string; year?: string } | null>(null);
   // Stops the next episode from being started twice.
   const playedNext = useRef(false);
   // The subtitles the file has, and the one being shown.
@@ -74,9 +123,39 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   // The words of the subtitle being shown, kept with the language they are
   // for, so the right ones are shown while a new one is on its way.
   const [loaded, setLoaded] = useState<{ id: string; list: SubtitleCue[] } | null>(null);
+  // The speed the film is played at, and how late the subtitles are shown.
+  const [speed, setSpeed] = useState(1);
+  const [subtitleDelay, setSubtitleDelay] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const speedRef = useRef(1);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   useEffect(() => {
     latestTime.current = currentTime ?? 0;
-  }, [currentTime]);
+    durationRef.current = player.duration ?? 0;
+  }, [currentTime, player]);
+  useEffect(() => {
+    speedRef.current = speed;
+    applySpeed(player, speed);
+  }, [player, speed]);
+  useEffect(() => {
+    AsyncStorage.getItem(SUBTITLE_DELAY_KEY)
+      .then((raw) => {
+        const value = Number(raw);
+        if (Number.isFinite(value)) {
+          setSubtitleDelay(Math.max(-5, Math.min(5, value)));
+        }
+      })
+      .catch(() => {});
+  }, []);
+  const changeSubtitleDelay = (value: number) => {
+    setSubtitleDelay(value);
+    AsyncStorage.setItem(SUBTITLE_DELAY_KEY, String(value)).catch(() => {});
+  };
   const audio = useAudioTracks(player);
   const [audioPickerOpen, setAudioPickerOpen] = useState(false);
   useTraktScrobble(item.title, currentTime ?? 0, player.duration ?? 0, player.playing);
@@ -96,7 +175,12 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   // native controls are switched off (they eat the D-pad). The overlay below
   // gives the same buttons for anyone who prefers the remote to focus them.
   const [showOverlay, setShowOverlay] = useState(true);
-  useRemoteSeek(player, () => setShowOverlay(true));
+  const [seekState, setSeekState] = useState<SeekState | null>(null);
+  useRemoteSeek(
+    player,
+    () => setShowOverlay(true),
+    setSeekState,
+  );
   useEffect(() => {
     if (!showOverlay) return;
     const timer = setTimeout(() => setShowOverlay(false), 4000);
@@ -108,39 +192,64 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
     setLoading(true);
     setLinkError(null);
     try {
-      const rows = await playableRows(item.subjectId, item.season, item.episode);
-      if (rows.length === 0) throw new Error('There is no file for this episode.');
-      // The best quality the service has for it.
-      const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
-      const stream = await directStream(item.subjectId, best);
-      await player.replaceAsync({ uri: stream.url });
+      // The title's own signed links are the whole film. The play-info resolver
+      // on the server answers with a fifteen-minute preview for members-only
+      // titles, so it is only used when there is no file link at all.
+      let stream: MovieboxStream | null = null;
+      let resourceId: string | null = null;
+      try {
+        const rows = await playableRows(item.subjectId, item.season, item.episode);
+        if (rows.length > 0) {
+          // The best quality the service has for it.
+          const best = rows.reduce((pick, row) => (row.resolution > pick.resolution ? row : pick));
+          stream = await directStream(item.subjectId, best);
+          resourceId = best.resourceId;
+        }
+      } catch {
+        // No usable file link; the server resolver gets a turn below.
+      }
+      if (!alive.current) return;
+      if (!stream) {
+        const resolved = await resolveMoviebox(item.subjectId, item.season, item.episode).catch(() => null);
+        if (!alive.current) return;
+        if (resolved?.url) {
+          stream = {
+            url: resolved.url,
+            headers: resolved.headers,
+            size: 0,
+            resolution: 0,
+            whole: true,
+          };
+        }
+      }
+      if (!stream) throw new Error('There is no file for this episode.');
+      await player.replaceAsync({ uri: stream.url, headers: stream.headers });
+      if (!alive.current) return;
+      applySpeed(player, speedRef.current);
       player.play();
       // Put the film back where it was left, once.
-      if (!resumed.current) {
-        resumed.current = true;
-        loadProgress(item.subjectId, item.season, item.episode).then((saved) => {
-          if (saved && saved.position > 5 && player.duration > 0 && saved.position < player.duration * 0.95) {
-            player.currentTime = saved.position;
-          }
-        });
-      }
+      resumeFromSave(item.subjectId, item.season, item.episode, player, resumed, durationRef);
       // The subtitles belong to the file, so they are asked for now.
-      captions(item.subjectId, best.resourceId)
-        .then((list) => {
-          setCaptionOptions(list);
-          // The first one is shown straight away, if there is one.
-          if (list.length > 0) setChosen(list[0].id);
-          else setChosen(null);
-        })
-        .catch(() => setCaptionOptions([]));
+      if (resourceId) {
+        captions(item.subjectId, resourceId)
+          .then((list) => {
+            if (!alive.current) return;
+            setCaptionOptions(list);
+            // The first one is shown straight away, if there is one.
+            if (list.length > 0) setChosen(list[0].id);
+            else setChosen(null);
+          })
+          .catch(() => alive.current && setCaptionOptions([]));
+      }
     } catch (e) {
+      if (!alive.current) return;
       const base = e instanceof Error ? e.message : "This episode can't be played.";
-      const hint = item.season > 0
+      const hint = !isTV && item.season > 0
         ? " This series is not available for free on MovieBox - open the title and use \"Send to TorBox\" to play it."
         : "";
       setLinkError(base + hint);
     } finally {
-      setLoading(false);
+      if (alive.current) setLoading(false);
     }
   }, [item.episode, item.season, item.subjectId, player]);
 
@@ -148,14 +257,48 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
     // Remember where this film or episode was left.
     const timer = setInterval(() => {
       const t = latestTime.current;
-      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, player.duration ?? 0);
+      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, durationRef.current);
     }, 10000);
     return () => {
       clearInterval(timer);
       const t = latestTime.current;
-      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, player.duration ?? 0);
+      if (t > 5) saveProgress(item.subjectId, item.season, item.episode, t, durationRef.current);
     };
   }, [item.subjectId, item.season, item.episode, player]);
+
+  // Fetch subject metadata once and record a watch event on the way out.
+  useEffect(() => {
+    let cancelled = false;
+    subjectDetails(item.subjectId)
+      .then((d) => {
+        if (cancelled) return;
+        subjectMeta.current = {
+          genre: d?.subject?.genre,
+          language: d?.subject?.language,
+          country: d?.subject?.country,
+          year: d?.subject?.year,
+        };
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      const t = latestTime.current;
+      const dur = durationRef.current;
+      const progress = dur > 0 ? Math.min(1, t / dur) : 0;
+      void trackWatch({
+        id: item.subjectId,
+        source: 'moviebox',
+        title: item.title,
+        genre: subjectMeta.current?.genre,
+        language: subjectMeta.current?.language,
+        country: subjectMeta.current?.country,
+        year: subjectMeta.current?.year,
+        progress,
+        duration: dur,
+        completed: dur > 0 && progress >= 0.9,
+      });
+    };
+  }, [item.subjectId, item.season, item.episode, player, item.title]);
 
   useEffect(() => {
     playedNext.current = false;
@@ -216,7 +359,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
   const failure = linkError ?? (status === 'error' ? error?.message ?? 'This file could not be played.' : null);
   const spoken =
     loaded && loaded.id === chosen && loaded.list.length > 0
-      ? cueAt(loaded.list, currentTime ?? 0)
+      ? cueAt(loaded.list, (currentTime ?? 0) - subtitleDelay)
       : null;
 
   return (
@@ -226,6 +369,8 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         style={portraitPhone ? styles.videoPortrait : styles.video}
         // In the corner window a tap opens the player instead.
         nativeControls={!mini && !isTV}
+        allowsPictureInPicture={!mini && !isTV}
+        startsPictureInPictureAutomatically={!mini && !isTV}
         contentFit="contain"
         fullscreenOptions={{
           enable: !isTV,
@@ -240,14 +385,30 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         <VideoOverlay
           player={player}
           paused={!player.playing}
-          time={{ t: currentTime ?? 0, d: player.duration ?? 0 }}
+          time={{ t: seekState ? seekState.targetTime : (currentTime ?? 0), d: player.duration ?? 0 }}
           buffering={loading || status !== 'readyToPlay'}
           show={showOverlay}
           onToggle={() => (player.playing ? player.pause() : player.play())}
           onSeekBy={(seconds) => player.seekBy(seconds)}
           hasMultipleAudio={audio.hasMultiple}
           onCycleAudio={cycleAudio}
+          speed={speed}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
+      )}
+
+      {/* Instant TV Seek feedback badge */}
+      {isTV && seekState && (
+        <View style={styles.seekToast} pointerEvents="none">
+          <Ionicons
+            name={seekState.delta > 0 ? 'play-forward' : 'play-back'}
+            size={32}
+            color="#ffffff"
+          />
+          <Text style={styles.seekToastText}>
+            {seekState.delta > 0 ? `+${seekState.delta}s` : `${seekState.delta}s`}
+          </Text>
+        </View>
       )}
 
       {/* The words being said, over the video. */}
@@ -268,11 +429,29 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
 
       {failure && (
         <View style={styles.overlay}>
-          <Text style={styles.errorTitle}>{"Couldn&apos;t play this episode"}</Text>
+          <Text style={styles.errorTitle}>{"Couldn't play this episode"}</Text>
           <Text style={styles.overlayText}>{failure}</Text>
-          <Pressable onPress={resolve} style={styles.retry}>
-            <Text style={styles.retryText}>Try again</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
+            <Pressable
+              onPress={resolve}
+              style={({ focused, pressed }) => [
+                styles.retry,
+                (focused || pressed) && styles.retryFocused,
+              ]}
+            >
+              <Text style={styles.retryText}>Try again</Text>
+            </Pressable>
+            <Pressable
+              onPress={onClose}
+              style={({ focused, pressed }) => [
+                styles.retry,
+                { backgroundColor: colors.surface },
+                (focused || pressed) && styles.retryFocused,
+              ]}
+            >
+              <Text style={[styles.retryText, { color: colors.text }]}>Back to details</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -324,9 +503,27 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
                   </Text>
                 </Pressable>
               ))}
+              <Pressable
+                onPress={() => setSettingsOpen(true)}
+                style={({ pressed }) => [styles.caption, pressed && styles.captionPressed]}
+              >
+                <Text style={styles.captionText}>
+                  Sync{subtitleDelay !== 0 ? ` ${subtitleDelay > 0 ? '+' : ''}${subtitleDelay.toFixed(1)}s` : ''}
+                </Text>
+              </Pressable>
             </ScrollView>
           )}
         </RelatedPanel>
+      )}
+
+      {!isTV && !mini && (
+        <Pressable
+          onPress={() => setSettingsOpen(true)}
+          hitSlop={10}
+          style={[styles.speed, { top: (portraitPhone ? (width * 9) / 16 : 0) + 8 }]}
+        >
+          <Text style={styles.speedText}>{speed === 1 ? '1×' : `${speed}×`}</Text>
+        </Pressable>
       )}
 
       {!isTV && !mini && (
@@ -351,6 +548,16 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
         selected={audio.selected}
         onSelect={audio.select}
         onClose={() => setAudioPickerOpen(false)}
+      />
+
+      <PlaybackSettings
+        visible={settingsOpen}
+        speed={speed}
+        delay={subtitleDelay}
+        captionsAvailable={captionOptions.length > 0}
+        onSpeed={setSpeed}
+        onDelay={changeSubtitleDelay}
+        onClose={() => setSettingsOpen(false)}
       />
     </View>
   );
@@ -421,6 +628,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   retryText: { color: '#fff', fontSize: sz(14, 16), fontWeight: '800' },
+  retryFocused: {
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    transform: [{ scale: 1.05 }],
+  },
   minimize: {
     position: 'absolute',
     top: 8,
@@ -433,6 +645,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   minimizeText: { color: '#fff', fontSize: 22, fontWeight: '800', lineHeight: 22 },
+  speed: {
+    position: 'absolute',
+    right: 56,
+    height: 36,
+    minWidth: 44,
+    paddingHorizontal: 8,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  speedText: { color: '#fff', fontSize: sz(12, 14), fontWeight: '800' },
   close: {
     position: 'absolute',
     right: 12,
@@ -444,4 +668,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  seekToast: {
+    position: 'absolute',
+    top: '40%',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 20,
+    backgroundColor: 'rgba(15, 12, 22, 0.94)',
+    borderWidth: 2,
+    borderColor: colors.accent,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
+    elevation: 12,
+    zIndex: 100,
+  },
+  seekToastText: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
 });

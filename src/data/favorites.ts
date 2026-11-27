@@ -2,6 +2,7 @@
 // TorBox file, or YouTube video and access them instantly in the Favorites tab.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
+import { trackFavorite } from './activity';
 
 const STORAGE_KEY = '@forus_favorites_v1';
 
@@ -82,12 +83,29 @@ export async function addFavorite(item: FavoriteItem): Promise<void> {
   };
   const updated = [itemWithTime, ...favoritesCache];
   await saveFavorites(updated);
+  void trackFavorite({
+    id: item.id,
+    source: item.kind === 'moviebox' ? 'moviebox' : item.kind === 'file' ? 'file' : item.kind === 'video' ? 'video' : item.kind === 'stream' ? 'stream' : 'moviebox',
+    title: item.title,
+    genre: item.genre,
+    year: item.year,
+  });
 }
 
 export async function removeFavorite(id: string): Promise<void> {
   await loadFavorites();
+  const removed = favoritesCache.find((f) => f.id === id);
   const updated = favoritesCache.filter((f) => f.id !== id);
   await saveFavorites(updated);
+  if (removed) {
+    void trackFavorite({
+      id: removed.id,
+      source: removed.kind === 'moviebox' ? 'moviebox' : removed.kind === 'file' ? 'file' : removed.kind === 'video' ? 'video' : removed.kind === 'stream' ? 'stream' : 'moviebox',
+      title: removed.title,
+      genre: removed.genre,
+      year: removed.year,
+    });
+  }
 }
 
 export async function toggleFavorite(item: FavoriteItem): Promise<boolean> {

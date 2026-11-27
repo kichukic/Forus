@@ -214,10 +214,11 @@ export function MovieboxScreen({ onOpen, embedded, refreshControl }: Props) {
 
   // The grid reflows when the phone rotates. TV uses a high-density 6-10 column grid.
   const { width } = useWindowDimensions();
+  const availableWidth = isTV ? width - 72 : width;
   const columns = isTV
-    ? Math.min(10, Math.max(6, Math.floor((width - GUTTER * 2) / 128)))
-    : Math.max(2, Math.floor((width - GUTTER * 2) / 150));
-  const cardWidth = Math.floor((width - GUTTER * 2) / columns);
+    ? Math.min(10, Math.max(6, Math.floor((availableWidth - GUTTER * 2) / 128)))
+    : Math.max(2, Math.floor((availableWidth - GUTTER * 2) / 150));
+  const cardWidth = Math.floor((availableWidth - GUTTER * 2) / columns);
 
   const searchBox = (
     <View style={styles.inputWrap}>

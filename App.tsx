@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSavedPosters, preloadHome, type PreloadStep } from './src/api/preload';
 import { AnimatedSplash } from './src/components/AnimatedSplash';
 import { BottomNav, BOTTOM_NAV_HEIGHT, type NavId } from './src/components/BottomNav';
+import { TVNavigationRail, TV_RAIL_COLLAPSED_WIDTH, type TVRailId } from './src/components/TVNavigationRail';
 import { ScreenReveal } from './src/components/ScreenReveal';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { PlayerShell } from './src/components/PlayerShell';
@@ -31,6 +32,8 @@ import { ReelsScreen } from './src/screens/ReelsScreen';
 import { ChatScreen, type ChatHandle } from './src/screens/ChatScreen';
 import { sendScreenTimeHeartbeat, startChat, useChatStatus, publishWatching } from './src/chat/store';
 import { clearSyncedHistory, pushWatched, syncHistory } from './src/chat/historySync';
+import { syncActivity } from './src/chat/activitySync';
+import { registerDevice } from './src/chat/api';
 import { onOpenChatRequest } from './src/chat/push';
 import { SendToFriend } from './src/chat/SendToFriend';
 import { MovieboxDetailScreen } from './src/screens/MovieboxDetailScreen';
@@ -39,6 +42,9 @@ import { MovieboxPlayerScreen } from './src/screens/MovieboxPlayerScreen';
 import { MovieScreen } from './src/screens/MovieScreen';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { StreamPlayerScreen } from './src/screens/StreamPlayerScreen';
+import { LivePlayerScreen } from './src/screens/LivePlayerScreen';
+import { LiveTvScreen } from './src/screens/LiveTvScreen';
+import { WatchPartyScreen } from './src/screens/WatchPartyScreen';
 import { WebPlayerScreen } from './src/screens/WebPlayerScreen';
 import { SearchScreen } from './src/screens/SearchScreen';
 import { TransferBar } from './src/components/TransferBar';
@@ -56,7 +62,7 @@ import type { SearchScope } from './src/data/channels';
 import type { Playable } from './src/types';
 
 // The screen behind the player. The player itself floats above whichever it is.
-type Screen = NavId | 'torbox';
+type Screen = NavId | 'torbox' | 'reels' | 'watchparty';
 
 // Take over the error handler before anything else can fail, so an error that
 // reaches the top shows itself instead of closing the app.
@@ -118,6 +124,7 @@ export default function App() {
   // The film open from MovieBox, in the same way.
   const [moviebox, setMoviebox] = useState<MovieboxSubject | null>(null);
   const [streamioSeries, setStreamioSeries] = useState<StreamioItem | null>(null);
+  const [currentHomeTab, setCurrentHomeTab] = useState<string>(isTV ? 'moviebox' : 'all');
   // The prompt shown on launch (and from Settings) when an update is found.
   const [updatePrompt, setUpdatePrompt] = useState<Update | null>(null);
   // Transfers now run in the background, so there is no full-screen sender.
@@ -193,6 +200,39 @@ export default function App() {
     sync();
     const sub = AppState.addEventListener('change', (s) => s === 'active' && sync());
     return () => sub.remove();
+  }, [chatStatus]);
+
+  // Personalization activity follows the account too.
+  useEffect(() => {
+    if (chatStatus !== 'signedIn') return;
+    const sync = () => syncActivity();
+    sync();
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && sync());
+    return () => sub.remove();
+  }, [chatStatus]);
+
+  // Register this device for push notifications (best effort).
+  useEffect(() => {
+    if (chatStatus !== 'signedIn') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const Notifications = await import('expo-notifications');
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== 'granted') {
+          const req = await Notifications.requestPermissionsAsync();
+          if (req.status !== 'granted') return;
+        }
+        const token = await Notifications.getExpoPushTokenAsync();
+        if (cancelled || !token?.data) return;
+        await registerDevice(token.data, 'android');
+      } catch {
+        // Push is optional; ignore failures.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [chatStatus]);
 
   // Tell friends what is playing, but only while the screen is actually on and
@@ -297,8 +337,65 @@ export default function App() {
 
   // On TV nothing behind a player may keep remote focus, so it's hidden.
   const hideBackground = isTV && (!!playing || !!movie || !!moviebox || !!streamioSeries);
+  const showTVRail = isTV && !hideBackground;
   const showNav = !isTV && screen !== 'torbox' && !movie && !moviebox && !(screen === 'chat' && chatFull);
-  const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
+
+  const activeTVRailItem: TVRailId = (() => {
+    if (screen === 'search') return 'search';
+    if (screen === 'history') return 'history';
+    if (screen === 'favorites') return 'favorites';
+    if (screen === 'settings') return 'settings';
+    if (currentHomeTab === 'moviebox' || screen === 'home') return 'moviebox';
+    return 'moviebox';
+  })();
+
+  const handleTVRailSelect = (id: TVRailId) => {
+    if (id === 'moviebox') {
+      setScreen('home');
+      setCurrentHomeTab('moviebox');
+      home.current?.openTab('moviebox');
+    } else if (id === 'search') {
+      setSearchScope('all');
+      setScreen('search');
+    } else if (id === 'history') {
+      setScreen('history');
+    } else if (id === 'favorites') {
+      setScreen('favorites');
+    } else if (id === 'settings') {
+      setScreen('settings');
+    }
+  };
+
+  const handleOpenMovie = useCallback(async (m: CatalogMovie) => {
+    if (isTV) {
+      try {
+        const { searchSubjects } = await import('./src/api/moviebox');
+        const res = await searchSubjects(m.title);
+        if (res.subjects.length > 0) {
+          setMoviebox(res.subjects[0]);
+          return;
+        }
+      } catch {}
+      setMoviebox({
+        id: m.id,
+        title: m.title,
+        kind: 'movie',
+        poster: m.poster,
+        year: m.year,
+        genre: '',
+        hasResource: true,
+        membersOnly: false,
+        dubs: [],
+      });
+      return;
+    }
+    setMovie(m);
+  }, []);
+
+  const layer = (s: Screen) => [
+    showTVRail ? styles.tvLayer : StyleSheet.absoluteFill,
+    (screen !== s || hideBackground) && styles.hidden,
+  ];
   const TargetView = isTV ? View : BlurTargetView;
 
   return (
@@ -306,6 +403,12 @@ export default function App() {
       <ErrorBoundary label="App">
         <View style={styles.root}>
         <StatusBar hidden={isTV} style="light" />
+        {showTVRail && (
+          <TVNavigationRail
+            active={activeTVRailItem}
+            onSelect={handleTVRailSelect}
+          />
+        )}
         {/* The screens, which the bottom bar's frosted glass blurs on phone; on TV plain View saves GPU texture capture. */}
         <TargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
           {/* Home stays mounted so its tabs, rows and scroll position survive. */}
@@ -316,19 +419,34 @@ export default function App() {
               onPlay={play}
               onOpenTorbox={openTorbox}
               onOpenSearch={openSearch}
-              onOpenMovie={setMovie}
+              onOpenMovie={handleOpenMovie}
               onOpenMoviebox={setMoviebox}
               onOpenStreamioSeries={setStreamioSeries}
               onSendRelease={sendRelease}
               onOpenHistory={openHistory}
               onOpenSettings={openSettings}
+              onOpenLive={() => setScreen('live')}
+              onOpenWatchParty={() => setScreen('watchparty')}
               onOpenReels={(_, index) => {
                 setReelsInitialIndex(index ?? 0);
                 setScreen('reels');
               }}
+              onTabChange={setCurrentHomeTab}
               ref={home}
             />
           </Animated.View>
+
+          {screen === 'live' && (
+            <ScreenReveal style={layer('live')}>
+              <LiveTvScreen onPlay={play} onBack={() => setScreen('home')} />
+            </ScreenReveal>
+          )}
+
+          {screen === 'watchparty' && (
+            <ScreenReveal style={layer('watchparty')}>
+              <WatchPartyScreen onBack={() => setScreen('home')} />
+            </ScreenReveal>
+          )}
 
           {screen === 'reels' && (
             <ScreenReveal style={layer('reels')}>
@@ -363,7 +481,7 @@ export default function App() {
                   else if (title.kind === 'stream') play({ kind: 'stream', url: title.url, title: title.title, poster: title.poster });
                   else if (title.kind === 'moviebox') play({ kind: 'moviebox', subjectId: title.subjectId, season: title.season ?? 0, episode: title.episode ?? 0, title: title.title, poster: title.poster });
                   else if (title.kind === 'movie') {
-                    setMovie({
+                    handleOpenMovie({
                       id: title.id,
                       title: title.title,
                       poster: title.poster,
@@ -438,13 +556,15 @@ export default function App() {
           )}
         </TargetView>
 
-        <TransferToast
-          onPlay={(transfer) => {
-            const item = playableFrom(transfer);
-            if (item) play(item);
-          }}
-          onOpenTorbox={openTorbox}
-        />
+        {!isTV && (
+          <TransferToast
+            onPlay={(transfer) => {
+              const item = playableFrom(transfer);
+              if (item) play(item);
+            }}
+            onOpenTorbox={openTorbox}
+          />
+        )}
 
         <ToastHost />
         {!isTV && <SendToFriend />}
@@ -473,7 +593,6 @@ export default function App() {
             active={screen as NavId}
             blurTarget={blurTarget}
             onSelect={(id) => {
-              if (id === 'reels') setReelsInitialIndex(0);
               // The bottom bar's Search looks everywhere.
               if (id === 'search') setSearchScope('all');
               setScreen(id);
@@ -505,6 +624,7 @@ export default function App() {
               onClose={() => setMoviebox(null)}
               onPlay={play}
               onSendRelease={(option) => {
+                if (isTV) return;
                 // The film screen is below this one, so it is closed first.
                 setMoviebox(null);
                 addTransfer(option);
@@ -521,6 +641,7 @@ export default function App() {
               onClose={() => setStreamioSeries(null)}
               onPlay={play}
               onSendRelease={(option) => {
+                if (isTV) return;
                 setStreamioSeries(null);
                 addTransfer(option);
               }}
@@ -541,7 +662,17 @@ export default function App() {
               ) : playing.kind === 'moviebox' ? (
                 <MovieboxPlayerScreen key={playableKey(playing)} item={playing} onClose={closePlayer} onPlay={play} shell={shell} />
               ) : playing.kind === 'stream' ? (
-                <StreamPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
+                playing.live ? (
+                  <LivePlayerScreen
+                    url={playing.url}
+                    title={playing.title}
+                    poster={playing.poster}
+                    headers={playing.headers}
+                    onClose={closePlayer}
+                  />
+                ) : (
+                  <StreamPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
+                )
               ) : playing.kind === 'web' ? (
                 <WebPlayerScreen url={playing.url} title={playing.title} onClose={closePlayer} />
               ) : (
@@ -574,4 +705,11 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   hidden: { display: 'none' },
+  tvLayer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: TV_RAIL_COLLAPSED_WIDTH,
+    right: 0,
+  },
 });

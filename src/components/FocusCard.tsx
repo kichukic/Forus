@@ -29,8 +29,8 @@ export const FocusCard = memo(function FocusCard({
     if (isTV) {
       Animated.timing(scale, {
         toValue: to,
-        duration: 90,
-        easing: Easing.out(Easing.quad),
+        duration: 110,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }).start();
     } else {
@@ -44,7 +44,7 @@ export const FocusCard = memo(function FocusCard({
       onLongPress={onLongPress}
       onFocus={() => {
         setFocused(true);
-        animate(1.05);
+        animate(isTV ? 1.08 : 1.05);
       }}
       onBlur={() => {
         setFocused(false);
@@ -71,10 +71,14 @@ const styles = StyleSheet.create({
     padding: sz(0, 4),
   },
   focused: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSoft,
+    borderColor: '#ffffff',
+    backgroundColor: isTV ? 'rgba(155, 92, 255, 0.28)' : colors.accentSoft,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: isTV ? 0.95 : 0,
+    shadowRadius: isTV ? 16 : 0,
   },
-  raised: { zIndex: 2, elevation: isTV ? 0 : 2 },
+  raised: { zIndex: 10, elevation: isTV ? 10 : 2 },
 });
 
 export const cardImageStyle = { width: '100%' as const, height: CARD_HEIGHT, borderRadius: RADIUS };

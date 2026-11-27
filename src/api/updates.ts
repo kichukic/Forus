@@ -1,8 +1,7 @@
-// A tiny in-app updater: the app polls a manifest on GitHub Releases and, when
-// a newer versionCode is published, downloads the APK and hands it to Android's
-// package installer. The manifest is a plain file (no API key, no rate limit),
-// and carries the SHA-256 of the exact APK it points at, so a truncated or
-// tampered download is rejected before it can reach the installer.
+// A resilient in-app updater: the app checks for new releases on GitHub,
+// downloads the APK with automated CDN/API fallback to prevent 504 Gateway
+// Timeouts, and verifies the SHA-256 checksum before handing it to Android's
+// package installer.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import * as FileSystem from 'expo-file-system';
@@ -21,23 +20,34 @@ export type Update = {
   notes?: string;
 };
 
-// The manifest lives in the same release as the APK, so it is always current
-// without needing a git push of the source tree.
-const MANIFEST_URL = 'https://github.com/kichukic/Forus/releases/latest/download/version.json';
+const MANIFEST_URLS = [
+  'https://raw.githubusercontent.com/kichukic/Forus/dev/version.json',
+  'https://raw.githubusercontent.com/kichukic/Forus/main/version.json',
+  'https://github.com/kichukic/Forus/releases/latest/download/version.json',
+];
+
 const CHECK_KEY = 'updater-last-check-v2';
-// The manifest is about 200 bytes, so checking often costs nothing.
+// Checking often costs nothing since the manifest is ~200 bytes.
 const CHECK_EVERY_MS = 30 * 60 * 1000;
 
-// A hash from a manifest, as lowercase hex, or undefined when absent or
-// malformed (older manifests carry none; the check is skipped for those).
+async function fetchWithTimeout(url: string, headers?: Record<string, string>, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// A hash from a manifest, as lowercase hex, or undefined when absent or malformed.
 function checksum(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   return /^[0-9a-fA-F]{64}$/.test(value) ? value.toLowerCase() : undefined;
 }
 
 // The SHA-256 of a file, read one megabyte at a time so a whole APK never sits
-// in memory. `open()` lives on the native base class under the File class, so
-// the read side is typed here by hand.
+// in memory. `open()` lives on the native base class under the File class.
 const READ_CHUNK = 1024 * 1024;
 
 async function fileHash(file: FileSystem.File): Promise<string> {
@@ -51,7 +61,6 @@ async function fileHash(file: FileSystem.File): Promise<string> {
       const piece = handle.readBytes(READ_CHUNK);
       if (piece.length === 0) break;
       hasher.update(piece);
-      // Hand a moment back so the interface can redraw between megabytes.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     return hasher.hex();
@@ -70,9 +79,56 @@ export function installedVersionName(): string {
   return Application.nativeApplicationVersion ?? '0';
 }
 
-// A release newer than the one installed, or null.
 function newer(update: Update | null | undefined): Update | null {
   return update && update.versionCode > installedVersionCode() ? update : null;
+}
+
+async function fetchManifest(): Promise<Partial<Update> | null> {
+  // 1. Try fast CDN raw URLs first, followed by GitHub releases download
+  for (const rawUrl of MANIFEST_URLS) {
+    try {
+      const res = await fetchWithTimeout(`${rawUrl}?t=${Date.now()}`, { Accept: 'application/json' }, 5000);
+      if (res.ok) {
+        const manifest = (await res.json()) as Partial<Update>;
+        if (Number.isFinite(Number(manifest?.versionCode)) && manifest?.url) {
+          return manifest;
+        }
+      }
+    } catch {
+      // try next source
+    }
+  }
+
+  // 2. Fall back to GitHub REST API if direct manifest links fail
+  try {
+    const res = await fetchWithTimeout('https://api.github.com/repos/kichukic/Forus/releases/latest', {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'ForUs-Updater',
+    }, 6000);
+    if (res.ok) {
+      const release = (await res.json()) as any;
+      const jsonAsset = Array.isArray(release?.assets)
+        ? release.assets.find((a: any) => a.name === 'version.json')
+        : null;
+
+      if (jsonAsset?.url) {
+        const jsonRes = await fetchWithTimeout(jsonAsset.url, {
+          Accept: 'application/octet-stream',
+          'User-Agent': 'ForUs-Updater',
+        }, 6000);
+        if (jsonRes.ok) {
+          const manifest = (await jsonRes.json()) as Partial<Update>;
+          if (Number.isFinite(Number(manifest?.versionCode)) && manifest?.url) {
+            return manifest;
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
 }
 
 export async function checkForUpdate(force = false): Promise<Update | null> {
@@ -84,42 +140,39 @@ export async function checkForUpdate(force = false): Promise<Update | null> {
   } catch {
     cached = null;
   }
-  // Within the window the last answer stands, including "there is an update":
-  // that one keeps being offered until it is installed.
+
   if (!force && cached?.update !== undefined && Date.now() - cached.at < CHECK_EVERY_MS) {
     return newer(cached.update);
   }
+
   try {
-    // The time in the address stops a cached copy of an older manifest being
-    // served in place of the one just published.
-    const res = await fetch(`${MANIFEST_URL}?t=${Date.now()}`, { headers: { Accept: 'application/json' } });
-    if (!res.ok) return newer(cached?.update);
-    const manifest = (await res.json()) as Partial<Update>;
+    const manifest = await fetchManifest();
+    if (!manifest) return newer(cached?.update);
+
     const remoteCode = Number(manifest.versionCode);
     const sha = checksum(manifest.sha256);
     if (!Number.isFinite(remoteCode) || !manifest.url || !sha) return newer(cached?.update);
+
     const update: Update = {
       version: String(manifest.version ?? remoteCode),
       versionCode: remoteCode,
       url: String(manifest.url),
       size: manifest.size,
-      sha256: checksum(manifest.sha256),
+      sha256: sha,
       notes: manifest.notes,
     };
     await AsyncStorage.setItem(CHECK_KEY, JSON.stringify({ at: Date.now(), update }));
     return newer(update);
   } catch {
-    // Offline: whatever was found last time still applies.
     return newer(cached?.update);
   }
 }
 
 export async function downloadUpdate(update: Update, onProgress?: (written: number, total: number) => void): Promise<string> {
-  // Only accept HTTPS downloads from the trusted release host.
   if (!update.url || !/^https:\/\//i.test(update.url)) {
     throw new Error('The update URL is not a trusted HTTPS link.');
   }
-  if (!/github\.com/i.test(update.url)) {
+  if (!/github\.com|githubusercontent\.com/i.test(update.url)) {
     throw new Error('The update URL is not from the trusted release host.');
   }
   const dir = FileSystem.Paths.cache;
@@ -129,9 +182,63 @@ export async function downloadUpdate(update: Update, onProgress?: (written: numb
   } catch {
     // ignore
   }
-  const output = await FileSystem.File.downloadFileAsync(update.url, file, {
-    onProgress: onProgress ? (p) => onProgress(p.bytesWritten, p.totalBytes) : undefined,
-  });
+
+  let output: FileSystem.File | null = null;
+  let primaryError: unknown = null;
+
+  // 1. Primary: Download directly from update.url
+  try {
+    output = await FileSystem.File.downloadFileAsync(update.url, file, {
+      idempotent: true,
+      onProgress: onProgress ? (p) => onProgress(p.bytesWritten, p.totalBytes) : undefined,
+    });
+  } catch (err) {
+    primaryError = err;
+    try {
+      if (file.exists) file.delete();
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Fallback: If primary download fails (e.g. 504 Gateway Time-out on github.com web proxy),
+  // stream directly via GitHub REST API which routes to release-assets.githubusercontent.com
+  if (!output || !file.exists) {
+    try {
+      const apiReleaseUrl = update.version
+        ? `https://api.github.com/repos/kichukic/Forus/releases/tags/v${update.version}`
+        : 'https://api.github.com/repos/kichukic/Forus/releases/latest';
+
+      const releaseRes = await fetchWithTimeout(apiReleaseUrl, {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'ForUs-Updater',
+      }, 8000);
+
+      if (releaseRes.ok) {
+        const releaseData = (await releaseRes.json()) as any;
+        const apkAsset = Array.isArray(releaseData?.assets)
+          ? releaseData.assets.find((a: any) => typeof a.name === 'string' && a.name.endsWith('.apk'))
+          : null;
+
+        if (apkAsset?.url) {
+          output = await FileSystem.File.downloadFileAsync(apkAsset.url, file, {
+            headers: {
+              Accept: 'application/octet-stream',
+              'User-Agent': 'ForUs-Updater',
+            },
+            idempotent: true,
+            onProgress: onProgress ? (p) => onProgress(p.bytesWritten, p.totalBytes) : undefined,
+          });
+        }
+      }
+    } catch {
+      // If fallback fails, let the original error or missing file trigger below
+    }
+  }
+
+  if (!output || !file.exists) {
+    throw primaryError || new Error('Failed to download update.');
+  }
 
   // Require a checksum: without one we cannot verify integrity, so reject.
   if (!update.sha256) {

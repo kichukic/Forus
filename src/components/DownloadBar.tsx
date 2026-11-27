@@ -11,7 +11,9 @@ type Props = {
 export function DownloadBar({ onOpen }: Props) {
   const downloads = useDownloads();
   const active = downloads.find((d) => d.status === 'downloading');
-  const others = downloads.filter((d) => d !== active && d.status === 'downloading').length;
+  const others = downloads.filter(
+    (d) => d !== active && (d.status === 'downloading' || d.status === 'queued'),
+  ).length;
 
   if (isTV || !active) return null;
 
