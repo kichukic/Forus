@@ -392,7 +392,10 @@ export default function App() {
     setMovie(m);
   }, []);
 
-  const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
+  const layer = (s: Screen) => [
+    showTVRail ? styles.tvLayer : StyleSheet.absoluteFill,
+    (screen !== s || hideBackground) && styles.hidden,
+  ];
   const TargetView = isTV ? View : BlurTargetView;
 
   return (
@@ -407,7 +410,7 @@ export default function App() {
           />
         )}
         {/* The screens, which the bottom bar's frosted glass blurs on phone; on TV plain View saves GPU texture capture. */}
-        <TargetView ref={blurTarget} style={[StyleSheet.absoluteFill, showTVRail && styles.tvContentPad]}>
+        <TargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
           {/* Home stays mounted so its tabs, rows and scroll position survive. */}
           <Animated.View style={[layer('home'), { opacity: homeShown, transform: [{ translateY: homeLift }] }]}>
             <HomeScreen
@@ -702,5 +705,11 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   hidden: { display: 'none' },
-  tvContentPad: { paddingLeft: TV_RAIL_COLLAPSED_WIDTH },
+  tvLayer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: TV_RAIL_COLLAPSED_WIDTH,
+    right: 0,
+  },
 });

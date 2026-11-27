@@ -53,7 +53,7 @@ export const HeroCarousel = memo(function HeroCarousel({ sources, label, onPlay,
   const list = useRef<FlatList<Featured>>(null);
   const touched = useRef(0);
 
-  const cardWidth = width - GUTTER * 2;
+  const cardWidth = (isTV ? width - 72 : width) - GUTTER * 2;
   // On TV it leaves room below for the first row of cards.
   const cardHeight = isTV ? Math.round(height * 0.4) : Math.round(cardWidth * 1.02);
 
@@ -228,7 +228,7 @@ const Slide = memo(function Slide({
   // 16:9 sizes. (hqdefault is 4:3 with black bars baked in, so it's skipped.)
   const [size, setSize] = useState(0);
   const [loadedUri, setLoadedUri] = useState<string | null>(null);
-  const slideWidth = useWindowDimensions().width - GUTTER * 2;
+  const slideWidth = useWindowDimensions().width - (isTV ? 72 : 0) - GUTTER * 2;
   const uri = `https://i.ytimg.com/vi/${video.id}/${HERO_SIZES[size]}.jpg`;
   const [focused, setFocused] = useState(false);
   const [optionsFocused, setOptionsFocused] = useState(false);

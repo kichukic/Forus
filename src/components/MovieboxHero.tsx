@@ -26,11 +26,16 @@ export const MovieboxHero = memo(function MovieboxHero({
   sectionId,
   prefer = 'movie',
 }: Props) {
-  const { width, height } = useWindowDimensions();
+  const { width: windowWidth, height } = useWindowDimensions();
   const [subjects, setSubjects] = useState<MovieboxSubject[]>([]);
   const [index, setIndex] = useState(0);
   const list = useRef<FlatList<MovieboxSubject>>(null);
   const touched = useRef(0);
+
+  // On TV, the content layer starts at left: 72 (TV_RAIL_COLLAPSED_WIDTH).
+  const availableWidth = isTV ? windowWidth - 72 : windowWidth;
+  const cardWidth = availableWidth - GUTTER * 2;
+  const cardHeight = isTV ? Math.round(height * 0.42) : Math.round(cardWidth * 1.02);
 
   useEffect(() => {
     let alive = true;
@@ -59,8 +64,6 @@ export const MovieboxHero = memo(function MovieboxHero({
   }, [prefer, sectionId, version]);
 
   const slides = subjects;
-  const cardWidth = width - GUTTER * 2;
-  const cardHeight = isTV ? Math.round(height * 0.4) : Math.round(cardWidth * 1.02);
 
   useEffect(() => {
     if (isTV || slides.length < 2) return;
@@ -74,7 +77,7 @@ export const MovieboxHero = memo(function MovieboxHero({
   }, [index, slides.length]);
 
   const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) =>
-    setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
+    setIndex(Math.round(e.nativeEvent.contentOffset.x / cardWidth));
 
   if (slides.length === 0) {
     return (
@@ -95,11 +98,11 @@ export const MovieboxHero = memo(function MovieboxHero({
         keyExtractor={(s) => s.id}
         onMomentumScrollEnd={onScrollEnd}
         onScrollBeginDrag={() => (touched.current = Date.now())}
-        getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+        getItemLayout={(_, i) => ({ length: cardWidth, offset: cardWidth * i, index: i })}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => onOpen(item)}
-            style={[styles.slide, { width, height: cardHeight }]}
+            style={[styles.slide, { width: cardWidth, height: cardHeight }]}
           >
             <Image
               source={{ uri: item.backdrop || item.poster }}
