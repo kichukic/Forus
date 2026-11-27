@@ -275,7 +275,9 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
         const sourcesPromise: Promise<[MovieboxSubject[], TorrentOption[]]> = searchesEverywhere
           ? Promise.all([
               searchSubjects(q, 1).then((r) => r.subjects).catch(() => [] as MovieboxSubject[]),
-              searchTorrents(q).catch(() => [] as TorrentOption[]),
+              isTV
+                ? Promise.resolve([] as TorrentOption[])
+                : searchTorrents(q).catch(() => [] as TorrentOption[]),
             ])
           : Promise.resolve([[], []]);
         const [videos, [found, foundReleases]] = await Promise.all([videosPromise, sourcesPromise]);
@@ -563,8 +565,8 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                   </View>
                 )}
 
-                {/* The releases: they are downloaded to the TorBox and played from there. */}
-                {releaseList.length > 0 && (
+                {/* The releases: they are downloaded to the TorBox and played from there (mobile only). */}
+                {!isTV && releaseList.length > 0 && (
                   <View style={styles.block}>
                     <Text style={styles.blockTitle}>
                       Releases to send to your TorBox
@@ -574,8 +576,8 @@ export function SearchScreen({ scope, onPlay, onOpenMoviebox, onSendRelease }: P
                   </View>
                 )}
 
-                {/* The files that are already in the TorBox. */}
-                {fileList.length > 0 && (
+                {/* The files that are already in the TorBox (mobile only). */}
+                {!isTV && fileList.length > 0 && (
                   <View style={styles.block}>
                     <Text style={styles.blockTitle}>In your TorBox</Text>
                     <ScrollView

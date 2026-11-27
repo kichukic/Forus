@@ -366,6 +366,32 @@ export default function App() {
     }
   };
 
+  const handleOpenMovie = useCallback(async (m: CatalogMovie) => {
+    if (isTV) {
+      try {
+        const { searchSubjects } = await import('./src/api/moviebox');
+        const res = await searchSubjects(m.title);
+        if (res.subjects.length > 0) {
+          setMoviebox(res.subjects[0]);
+          return;
+        }
+      } catch {}
+      setMoviebox({
+        id: m.id,
+        title: m.title,
+        kind: 'movie',
+        poster: m.poster,
+        year: m.year,
+        genre: '',
+        hasResource: true,
+        membersOnly: false,
+        dubs: [],
+      });
+      return;
+    }
+    setMovie(m);
+  }, []);
+
   const layer = (s: Screen) => [StyleSheet.absoluteFill, (screen !== s || hideBackground) && styles.hidden];
   const TargetView = isTV ? View : BlurTargetView;
 
@@ -390,7 +416,7 @@ export default function App() {
               onPlay={play}
               onOpenTorbox={openTorbox}
               onOpenSearch={openSearch}
-              onOpenMovie={setMovie}
+              onOpenMovie={handleOpenMovie}
               onOpenMoviebox={setMoviebox}
               onOpenStreamioSeries={setStreamioSeries}
               onSendRelease={sendRelease}
@@ -452,7 +478,7 @@ export default function App() {
                   else if (title.kind === 'stream') play({ kind: 'stream', url: title.url, title: title.title, poster: title.poster });
                   else if (title.kind === 'moviebox') play({ kind: 'moviebox', subjectId: title.subjectId, season: title.season ?? 0, episode: title.episode ?? 0, title: title.title, poster: title.poster });
                   else if (title.kind === 'movie') {
-                    setMovie({
+                    handleOpenMovie({
                       id: title.id,
                       title: title.title,
                       poster: title.poster,
@@ -527,13 +553,15 @@ export default function App() {
           )}
         </TargetView>
 
-        <TransferToast
-          onPlay={(transfer) => {
-            const item = playableFrom(transfer);
-            if (item) play(item);
-          }}
-          onOpenTorbox={openTorbox}
-        />
+        {!isTV && (
+          <TransferToast
+            onPlay={(transfer) => {
+              const item = playableFrom(transfer);
+              if (item) play(item);
+            }}
+            onOpenTorbox={openTorbox}
+          />
+        )}
 
         <ToastHost />
         {!isTV && <SendToFriend />}
@@ -593,6 +621,7 @@ export default function App() {
               onClose={() => setMoviebox(null)}
               onPlay={play}
               onSendRelease={(option) => {
+                if (isTV) return;
                 // The film screen is below this one, so it is closed first.
                 setMoviebox(null);
                 addTransfer(option);
@@ -609,6 +638,7 @@ export default function App() {
               onClose={() => setStreamioSeries(null)}
               onPlay={play}
               onSendRelease={(option) => {
+                if (isTV) return;
                 setStreamioSeries(null);
                 addTransfer(option);
               }}

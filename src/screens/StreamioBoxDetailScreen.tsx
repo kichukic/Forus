@@ -53,7 +53,13 @@ export function StreamioBoxDetailScreen({ item, onClose, onSendRelease, onPlay }
         }
       }
 
-      // 2. Fallback to torrent releases:
+      // 2. On TV, we do not fall back to TorBox; only direct MovieBox streams:
+      if (isTV) {
+        showToast({ text: 'This stream is not available on MovieBox.' });
+        return;
+      }
+
+      // Fallback to torrent releases on mobile:
       const q = `${item.title} S${String(v.season).padStart(2, '0')}E${String(v.episode).padStart(2, '0')}`;
       const list = await searchTorrents(q);
       if (list.length === 0) {

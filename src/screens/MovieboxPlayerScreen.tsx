@@ -244,7 +244,7 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
     } catch (e) {
       if (!alive.current) return;
       const base = e instanceof Error ? e.message : "This episode can't be played.";
-      const hint = item.season > 0
+      const hint = !isTV && item.season > 0
         ? " This series is not available for free on MovieBox - open the title and use \"Send to TorBox\" to play it."
         : "";
       setLinkError(base + hint);
@@ -432,10 +432,23 @@ export function MovieboxPlayerScreen({ item, onClose, onPlay, shell }: Props) {
           <Text style={styles.errorTitle}>{"Couldn't play this episode"}</Text>
           <Text style={styles.overlayText}>{failure}</Text>
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
-            <Pressable onPress={resolve} style={styles.retry}>
+            <Pressable
+              onPress={resolve}
+              style={({ focused, pressed }) => [
+                styles.retry,
+                (focused || pressed) && styles.retryFocused,
+              ]}
+            >
               <Text style={styles.retryText}>Try again</Text>
             </Pressable>
-            <Pressable onPress={onClose} style={[styles.retry, { backgroundColor: colors.surface }]}>
+            <Pressable
+              onPress={onClose}
+              style={({ focused, pressed }) => [
+                styles.retry,
+                { backgroundColor: colors.surface },
+                (focused || pressed) && styles.retryFocused,
+              ]}
+            >
               <Text style={[styles.retryText, { color: colors.text }]}>Back to details</Text>
             </Pressable>
           </View>
@@ -615,6 +628,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   retryText: { color: '#fff', fontSize: sz(14, 16), fontWeight: '800' },
+  retryFocused: {
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    transform: [{ scale: 1.05 }],
+  },
   minimize: {
     position: 'absolute',
     top: 8,

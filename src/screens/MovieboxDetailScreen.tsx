@@ -17,7 +17,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   downloadStream,
-  playableRows,
   searchSubjects,
   seasonEpisodes,
   seasonList,
@@ -71,7 +70,6 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
   const [episodes, setEpisodes] = useState<{ season: number; list: MovieboxEpisode[] } | null>(null);
   const [releases, setReleases] = useState<TorrentOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [preparing, setPreparing] = useState(false);
   // The language version in front. A film dubbed into Hindi is a subject of
   // its own, so changing the audio means changing the film.
   const [currentId, setCurrentId] = useState(subject.id);
@@ -167,8 +165,9 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
     };
   }, [subject.id]);
 
-  // The releases the film's name has on the torrent indexes.
+  // The releases the film's name has on the torrent indexes (disabled on TV).
   useEffect(() => {
+    if (isTV) return;
     const name = plainTitle(subject.title);
     if (name.length < 2) return;
     let alive = true;
@@ -180,28 +179,15 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
     };
   }, [subject.title]);
 
-  // A film is played as a whole, so its file is found first. The player does
-  // the same thing again, but doing it here means a film that cannot be
-  // played says so before the player opens.
-  const playFilm = async () => {
-    setPreparing(true);
-    setError(null);
-    try {
-      const rows = await playableRows(currentId, 0, 0);
-      if (rows.length === 0) throw new Error('This film has no file to play.');
-      onPlay({
-        kind: 'moviebox',
-        subjectId: currentId,
-        season: 0,
-        episode: 0,
-        title: details?.title ?? subject.title,
-        poster: details?.poster ?? subject.poster,
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "This film can't be played.");
-    } finally {
-      setPreparing(false);
-    }
+  const playFilm = () => {
+    onPlay({
+      kind: 'moviebox',
+      subjectId: currentId,
+      season: 0,
+      episode: 0,
+      title: details?.title ?? subject.title,
+      poster: details?.poster ?? subject.poster,
+    });
   };
 
   const playEpisode = (episode: MovieboxEpisode) => {
@@ -442,22 +428,44 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <View style={styles.actionRow}>
-        {hasSeasons && !isSeries && (
+        {!hasSeasons ? (
+          <View style={[styles.play, styles.playBusy]}>
+            <ActivityIndicator color="#fff" />
+            <Text style={styles.playText}>Loading…</Text>
+          </View>
+        ) : !isSeries ? (
           <Pressable
             onPress={playFilm}
-            disabled={preparing}
             style={({ focused, pressed }) => [
               styles.play,
               (focused || pressed) && styles.playActive,
-              preparing && styles.playBusy,
             ]}
           >
-            {preparing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Ionicons name="play-circle" size={isTV ? 30 : 24} color="#fff" />
-            )}
+            <Ionicons name="play-circle" size={isTV ? 30 : 24} color="#fff" />
             <Text style={styles.playText}>Play now</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => {
+              const firstEp = episodes?.list?.find((e) => e.episode > 0) ?? {
+                season: season || 1,
+                episode: 1,
+                title: 'Episode 1',
+                resolution: 720,
+                size: 0,
+                duration: 0,
+                resourceId: '',
+                previewUrl: '',
+              };
+              playEpisode(firstEp);
+            }}
+            style={({ focused, pressed }) => [
+              styles.play,
+              (focused || pressed) && styles.playActive,
+            ]}
+          >
+            <Ionicons name="play-circle" size={isTV ? 30 : 24} color="#fff" />
+            <Text style={styles.playText}>{`Play S${season || 1} · E1`}</Text>
           </Pressable>
         )}
 
@@ -598,69 +606,86 @@ export function MovieboxDetailScreen({ subject, onClose, onPlay, onSendRelease }
         </View>
       )}
 
-      <View style={styles.block}>
-        <Text style={styles.sectionTitle}>Send to TorBox</Text>
-        <Text style={styles.note}>
-          The same film as a downloadable release, sent to your TorBox and played from there.
-        </Text>
-        {plainTitle(subject.title).length < 2 ? (
-          <Text style={styles.note}>There is nothing to look up by name.</Text>
-        ) : (
-          <ReleaseList
-            releases={releases}
-            onSend={onSendRelease}
-            emptyText="No releases found for this film."
-          />
-        )}
-      </View>
-
-      <View style={styles.block}>
-        <Text style={styles.sectionTitle}>
-          Ratings & Reviews
-          {ratingSummary && ratingSummary.count > 0
-            ? ` · ${ratingSummary.average}★ (${ratingSummary.count})`
-            : ''}
-        </Text>
-        <View style={styles.ratingRow}>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <Pressable key={n} onPress={() => setMyStars(n)} hitSlop={6}>
-              <Ionicons
-                name={n <= myStars ? 'star' : 'star-outline'}
-                size={24}
-                color={n <= myStars ? colors.accent : colors.muted}
-              />
-            </Pressable>
-          ))}
+      {isTV && !isSeries && (
+        <View style={styles.block}>
+          <Text style={styles.sectionTitle}>Storyline</Text>
+          <Text style={styles.description}>{shown.description || 'No description available.'}</Text>
+          {cast.length > 0 && (
+            <View style={{ marginTop: 14 }}>
+              <Text style={styles.sectionTitle}>Cast</Text>
+              <Text style={styles.cast}>{cast.map((person) => person.name).join(' · ')}</Text>
+            </View>
+          )}
         </View>
-        <TextInput
-          value={myReview}
-          onChangeText={setMyReview}
-          placeholder="Write a review (optional)"
-          placeholderTextColor={colors.muted}
-          style={styles.reviewInput}
-          multiline
-        />
-        <Pressable
-          onPress={submitRating}
-          disabled={ratingBusy || myStars < 1}
-          style={({ pressed }) => [styles.reviewBtn, pressed && styles.pressed, (ratingBusy || myStars < 1) && styles.disabled]}
-        >
-          <Text style={styles.reviewBtnText}>{ratingBusy ? 'Submitting…' : 'Submit rating'}</Text>
-        </Pressable>
-        {ratings.length > 0 && (
-          <View style={{ marginTop: 12, gap: 10 }}>
-            {ratings.slice(0, 5).map((r) => (
-              <View key={r.user + r.updatedAt} style={styles.reviewCard}>
-                <View style={styles.reviewHead}>
-                  <Text style={styles.reviewName}>{r.userName ?? 'Someone'}</Text>
-                  <Text style={styles.reviewStars}>{'★'.repeat(r.stars)}{'☆'.repeat(5 - r.stars)}</Text>
-                </View>
-                {r.review ? <Text style={styles.reviewText}>{r.review}</Text> : null}
-              </View>
+      )}
+
+      {!isTV && (
+        <View style={styles.block}>
+          <Text style={styles.sectionTitle}>Send to TorBox</Text>
+          <Text style={styles.note}>
+            The same film as a downloadable release, sent to your TorBox and played from there.
+          </Text>
+          {plainTitle(subject.title).length < 2 ? (
+            <Text style={styles.note}>There is nothing to look up by name.</Text>
+          ) : (
+            <ReleaseList
+              releases={releases}
+              onSend={onSendRelease}
+              emptyText="No releases found for this film."
+            />
+          )}
+        </View>
+      )}
+
+      {!isTV && (
+        <View style={styles.block}>
+          <Text style={styles.sectionTitle}>
+            Ratings & Reviews
+            {ratingSummary && ratingSummary.count > 0
+              ? ` · ${ratingSummary.average}★ (${ratingSummary.count})`
+              : ''}
+          </Text>
+          <View style={styles.ratingRow}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Pressable key={n} onPress={() => setMyStars(n)} hitSlop={6}>
+                <Ionicons
+                  name={n <= myStars ? 'star' : 'star-outline'}
+                  size={24}
+                  color={n <= myStars ? colors.accent : colors.muted}
+                />
+              </Pressable>
             ))}
           </View>
-        )}
-      </View>
+          <TextInput
+            value={myReview}
+            onChangeText={setMyReview}
+            placeholder="Write a review (optional)"
+            placeholderTextColor={colors.muted}
+            style={styles.reviewInput}
+            multiline
+          />
+          <Pressable
+            onPress={submitRating}
+            disabled={ratingBusy || myStars < 1}
+            style={({ pressed }) => [styles.reviewBtn, pressed && styles.pressed, (ratingBusy || myStars < 1) && styles.disabled]}
+          >
+            <Text style={styles.reviewBtnText}>{ratingBusy ? 'Submitting…' : 'Submit rating'}</Text>
+          </Pressable>
+          {ratings.length > 0 && (
+            <View style={{ marginTop: 12, gap: 10 }}>
+              {ratings.slice(0, 5).map((r) => (
+                <View key={r.user + r.updatedAt} style={styles.reviewCard}>
+                  <View style={styles.reviewHead}>
+                    <Text style={styles.reviewName}>{r.userName ?? 'Someone'}</Text>
+                    <Text style={styles.reviewStars}>{'★'.repeat(r.stars)}{'☆'.repeat(5 - r.stars)}</Text>
+                  </View>
+                  {r.review ? <Text style={styles.reviewText}>{r.review}</Text> : null}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
     </>
   );
 
